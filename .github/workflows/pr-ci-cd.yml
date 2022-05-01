@@ -35,7 +35,7 @@ jobs:
 
       - name: DataRobot Custom Inference Model
         id: custom-inference-model
-        uses: ./actions/custom-inference-model
+        uses: actions/custom-inference-model
         with:
           api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
           webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
