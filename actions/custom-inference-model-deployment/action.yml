@@ -1,0 +1,39 @@
+# action.yml
+name: 'Custom Inference Model Deployment'
+description: 'Manage custom inference model deployments in DataRobot'
+inputs:
+  api-token: # id of input
+    description: 'DataRobot authentication API token'
+    required: true
+  webserver: # id of input
+    description: 'DataRobot frontend web server'
+    required: true
+  release-branch:  # id of input
+    description: 'The release branch for PRs to take an actions on'
+    required: true
+outputs:
+  deployment-created: # id of output
+    description: 'Whether a new custom inference model deployment was created'
+    value: ${{ steps.custom-inference-model-deployment.outputs.deployment-created }}
+  deploymed-deleted: # id of output
+    description: 'Whether an existing custom inference model deployment was deleted'
+    value: ${{ steps.custom-inference-model.outputs.deployment-deleted }}
+  returned-code: # id of output
+    description: 'The exist code from the GitHub action'
+    value: ${{ steps.custom-inference-model.outputs.returned-code }}
+  message: # id of output
+    description: 'The output message from GitHub action'
+    value: ${{ steps.custom-inference-model.outputs.message }}
+runs:
+  using: 'composite'
+  steps:
+    - run: pip install -r ${GITHUB_ACTION_PATH}/src/requirements.txt
+      shell: bash
+    - id: custom-inference-model-deployment
+      run: |
+        python ${GITHUB_ACTION_PATH}/src/main.py \
+          --deploy \
+          --api-token ${{ inputs.api-token }} \
+          --webserver ${{ inputs.webserver }} \
+          --branch ${{ inputs.release-branch }}
+      shell: bash

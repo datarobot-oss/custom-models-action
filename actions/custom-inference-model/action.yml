@@ -1,0 +1,46 @@
+# action.yml
+name: 'Custom Inference Model'
+description: 'Manage custom inference models in DataRobot'
+inputs:
+  api-token: # id of input
+    description: 'DataRobot authentication API token'
+    required: true
+  webserver: # id of input
+    description: 'DataRobot frontend web server'
+    required: true
+  main-branch:  # id of input
+    description: 'The main branch for PRs to take an action on'
+    required: false
+    default: 'master'
+outputs:
+  new-model-created: # id of output
+    description: 'Whether a new custom inference model was created'
+    value: ${{ steps.custom-inference-model.outputs.new-model-created }}
+  model-deleted: # id of output
+    description: 'Whether an existing custom inference model was deleted'
+    value: ${{ steps.custom-inference-model.outputs.model-deleted }}
+  new-model-version-created: # id of output
+    description: 'Whether a new custom inference model version was created'
+    value: ${{ steps.custom-inference-model.outputs.new-model-version-created }}
+  test-result: # id of output
+    description: 'Whether the custom inference test was successful'
+    value: ${{ steps.custom-inference-model.outputs.test-result }}
+  returned-code: # id of output
+    description: 'The exist code from the GitHub action'
+    value: ${{ steps.custom-inference-model.outputs.returned-code }}
+  message: # id of output
+    description: 'The output message from GitHub action'
+    value: ${{ steps.custom-inference-model.outputs.message }}
+runs:
+  using: 'composite'
+  steps:
+    - run: pip install -r ${GITHUB_ACTION_PATH}/src/requirements.txt
+      shell: bash
+    - id: custom-inference-model
+      run: |
+        python ${GITHUB_ACTION_PATH}/src/main.py \
+          --api-token ${{ inputs.api-token }} \
+          --webserver ${{ inputs.webserver }} \
+          --branch ${{ inputs.main-branch }} \
+          --root-dir ${{ github.workspace }}
+      shell: bash
