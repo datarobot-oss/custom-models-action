@@ -30,4 +30,5 @@ def transform(data, model):
         if target_col in data:
             data.pop(target_col)
     data = data.fillna(0)
+    print('test-1')
     return data
