@@ -27,11 +27,11 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - run: pip install -r ${GITHUB_ACTION_PATH}/src/requirements.txt
+    - run: pip install -r ../../src/requirements.txt
       shell: bash
     - id: custom-inference-model-deployment
       run: |
-        python ${GITHUB_ACTION_PATH}/src/main.py \
+        python ../../src/main.py \
           --deploy \
           --api-token ${{ inputs.api-token }} \
           --webserver ${{ inputs.webserver }} \
