@@ -25,6 +25,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
         print(f'Options: {self._options}')
         print(f'GITHUB_WORKSPACE: {os.environ["GITHUB_WORKSPACE"]}')
 
+        for f in os.listdir(os.environ["GITHUB_WORKSPACE"]):
+            print(f)
+
         print(
             """
             ::set-output name=new-model-created::True
