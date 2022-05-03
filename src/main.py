@@ -1,7 +1,13 @@
 #!/usr/bin/env python
 import argparse
+import logging
+import sys
+
 from custom_inference_model import CustomInferenceModel
 from custom_inference_deployment import CustomInferenceDeployment
+from exceptions import GenericException
+
+logger = logging.getLogger()
 
 
 def argparse_options():
@@ -24,10 +30,17 @@ def argparse_options():
 
 
 def main(options):
-    if options.deploy:
-        CustomInferenceDeployment(options).run()
-    else:
-        CustomInferenceModel(options).run()
+    logging.basicConfig(format='%(asctime)s [%(levelname)s]  %(message)s', level=logging.INFO)
+
+    try:
+        if options.deploy:
+            CustomInferenceDeployment(options).run()
+        else:
+            CustomInferenceModel(options).run()
+    except GenericException as e:
+        # Avoid printing the stacktrace
+        logger.error(str(e))
+        sys.exit(e.code)
 
 
 if __name__ == '__main__':

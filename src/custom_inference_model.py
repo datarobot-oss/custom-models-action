@@ -1,6 +1,12 @@
+import sys
 from abc import ABC
 from abc import abstractmethod
+import logging
 import os
+
+from exceptions import InvalidModelSchema
+
+logger = logging.getLogger()
 
 
 class CustomInferenceModelBase(ABC):
@@ -22,8 +28,10 @@ class CustomInferenceModel(CustomInferenceModelBase):
         Executes the GitHub action logic to manage custom inference models
         """
 
-        print(f'Options: {self._options}')
-        print(f'GITHUB_WORKSPACE: {os.environ["GITHUB_WORKSPACE"]}')
+        logger.info(f'Options: {self._options}')
+        logger.info(f'GITHUB_WORKSPACE: {os.environ["GITHUB_WORKSPACE"]}')
+
+        # raise InvalidModelSchema('(3) Some exception error')
 
         print(
             """
