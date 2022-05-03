@@ -1,6 +1,6 @@
 # This is a basic workflow to help you get started with Actions
 
-name: DataRobot Custom Inference Models
+name: Pull Request Validation
 
 # Controls when the workflow will run
 on:
@@ -21,7 +21,7 @@ env:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "build"
-  job-1:
+  validate-code-style:
     # Run this job on any action of a PR, but skip the job upon merge to master
     if: github.event.pull_request.merged != true
 
@@ -33,19 +33,11 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
-      - name: DataRobot Custom Inference Model
-        id: custom-inference-model
-        uses: ./actions/custom-inference-model
-        with:
-          api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
-          webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
-          main-branch: my-main-dev-branch
+      - name: Install Reqruirements
+        run: pip install -r ${{ github.workspace }}/tests/requirements.txt
 
-      - name: DataRobot Custom Inference Model Results
-        run: |
-          echo "Test result: ${{ steps.custom-inference-model.outputs.message }}"
-          echo "Test result: ${{ steps.custom-inference-model.outputs.returned-code }}"
-          echo "Test result: ${{ steps.custom-inference-model.outputs.test-result }}"
+      - name: Check source code format (black)
+        run: black --check ${{ github.workspace }}
 
       # Print out context information
       - name: Inspect context

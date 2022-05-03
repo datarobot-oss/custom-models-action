@@ -13,7 +13,6 @@ logger = logging.getLogger()
 
 
 class CustomInferenceModelBase(ABC):
-
     def __init__(self, options):
         self._options = options
 
@@ -35,7 +34,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
         Executes the GitHub action logic to manage custom inference models
         """
 
-        logger.info(f'Options: {self._options}')
+        logger.info(f"Options: {self._options}")
         logger.info(f'GITHUB_WORKSPACE: {os.environ["GITHUB_WORKSPACE"]}')
         # raise InvalidModelSchema('(3) Some exception error')
 
@@ -58,13 +57,13 @@ class CustomInferenceModel(CustomInferenceModelBase):
         # print('::set-output name=test-result::The test passed with success.')
 
     def _scan_and_load_models_metadata(self):
-        yaml_files = glob(f'{self._options.root_dir}/**/*.yaml', recursive=True)
-        yaml_files.extend(glob(f'{self._options.root_dir}/**/*.yml', recursive=True))
+        yaml_files = glob(f"{self._options.root_dir}/**/*.yaml", recursive=True)
+        yaml_files.extend(glob(f"{self._options.root_dir}/**/*.yml", recursive=True))
         for yaml_path in yaml_files:
             with open(yaml_path) as f:
                 yaml_content = yaml.safe_load(f)
-                if 'models' in yaml_content:
-                    for model in yaml_content['models']:
+                if "models" in yaml_content:
+                    for model in yaml_content["models"]:
                         self._models_metadata.append(model)
                 else:
                     self._models_metadata.append(yaml_content)
