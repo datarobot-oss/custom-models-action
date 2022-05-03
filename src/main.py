@@ -10,7 +10,7 @@ from exceptions import GenericException
 logger = logging.getLogger()
 
 
-def argparse_options():
+def argparse_options(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--deploy',
@@ -26,7 +26,7 @@ def argparse_options():
         '--root-dir', required=True, help='The workspace root directory'
     )
 
-    return parser.parse_args()
+    return parser.parse_args(args)
 
 
 def main(options):
