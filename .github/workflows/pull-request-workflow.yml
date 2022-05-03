@@ -95,7 +95,7 @@ jobs:
         run: pip install -r ${{ github.workspace }}/tests/requirements.txt
 
       - name: Run unit-tests
-        run: PYTHONPATH=src pytest tests/unit
+        run: make test
 
   # This workflow contains a single job called "build"
   datarobot-custom-inference-model:
