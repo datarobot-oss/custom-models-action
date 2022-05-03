@@ -1,3 +1,4 @@
 -r ../src/requirements.txt
+black
 pytest
 bson
