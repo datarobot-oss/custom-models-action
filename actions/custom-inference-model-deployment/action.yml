@@ -33,7 +33,8 @@ runs:
       run: |
         python ../../src/main.py \
           --deploy \
-          --api-token ${{ inputs.api-token }} \
           --webserver ${{ inputs.webserver }} \
-          --branch ${{ inputs.release-branch }}
+          --api-token ${{ inputs.api-token }} \
+          --branch ${{ inputs.release-branch }} \
+          --root-dir ${{ github.workspace }}
       shell: bash

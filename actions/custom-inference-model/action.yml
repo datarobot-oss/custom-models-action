@@ -42,5 +42,5 @@ runs:
           --api-token ${{ inputs.api-token }} \
           --webserver ${{ inputs.webserver }} \
           --branch ${{ inputs.main-branch }} \
-          --root-dir ${{ github.workspace }}
+          --root-dir "${{ github.workspace }}"
       shell: bash
