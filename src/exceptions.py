@@ -5,4 +5,9 @@ class GenericException(Exception):
 
 
 class InvalidModelSchema(GenericException):
+    def __init__(self, msg, code=-1):
+        super().__init__(msg.split("\n")[-1], code)
+
+
+class InvalidMemoryValue(GenericException):
     pass
