@@ -71,10 +71,14 @@ class TestGlobPatterns:
     @pytest.mark.parametrize("num_models", [1, 2, 3])
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
     @pytest.mark.parametrize(
-        "with_include_glob", [True, False], ids=["with-include-glob", "without-include-glob"]
+        "with_include_glob",
+        [True, False],
+        ids=["with-include-glob", "without-include-glob"],
     )
     @pytest.mark.parametrize(
-        "with_exclude_glob", [True, False], ids=["with-exclude-glob", "without-exclude-glob"]
+        "with_exclude_glob",
+        [True, False],
+        ids=["with-exclude-glob", "without-exclude-glob"],
     )
     def test_glob_patterns(
         self,
@@ -98,7 +102,9 @@ class TestGlobPatterns:
             readme_file_path = model_path / "README.md"
             assert readme_file_path.is_file()
 
-            model_file_paths = custom_inference_model.models_info[index].model_file_paths
+            model_file_paths = custom_inference_model.models_info[
+                index
+            ].model_file_paths
             assert excluded_src_path not in model_file_paths
 
             if with_include_glob:
@@ -125,11 +131,15 @@ class TestGlobPatterns:
             ({"./custom.py", "score/../bbb.py"}, {"bbb.py"}, 2),
             ({"./custom.py", "//score/bbb.py"}, {"/score/bbb.py"}, 1),
             ({"./custom.py", "//score/./bbb.py"}, {"/score/bbb.py"}, 1),
-        ]
+        ],
     )
-    def test_filtered_model_paths(self, included_paths, excluded_paths, expected_num_model_files):
+    def test_filtered_model_paths(
+        self, included_paths, excluded_paths, expected_num_model_files
+    ):
         model_info = ModelInfo("yaml-path", "model-path", None)
-        CustomInferenceModel._set_filtered_model_paths(model_info, included_paths, excluded_paths)
+        CustomInferenceModel._set_filtered_model_paths(
+            model_info, included_paths, excluded_paths
+        )
         assert len(model_info.model_file_paths) == expected_num_model_files
         for excluded_path in excluded_paths:
             assert Path(excluded_path) not in model_info.model_file_paths
@@ -164,9 +174,11 @@ class TestGlobPatterns:
             "package-collision2",
             "package-collision3",
             "no-collision",
-        ]
+        ],
     )
-    def test_local_and_shared_collisions(self, local_paths, shared_paths, collision_expected):
+    def test_local_and_shared_collisions(
+        self, local_paths, shared_paths, collision_expected
+    ):
         options = Namespace(root_dir="/repo")
         with patch.object(
             CustomInferenceModel, "models_info", new_callable=PropertyMock
@@ -176,12 +188,16 @@ class TestGlobPatterns:
             model_path = Path("/repo/model")
             model_info = ModelInfo("yaml-path", model_path, None)
             mock_models_info_property.return_value = model_info
-            mock_model_file_paths_property.return_value = (
-                [Path(p) for p in local_paths] + [Path(p) for p in shared_paths]
-            )
+            mock_model_file_paths_property.return_value = [
+                Path(p) for p in local_paths
+            ] + [Path(p) for p in shared_paths]
             custom_inference_model = CustomInferenceModel(options)
             if collision_expected:
                 with pytest.raises(SharedAndLocalPathCollision):
-                    custom_inference_model._validate_collision_between_local_and_shared(model_info)
+                    custom_inference_model._validate_collision_between_local_and_shared(
+                        model_info
+                    )
             else:
-                custom_inference_model._validate_collision_between_local_and_shared(model_info)
+                custom_inference_model._validate_collision_between_local_and_shared(
+                    model_info
+                )

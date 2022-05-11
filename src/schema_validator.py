@@ -116,7 +116,11 @@ class ModelSchema:
         }
     )
     MULTI_MODELS_SCHEMA = Schema(
-        {MULTI_MODELS_KEY: [{MODEL_ENTRY_PATH_KEY: str, MODEL_ENTRY_META_KEY: MODEL_SCHEMA.schema}]}
+        {
+            MULTI_MODELS_KEY: [
+                {MODEL_ENTRY_PATH_KEY: str, MODEL_ENTRY_META_KEY: MODEL_SCHEMA.schema}
+            ]
+        }
     )
 
     @classmethod

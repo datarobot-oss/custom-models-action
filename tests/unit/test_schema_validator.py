@@ -29,7 +29,9 @@ class TestSchemaValidator:
                 model_schema[ModelSchema.MULTI_MODELS_KEY].append(
                     {
                         ModelSchema.MODEL_ENTRY_PATH_KEY: f"./path/to/{model_name}",
-                        ModelSchema.MODEL_ENTRY_META_KEY: _partial_model_schema(model_name),
+                        ModelSchema.MODEL_ENTRY_META_KEY: _partial_model_schema(
+                            model_name
+                        ),
                     }
                 )
         return model_schema
@@ -83,19 +85,33 @@ class TestSchemaValidator:
     @staticmethod
     def _validate_schema(is_single, model_schema):
         if is_single:
-            transformed_schema = ModelSchema().validate_and_transform_single(model_schema)
+            transformed_schema = ModelSchema().validate_and_transform_single(
+                model_schema
+            )
 
             # Validate existence of default values
-            for glob_key in [ModelSchema.INCLUDE_GLOB_KEY, ModelSchema.EXCLUDE_GLOB_KEY]:
-                assert isinstance(transformed_schema[ModelSchema.VERSION_KEY][glob_key], list)
+            for glob_key in [
+                ModelSchema.INCLUDE_GLOB_KEY,
+                ModelSchema.EXCLUDE_GLOB_KEY,
+            ]:
+                assert isinstance(
+                    transformed_schema[ModelSchema.VERSION_KEY][glob_key], list
+                )
         else:
-            transformed_schema = ModelSchema().validate_and_transform_multi(model_schema)
+            transformed_schema = ModelSchema().validate_and_transform_multi(
+                model_schema
+            )
 
             # Validate existence of default values
             for model_entry in transformed_schema[ModelSchema.MULTI_MODELS_KEY]:
-                for glob_key in [ModelSchema.INCLUDE_GLOB_KEY, ModelSchema.EXCLUDE_GLOB_KEY]:
+                for glob_key in [
+                    ModelSchema.INCLUDE_GLOB_KEY,
+                    ModelSchema.EXCLUDE_GLOB_KEY,
+                ]:
                     model_metadata = model_entry[ModelSchema.MODEL_ENTRY_META_KEY]
-                    assert isinstance(model_metadata[ModelSchema.VERSION_KEY][glob_key], list)
+                    assert isinstance(
+                        model_metadata[ModelSchema.VERSION_KEY][glob_key], list
+                    )
 
     @pytest.mark.parametrize(
         "class_label_key", ["positive_class_label", "negative_class_label", None]
@@ -163,7 +179,9 @@ class TestSchemaValidator:
 
         def _set_single_model_keys(comb, schema):
             if not is_single:
-                schema = schema[ModelSchema.MULTI_MODELS_KEY][0][ModelSchema.MODEL_ENTRY_META_KEY]
+                schema = schema[ModelSchema.MULTI_MODELS_KEY][0][
+                    ModelSchema.MODEL_ENTRY_META_KEY
+                ]
             for element in comb:
                 if isinstance(element, Key):
                     # The 'type' is not really important here

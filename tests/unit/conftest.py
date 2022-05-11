@@ -74,7 +74,8 @@ def single_model_factory(repo_root_path, common_path, excluded_src_path):
         if with_include_glob:
             # noinspection PyTypeChecker
             single_model_metadata["version"]["include_glob_pattern"] = [
-                "./**", f"/{common_path.relative_to(repo_root_path)}/**"
+                "./**",
+                f"/{common_path.relative_to(repo_root_path)}/**",
             ]
         if with_exclude_glob:
             # noinspection PyTypeChecker
@@ -84,6 +85,7 @@ def single_model_factory(repo_root_path, common_path, excluded_src_path):
             _write_to_file(model_path / "model.yaml", yaml.dump(single_model_metadata))
 
         return single_model_metadata
+
     yield _inner
 
 
@@ -96,7 +98,9 @@ def models_factory(repo_root_path, common_path, single_model_factory):
         with_exclude_glob=True,
         include_main_prog=True,
     ):
-        multi_models_yaml_content = {ModelSchema.MULTI_MODELS_KEY: []} if is_multi else None
+        multi_models_yaml_content = (
+            {ModelSchema.MULTI_MODELS_KEY: []} if is_multi else None
+        )
         for counter in range(num_models):
             model_name = f"model_{counter}"
             model_metadata = single_model_factory(
@@ -125,4 +129,3 @@ def models_factory(repo_root_path, common_path, single_model_factory):
 @pytest.fixture
 def options(repo_root_path):
     return Namespace(root_dir=repo_root_path.absolute())
-

@@ -124,7 +124,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
                     for model_entry in transformed[self._model_schema.MULTI_MODELS_KEY]:
                         model_path = self._to_absolute(
                             model_entry[ModelSchema.MODEL_ENTRY_PATH_KEY],
-                            Path(yaml_path).parent
+                            Path(yaml_path).parent,
                         )
                         model_metadata = model_entry[ModelSchema.MODEL_ENTRY_META_KEY]
                         model_info = ModelInfo(yaml_path, model_path, model_metadata)
@@ -159,7 +159,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
                     )
                     included_paths.update(glob(include_glob_pattern, recursive=True))
             else:
-                included_paths.update(glob(f"{model_info.model_path}/**", recursive=True))
+                included_paths.update(
+                    glob(f"{model_info.model_path}/**", recursive=True)
+                )
 
             excluded_paths = set([])
             exclude_glob_patterns = model_info.metadata[ModelSchema.VERSION_KEY][
