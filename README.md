@@ -10,3 +10,6 @@ Contains the implementation of GitHub actions to manage custom inference models 
 ## Change 5
 ## Change 6
 
+################################################################################ o
+
+Change 7
