@@ -16,7 +16,7 @@ on:
 env:
   CONTEXT_INFO_FILEPATH: context_info.json
   OUT_DIR: output-context/pull-request
-  INSPECT_CONTEXT: false
+  INSPECT_CONTEXT: true
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
