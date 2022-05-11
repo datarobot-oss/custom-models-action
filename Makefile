@@ -8,3 +8,7 @@ black:
 	@black .
 .PHONY: black
 
+
+hello:
+	@echo Hello
+.PHONY: hello
