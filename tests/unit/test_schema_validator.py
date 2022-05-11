@@ -12,14 +12,12 @@ from schema_validator import ModelSchema
 class TestSchemaValidator:
     @staticmethod
     def create_partial_model_schema(is_single=True, num_models=1):
-        def _partial_model_schema(model_name):
+        def _partial_model_schema(name):
             return {
                 ModelSchema.MODEL_ID_KEY: str(uuid.uuid4()),
                 "target_name": "target_feature_col",
-                "settings": {
-                    "name": model_name,
-                },
-                "version": {"model_environment": str(ObjectId())},
+                "settings": {"name": name},
+                ModelSchema.VERSION_KEY: {"model_environment": str(ObjectId())},
             }
 
         if is_single:
@@ -27,9 +25,12 @@ class TestSchemaValidator:
         else:
             model_schema = {ModelSchema.MULTI_MODELS_KEY: []}
             for counter in range(1, num_models + 1):
-                multi_models_key = ModelSchema.MULTI_MODELS_KEY
-                model_schema[multi_models_key].append(
-                    _partial_model_schema(f"model-{counter}")
+                model_name = f"model-{counter}"
+                model_schema[ModelSchema.MULTI_MODELS_KEY].append(
+                    {
+                        ModelSchema.MODEL_ENTRY_PATH_KEY: f"./path/to/{model_name}",
+                        ModelSchema.MODEL_ENTRY_META_KEY: _partial_model_schema(model_name),
+                    }
                 )
         return model_schema
 
@@ -39,7 +40,7 @@ class TestSchemaValidator:
             ModelSchema.MODEL_ID_KEY: "abc123",
             "target_type": "Regression",
             "target_name": "target_column",
-            "version": {
+            ModelSchema.VERSION_KEY: {
                 "model_environment": "627785ea562155d227c6a56c",
             },
         }
@@ -74,21 +75,27 @@ class TestSchemaValidator:
         if is_single:
             setup_model_keys_func(model_schema)
         else:
-            for single_model_schema in model_schema[ModelSchema.MULTI_MODELS_KEY]:
-                setup_model_keys_func(single_model_schema)
+            for model_entry in model_schema[ModelSchema.MULTI_MODELS_KEY]:
+                setup_model_keys_func(model_entry[ModelSchema.MODEL_ENTRY_META_KEY])
 
         self._validate_schema(is_single, model_schema)
 
     @staticmethod
     def _validate_schema(is_single, model_schema):
         if is_single:
-            ModelSchema().validate_and_transform_single(model_schema)
-        else:
-            ModelSchema().validate_and_transform_multi(model_schema)
+            transformed_schema = ModelSchema().validate_and_transform_single(model_schema)
 
-    @staticmethod
-    def _wrap_multi(model_schema):
-        return {ModelSchema.MULTI_MODELS_KEY: [model_schema]}
+            # Validate existence of default values
+            for glob_key in [ModelSchema.INCLUDE_GLOB_KEY, ModelSchema.EXCLUDE_GLOB_KEY]:
+                assert isinstance(transformed_schema[ModelSchema.VERSION_KEY][glob_key], list)
+        else:
+            transformed_schema = ModelSchema().validate_and_transform_multi(model_schema)
+
+            # Validate existence of default values
+            for model_entry in transformed_schema[ModelSchema.MULTI_MODELS_KEY]:
+                for glob_key in [ModelSchema.INCLUDE_GLOB_KEY, ModelSchema.EXCLUDE_GLOB_KEY]:
+                    model_metadata = model_entry[ModelSchema.MODEL_ENTRY_META_KEY]
+                    assert isinstance(model_metadata[ModelSchema.VERSION_KEY][glob_key], list)
 
     @pytest.mark.parametrize(
         "class_label_key", ["positive_class_label", "negative_class_label", None]
@@ -156,7 +163,7 @@ class TestSchemaValidator:
 
         def _set_single_model_keys(comb, schema):
             if not is_single:
-                schema = schema[ModelSchema.MULTI_MODELS_KEY][0]
+                schema = schema[ModelSchema.MULTI_MODELS_KEY][0][ModelSchema.MODEL_ENTRY_META_KEY]
             for element in comb:
                 if isinstance(element, Key):
                     # The 'type' is not really important here
@@ -182,7 +189,7 @@ class TestSchemaValidator:
             ModelSchema.MODEL_ID_KEY,
             "target_type",
             "target_name",
-            "version",
+            ModelSchema.VERSION_KEY,
             "version.model_environment",
         ],
     )
@@ -205,6 +212,17 @@ class TestSchemaValidator:
 
         assert f"Missing key: '{sub_key if sub_key else key}'" in str(e)
 
+    @staticmethod
+    def _wrap_multi(model_schema):
+        return {
+            ModelSchema.MULTI_MODELS_KEY: [
+                {
+                    ModelSchema.MODEL_ENTRY_PATH_KEY: "./m1",
+                    ModelSchema.MODEL_ENTRY_META_KEY: model_schema,
+                }
+            ]
+        }
+
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
     def test_full_model_schema(self, is_single):
         full_model_schema = {
@@ -221,7 +239,7 @@ class TestSchemaValidator:
                 "training_dataset": "627790ba56215587b3021632",
                 "holdout_dataset": "627790ca5621558b55c78d78",
             },
-            "version": {
+            ModelSchema.VERSION_KEY: {
                 "model_environment": "627790db5621558eedc4c7fa",
                 "include_glob_pattern": ["./"],
                 "exclude_glob_pattern": ["README.md", "out/"],

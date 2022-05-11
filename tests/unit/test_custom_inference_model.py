@@ -1,135 +1,50 @@
 from argparse import Namespace
+
 from bson import ObjectId
 import os
 from pathlib import Path
+from mock import patch
 import pytest
 import uuid
 from tempfile import TemporaryDirectory
-import yaml
+
+from mock.mock import PropertyMock, Mock
 
 from custom_inference_model import CustomInferenceModel
+from custom_inference_model import ModelInfo
+from exceptions import ModelMainEntryPointNotFound, SharedAndLocalPathCollision
 from schema_validator import ModelSchema
 
 
 class TestCustomInferenceModel:
-    @staticmethod
-    def _single_model_metadata():
-        return {
-            ModelSchema.MODEL_ID_KEY: str(uuid.uuid4()),
-            "target_type": "Regression",
-            "target_name": "Grade 2014",
-            "version": {"model_environment": str(ObjectId())},
-        }
-
     @pytest.fixture
-    def models_root(self):
-        with TemporaryDirectory() as models_root:
-            os.makedirs(Path(models_root) / "dir-1" / "dir-11")
-            os.makedirs(Path(models_root) / "dir-2")
-            yield Path(models_root)
-
-    @pytest.fixture
-    def no_models(self, models_root):
-        yield models_root
-
-    @pytest.fixture
-    def common_file_path(self, models_root):
-        common_dir = models_root / "common"
-        os.mkdir(common_dir)
-        common_filename = "common.py"
-        common_file_path = common_dir / common_filename
-        with open(common_file_path, "w") as f:
-            f.write("# common.py")
-        return common_file_path.relative_to(models_root)
-
-    @pytest.fixture
-    def common_module(self, common_file_path):
-        module_name = common_file_path.with_suffix("")
-        module_name = str(module_name).replace("/", ".")
-        return module_name
-
-    @pytest.fixture
-    def single_model_factory(self, models_root, common_module):
-        def _inner(model_name):
-            model_path = models_root / model_name
-            os.makedirs(model_path)
-            with open(model_path / "custom.py", "w") as f:
-                f.write(f"import {common_module}")
-            with open(model_path / "non-datarobot-model.yaml", "w") as f:
-                f.write("model_id: 1234")
-
-            with open(model_path / "model.yaml", "w") as f:
-                f.write(yaml.dump(self._single_model_metadata()))
-
-            return model_path.relative_to(models_root)
-
-        return _inner
-
-    @pytest.fixture
-    def multi_models_in_a_single_yaml_factory(
-        self, models_root, common_file_path, common_module
-    ):
-        def _inner(num_models):
-            # Multiple models in a single metadata
-            multi_models_yaml_content = {ModelSchema.MULTI_MODELS_KEY: []}
-            for index in range(1, 1 + num_models):
-                model_name = f"model-from-multi-def-{index}"
-                model_path = models_root / model_name
-                os.mkdir(model_path)
-                with open(model_path / "custom.py", "w") as f:
-                    f.write(f"import {common_module}")
-                with open(model_path / "README.md", "w") as f:
-                    f.write(f"# README (to be excluded)")
-                with open(model_path / "non-datarobot-model.yml", "w") as f:
-                    f.write(f"models: []")
-
-                single_model_metadata = self._single_model_metadata()
-                # noinspection PyTypeChecker
-                single_model_metadata["version"]["include_glob_pattern"] = [
-                    f"/{model_path.relative_to(models_root)}/**",
-                    f"/{common_file_path.parent}/**",
-                ]
-                # noinspection PyTypeChecker
-                single_model_metadata["version"]["exclude_glob_pattern"] = [
-                    f"/{model_path.relative_to(models_root)}/README.md"
-                ]
-                multi_models_yaml_content[ModelSchema.MULTI_MODELS_KEY].append(
-                    single_model_metadata
-                )
-
-            with open(models_root / "models.yml", "w") as f:
-                f.write(yaml.dump(multi_models_yaml_content))
-
-        return _inner
-
-    @pytest.fixture
-    def options(self, models_root):
-        return Namespace(root_dir=models_root.absolute())
+    def no_models(self, common_path):
+        yield common_path
 
     @pytest.mark.usefixtures("no_models")
     def test_scan_and_load_no_models(self, options):
         custom_inference_model = CustomInferenceModel(options)
         custom_inference_model._scan_and_load_datarobot_models_metadata()
-        assert len(custom_inference_model._models_metadata) == 0
+        assert len(custom_inference_model._models_info) == 0
 
     @pytest.mark.parametrize("num_models", [1, 2, 3])
     def test_scan_and_load_models_from_multi_separate_yaml_files(
         self, options, single_model_factory, num_models
     ):
         for counter in range(1, num_models + 1):
-            single_model_factory(f"model-{counter}")
+            single_model_factory(f"model-{counter}", write_metadata=True)
         custom_inference_model = CustomInferenceModel(options)
         custom_inference_model._scan_and_load_datarobot_models_metadata()
-        assert len(custom_inference_model._models_metadata) == num_models
+        assert len(custom_inference_model._models_info) == num_models
 
     @pytest.mark.parametrize("num_models", [0, 1, 3])
     def test_scan_and_load_models_from_one_multi_models_yaml_file(
-        self, options, multi_models_in_a_single_yaml_factory, num_models
+        self, options, models_factory, num_models
     ):
-        multi_models_in_a_single_yaml_factory(num_models)
+        models_factory(num_models, is_multi=True)
         custom_inference_model = CustomInferenceModel(options)
         custom_inference_model._scan_and_load_datarobot_models_metadata()
-        assert len(custom_inference_model._models_metadata) == num_models
+        assert len(custom_inference_model._models_info) == num_models
 
     @pytest.mark.parametrize("num_single_models", [0, 1, 3])
     @pytest.mark.parametrize("num_multi_models", [0, 2])
@@ -139,14 +54,134 @@ class TestCustomInferenceModel:
         num_single_models,
         num_multi_models,
         single_model_factory,
-        multi_models_in_a_single_yaml_factory,
+        models_factory,
     ):
-        multi_models_in_a_single_yaml_factory(num_multi_models)
+        models_factory(num_multi_models, is_multi=True)
         for counter in range(1, num_single_models + 1):
             single_model_factory(f"model-{counter}")
 
         custom_inference_model = CustomInferenceModel(options)
         custom_inference_model._scan_and_load_datarobot_models_metadata()
-        assert len(custom_inference_model._models_metadata) == (
+        assert len(custom_inference_model._models_info) == (
             num_multi_models + num_single_models
         )
+
+
+class TestGlobPatterns:
+    @pytest.mark.parametrize("num_models", [1, 2, 3])
+    @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
+    @pytest.mark.parametrize(
+        "with_include_glob", [True, False], ids=["with-include-glob", "without-include-glob"]
+    )
+    @pytest.mark.parametrize(
+        "with_exclude_glob", [True, False], ids=["with-exclude-glob", "without-exclude-glob"]
+    )
+    def test_glob_patterns(
+        self,
+        models_factory,
+        common_path,
+        excluded_src_path,
+        options,
+        num_models,
+        is_multi,
+        with_include_glob,
+        with_exclude_glob,
+    ):
+        models_factory(num_models, is_multi, with_include_glob, with_exclude_glob)
+        custom_inference_model = CustomInferenceModel(options)
+        custom_inference_model.run()
+
+        assert len(custom_inference_model.models_info) == num_models
+
+        for index in range(num_models):
+            model_path = custom_inference_model.models_info[index].model_path
+            readme_file_path = model_path / "README.md"
+            assert readme_file_path.is_file()
+
+            model_file_paths = custom_inference_model.models_info[index].model_file_paths
+            assert excluded_src_path not in model_file_paths
+
+            if with_include_glob:
+                assert common_path in model_file_paths
+            else:
+                assert common_path not in model_file_paths
+
+            if with_exclude_glob:
+                assert readme_file_path.absolute() not in model_file_paths
+            else:
+                assert readme_file_path.absolute() in model_file_paths
+
+    @pytest.mark.parametrize(
+        "included_paths, excluded_paths, expected_num_model_files",
+        [
+            ({"./custom.py", "./bbb.py", "score/bbb.md"}, {"bbb.py"}, 2),
+            ({"./custom.py", ".//bbb.py", "score/bbb.md"}, {"bbb.py"}, 2),
+            ({"./custom.py", "bbb.py", "score/bbb.py"}, {"bbb.py"}, 2),
+            ({"./custom.py", "bbb.py", "score/bbb.py"}, {"bbb.sh"}, 3),
+            ({"./custom.py", "bbb.py", "score/./bbb.py"}, {"score/bbb.py"}, 2),
+            ({"./custom.py", "bbb.py", "score//bbb.py"}, {"score/bbb.py"}, 2),
+            ({"./custom.py", ".//bbb.py", "score/./bbb.py"}, {"score/bbb.py"}, 2),
+            ({"./custom.py", "score/../bbb.py"}, {"score/bbb.py"}, 2),
+            ({"./custom.py", "score/../bbb.py"}, {"bbb.py"}, 2),
+            ({"./custom.py", "//score/bbb.py"}, {"/score/bbb.py"}, 1),
+            ({"./custom.py", "//score/./bbb.py"}, {"/score/bbb.py"}, 1),
+        ]
+    )
+    def test_filtered_model_paths(self, included_paths, excluded_paths, expected_num_model_files):
+        model_info = ModelInfo("yaml-path", "model-path", None)
+        CustomInferenceModel._set_filtered_model_paths(model_info, included_paths, excluded_paths)
+        assert len(model_info.model_file_paths) == expected_num_model_files
+        for excluded_path in excluded_paths:
+            assert Path(excluded_path) not in model_info.model_file_paths
+
+    @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
+    def test_missing_main_program(self, models_factory, common_path, options, is_multi):
+        models_factory(1, is_multi, include_main_prog=False)
+        custom_inference_model = CustomInferenceModel(options)
+        with pytest.raises(ModelMainEntryPointNotFound):
+            custom_inference_model.run()
+
+    @pytest.mark.parametrize(
+        "local_paths, shared_paths, collision_expected",
+        [
+            (["/repo/model/custom.py", "/repo/model/util.py"], ["/repo/util.py"], True),
+            (
+                ["/repo/model/custom.py", "/repo/model/common/util.py"],
+                ["/repo/common/util.py"],
+                True,
+            ),
+            (["/repo/model/common/convert.py"], ["/repo/common/util.py"], True),
+            (["/repo/model/common/util/convert.py"], ["/repo/common/util.py"], True),
+            (
+                ["/repo/model/custom.py", "/repo/model/score.py"],
+                ["/repo/common/util.py", "/repo/common/common.py"],
+                False,
+            ),
+        ],
+        ids=[
+            "file-collision",
+            "package-collision1",
+            "package-collision2",
+            "package-collision3",
+            "no-collision",
+        ]
+    )
+    def test_local_and_shared_collisions(self, local_paths, shared_paths, collision_expected):
+        options = Namespace(root_dir="/repo")
+        with patch.object(
+            CustomInferenceModel, "models_info", new_callable=PropertyMock
+        ) as mock_models_info_property, patch.object(
+            ModelInfo, "model_file_paths", new_callable=PropertyMock
+        ) as mock_model_file_paths_property:
+            model_path = Path("/repo/model")
+            model_info = ModelInfo("yaml-path", model_path, None)
+            mock_models_info_property.return_value = model_info
+            mock_model_file_paths_property.return_value = (
+                [Path(p) for p in local_paths] + [Path(p) for p in shared_paths]
+            )
+            custom_inference_model = CustomInferenceModel(options)
+            if collision_expected:
+                with pytest.raises(SharedAndLocalPathCollision):
+                    custom_inference_model._validate_collision_between_local_and_shared(model_info)
+            else:
+                custom_inference_model._validate_collision_between_local_and_shared(model_info)
