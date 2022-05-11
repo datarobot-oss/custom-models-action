@@ -14,9 +14,15 @@ logger = logging.getLogger()
 
 
 class ModelSchema:
-    MODEL_ID_KEY = "git_datarobot_model_id"
     MULTI_MODELS_KEY = "datarobot_models"
+    MODEL_ENTRY_PATH_KEY = "model_path"
+    MODEL_ENTRY_META_KEY = "model_metadata"
+    MODEL_ID_KEY = "git_datarobot_model_id"
     DEPLOYMENT_ID_KEY = "git_datarobot_deployment_id"
+    VERSION_KEY = "version"
+    INCLUDE_GLOB_KEY = "include_glob_pattern"
+    EXCLUDE_GLOB_KEY = "exclude_glob_pattern"
+
     MODEL_SCHEMA = Schema(
         {
             MODEL_ID_KEY: str,
@@ -43,12 +49,12 @@ class ModelSchema:
                 Optional("training_dataset"): And(str, lambda i: ObjectId.is_valid(i)),
                 Optional("holdout_dataset"): And(str, lambda i: ObjectId.is_valid(i)),
             },
-            "version": {
+            VERSION_KEY: {
                 "model_environment": And(str, lambda i: ObjectId.is_valid(i)),
-                Optional("include_glob_pattern"): And(
+                Optional(INCLUDE_GLOB_KEY, default=[]): And(
                     list, lambda l: all(isinstance(e, str) for e in l)
                 ),
-                Optional("exclude_glob_pattern"): And(
+                Optional(EXCLUDE_GLOB_KEY, default=[]): And(
                     list, lambda l: all(isinstance(x, str) for x in l)
                 ),
                 Optional("memory"): Use(lambda v: MemoryConvertor.to_bytes(v)),
@@ -109,7 +115,13 @@ class ModelSchema:
             },
         }
     )
-    MULTI_MODELS_SCHEMA = Schema({MULTI_MODELS_KEY: [MODEL_SCHEMA.schema]})
+    MULTI_MODELS_SCHEMA = Schema(
+        {
+            MULTI_MODELS_KEY: [
+                {MODEL_ENTRY_PATH_KEY: str, MODEL_ENTRY_META_KEY: MODEL_SCHEMA.schema}
+            ]
+        }
+    )
 
     @classmethod
     def is_single_model_schema(cls, metadata):
@@ -166,8 +178,8 @@ class ModelSchema:
         # Validates and transform
         try:
             transformed = self.MULTI_MODELS_SCHEMA.validate(multi_models_metadata)
-            for model_metadata in transformed[self.MULTI_MODELS_KEY]:
-                self._validate_single_model(model_metadata)
+            for model_entry in transformed[self.MULTI_MODELS_KEY]:
+                self._validate_single_model(model_entry[self.MODEL_ENTRY_META_KEY])
             return transformed
         except SchemaError as se:
             raise InvalidModelSchema(se.code)

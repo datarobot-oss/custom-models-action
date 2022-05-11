@@ -11,3 +11,11 @@ class InvalidModelSchema(GenericException):
 
 class InvalidMemoryValue(GenericException):
     pass
+
+
+class ModelMainEntryPointNotFound(GenericException):
+    pass
+
+
+class SharedAndLocalPathCollision(GenericException):
+    pass
