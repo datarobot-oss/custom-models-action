@@ -8,7 +8,7 @@ on:
   #  push:
   #    branches: [ master ]
   pull_request:
-    branches: [ master ]
+    branches: [ zohar/inspect-github-context ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
   # This workflow contains a single job called "build"
   validate-code-style:
     # Run this job on any action of a PR, but skip the job upon merge to master
-    if: github.event.pull_request.merged != true
+    # if: github.event.pull_request.merged != true
 
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
@@ -79,7 +79,7 @@ jobs:
 
   run-unit-tests:
     # Run this job on any action of a PR, but skip the job upon merge to master
-    if: github.event.pull_request.merged != true
+    # if: github.event.pull_request.merged != true
 
     needs: validate-code-style
 
@@ -100,7 +100,7 @@ jobs:
   # This workflow contains a single job called "build"
   datarobot-custom-inference-model:
     # Run this job on any action of a PR, but skip the job upon merge to master
-    if: github.event.pull_request.merged != true
+    # if: github.event.pull_request.merged != true
 
     needs: [validate-code-style, run-unit-tests]
 
