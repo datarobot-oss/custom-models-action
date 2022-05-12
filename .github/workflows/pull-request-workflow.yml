@@ -71,8 +71,8 @@ jobs:
           echo "github.repository:    ${{ github.repository }}" >> $OUT_DIR/github_context.txt
           echo "github.workspace:    ${{ github.workspace }}" >> $OUT_DIR/github_context.txt
 
-          echo "The github context is:"
-          echo "${{ toJson(github) }}" >> $OUT_DIR/github_context.json
+          echo "The github context is: <skipped>"
+          # echo "${{ toJson(github) }}" >> $OUT_DIR/github_context.json
           echo ""
 
       - uses: actions/upload-artifact@v3
