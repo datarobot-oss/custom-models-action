@@ -1,25 +1,22 @@
+import os
 from argparse import Namespace
 
-from bson import ObjectId
-import os
 from pathlib import Path
+
 from mock import patch
 import pytest
-import uuid
-from tempfile import TemporaryDirectory
 
-from mock.mock import PropertyMock, Mock
+from mock.mock import PropertyMock
 
 from custom_inference_model import CustomInferenceModel
 from custom_inference_model import ModelInfo
 from exceptions import ModelMainEntryPointNotFound, SharedAndLocalPathCollision
-from schema_validator import ModelSchema
 
 
 class TestCustomInferenceModel:
     @pytest.fixture
-    def no_models(self, common_path):
-        yield common_path
+    def no_models(self, common_path_with_code):
+        yield common_path_with_code
 
     @pytest.mark.usefixtures("no_models")
     def test_scan_and_load_no_models(self, options):
@@ -64,6 +61,88 @@ class TestCustomInferenceModel:
         custom_inference_model._scan_and_load_datarobot_models_metadata()
         assert len(custom_inference_model._models_info) == (num_multi_models + num_single_models)
 
+    def test_changed_files_between_commits(
+        self, options, repo_root_path, git_repo, init_repo_with_models_factory, common_filepath
+    ):
+        init_repo_with_models_factory(2, is_multi=False)
+        custom_inference_model = CustomInferenceModel(options)
+        custom_inference_model._scan_and_load_datarobot_models_metadata()
+        custom_inference_model._collect_datarobot_model_files()
+
+        self._make_a_change_and_commit(git_repo, [str(common_filepath)], 1)
+
+        models_info = custom_inference_model.models_info
+        first_model_main_program_filepath = models_info[0].main_program_filepath()
+        self._make_a_change_and_commit(
+            git_repo, [str(common_filepath), first_model_main_program_filepath], 2
+        )
+
+        changed_files = custom_inference_model._find_changed_files("HEAD~2", "HEAD~1")
+        assert len(changed_files) == 1, changed_files
+
+        changed_files = custom_inference_model._find_changed_files("HEAD~2", "HEAD")
+        assert len(changed_files) == 2, changed_files
+
+    @staticmethod
+    def _make_a_change_and_commit(git_repo, file_paths, index):
+        for file_path in file_paths:
+            with open(file_path, "a") as f:
+                f.write(f"# Automatic change ({index})")
+        git_repo.index.add([str(f) for f in file_paths])
+        git_repo.index.commit(f"Change number {index}")
+
+    @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
+    def test_lookup_affected_models_by_a_push_to_the_main_branch(
+        self,
+        options,
+        git_repo,
+        init_repo_with_models_factory,
+        common_filepath,
+        is_multi,
+    ):
+        num_models = 3
+        init_repo_with_models_factory(num_models, is_multi=is_multi)
+        custom_inference_model = CustomInferenceModel(options)
+        custom_inference_model._scan_and_load_datarobot_models_metadata()
+        custom_inference_model._collect_datarobot_model_files()
+
+        # Change 1 - one common module
+        self._make_a_change_and_commit(git_repo, [str(common_filepath)], 1)
+
+        models_info = custom_inference_model.models_info
+        for model_index in range(num_models):
+            model_main_program_filepath = models_info[model_index].main_program_filepath()
+            self._make_a_change_and_commit(git_repo, [model_main_program_filepath], 2 + model_index)
+
+        head_git_sha = "HEAD"
+        last_provision_git_sha = f"HEAD~{num_models}"
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.dict(
+            os.environ, {"GITHUB_SHA": head_git_sha}
+        ), patch.object(
+            CustomInferenceModel,
+            "_get_last_model_provisioned_git_sha",
+            return_value=last_provision_git_sha,
+        ):
+            custom_inference_model._lookup_affected_models_by_the_current_action()
+
+        models_info = custom_inference_model.models_info
+        assert len([m_info for m_info in models_info if m_info.is_affected_by_commit]) == num_models
+
+        for reference in range(1, num_models):
+            head_git_sha = "HEAD"
+            last_provision_git_sha = f"HEAD~{reference}"
+            with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.dict(
+                os.environ, {"GITHUB_SHA": head_git_sha}
+            ), patch.object(
+                CustomInferenceModel,
+                "_get_last_model_provisioned_git_sha",
+                return_value=last_provision_git_sha,
+            ):
+                custom_inference_model._lookup_affected_models_by_the_current_action()
+            assert (
+                len([m_info for m_info in models_info if m_info.is_affected_by_commit]) == reference
+            )
+
 
 class TestGlobPatterns:
     @pytest.mark.parametrize("num_models", [1, 2, 3])
@@ -81,7 +160,7 @@ class TestGlobPatterns:
     def test_glob_patterns(
         self,
         models_factory,
-        common_path,
+        common_path_with_code,
         excluded_src_path,
         options,
         num_models,
@@ -91,7 +170,9 @@ class TestGlobPatterns:
     ):
         models_factory(num_models, is_multi, with_include_glob, with_exclude_glob)
         custom_inference_model = CustomInferenceModel(options)
-        custom_inference_model.run()
+
+        with patch.object(CustomInferenceModel, "_lookup_affected_models_by_the_current_commit"):
+            custom_inference_model.run()
 
         assert len(custom_inference_model.models_info) == num_models
 
@@ -104,9 +185,9 @@ class TestGlobPatterns:
             assert excluded_src_path not in model_file_paths
 
             if with_include_glob:
-                assert common_path in model_file_paths
+                assert common_path_with_code in model_file_paths
             else:
-                assert common_path not in model_file_paths
+                assert common_path_with_code not in model_file_paths
 
             if with_exclude_glob:
                 assert readme_file_path.absolute() not in model_file_paths
@@ -137,7 +218,7 @@ class TestGlobPatterns:
             assert Path(excluded_path) not in model_info.model_file_paths
 
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
-    def test_missing_main_program(self, models_factory, common_path, options, is_multi):
+    def test_missing_main_program(self, models_factory, common_path_with_code, options, is_multi):
         models_factory(1, is_multi, include_main_prog=False)
         custom_inference_model = CustomInferenceModel(options)
         with pytest.raises(ModelMainEntryPointNotFound):

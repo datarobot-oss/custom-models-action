@@ -8,15 +8,17 @@ on:
   #  push:
   #    branches: [ master ]
   pull_request:
-    branches: [ master ]
+    branches: [ zohar/raptor-8048-find-models-affected-by-commit ]
+  push:
+    branches: [ zohar/raptor-8048-find-models-affected-by-commit ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 env:
   CONTEXT_INFO_FILEPATH: context_info.json
-  OUT_DIR: output-context/pull-request
-  INSPECT_CONTEXT: false
+  OUT_DIR: output-context/${{ github.event_name }}
+  INSPECT_CONTEXT: true
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -111,6 +113,21 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Print out git log
+        run: git log -n 10
+
+      - name: get changed files
+        id: getfile
+        run: |
+          echo "::set-output name=files::$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} | xargs)"
+
+      - name: echo output
+        run: |
+          echo ${{ steps.getfile.outputs.files }}
+          echo $(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} | xargs)
 
       - name: DataRobot Custom Inference Model
         id: custom-inference-model

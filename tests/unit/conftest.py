@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from argparse import Namespace
@@ -7,6 +8,7 @@ from tempfile import TemporaryDirectory
 import pytest
 import yaml
 from bson import ObjectId
+from git import Repo
 
 from schema_validator import ModelSchema
 
@@ -24,9 +26,18 @@ def _write_to_file(file_path, content):
 
 @pytest.fixture
 def common_path(repo_root_path):
-    common_path = repo_root_path / "common"
+    return repo_root_path / "common"
+
+
+@pytest.fixture
+def common_filepath(common_path):
+    return common_path / "common.py"
+
+
+@pytest.fixture
+def common_path_with_code(repo_root_path, common_path, common_filepath):
     os.makedirs(common_path)
-    _write_to_file(common_path / "common.py", "# common.py")
+    _write_to_file(common_filepath, "# common.py")
     _write_to_file(common_path / "util.py", "# Util.py")
     os.makedirs(common_path / "string")
     _write_to_file(common_path / "string" / "conv.py", "# conv.py")
@@ -48,7 +59,7 @@ def excluded_src_path(repo_root_path):
 
 
 @pytest.fixture
-def single_model_factory(repo_root_path, common_path, excluded_src_path):
+def single_model_factory(repo_root_path, common_path_with_code, excluded_src_path):
     def _inner(
         name,
         write_metadata=True,
@@ -75,7 +86,7 @@ def single_model_factory(repo_root_path, common_path, excluded_src_path):
             # noinspection PyTypeChecker
             single_model_metadata["version"]["include_glob_pattern"] = [
                 "./**",
-                f"/{common_path.relative_to(repo_root_path)}/**",
+                f"/{common_path_with_code.relative_to(repo_root_path)}/**",
             ]
         if with_exclude_glob:
             # noinspection PyTypeChecker
@@ -90,7 +101,7 @@ def single_model_factory(repo_root_path, common_path, excluded_src_path):
 
 
 @pytest.fixture
-def models_factory(repo_root_path, common_path, single_model_factory):
+def models_factory(repo_root_path, common_path_with_code, single_model_factory):
     def _inner(
         num_models=2,
         is_multi=False,
@@ -127,3 +138,36 @@ def models_factory(repo_root_path, common_path, single_model_factory):
 @pytest.fixture
 def options(repo_root_path):
     return Namespace(root_dir=repo_root_path.absolute())
+
+
+@pytest.fixture
+def git_repo(repo_root_path):
+    repo = Repo.init(repo_root_path)
+    logging.basicConfig()
+    logging.root.setLevel(logging.INFO)
+    type(repo.git).GIT_PYTHON_TRACE = "full"
+    return repo
+
+
+@pytest.fixture
+def init_repo_with_models_factory(git_repo, repo_root_path, models_factory):
+    def _inner(
+        num_models=2,
+        is_multi=False,
+        with_include_glob=True,
+        with_exclude_glob=True,
+        include_main_prog=True,
+    ):
+        models_factory(
+            num_models,
+            is_multi,
+            with_include_glob,
+            with_exclude_glob,
+            include_main_prog,
+        )
+        os.chdir(repo_root_path)
+        git_repo.git.add("--all")
+        git_repo.git.commit("-m", "'Initial commit'", "--no-verify")
+        return repo_root_path
+
+    return _inner
