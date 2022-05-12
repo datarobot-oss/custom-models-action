@@ -90,6 +90,12 @@ class CustomInferenceModel(CustomInferenceModelBase):
         """
 
         logger.info(f"Options: {self.options}")
+        logger.info(f"{'GITHUB_EVENT_NAME:':<30}{os.environ.get('GITHUB_EVENT_NAME')}")
+        logger.info(f"{'GITHUB_SHA:':<30}{os.environ.get('GITHUB_SHA')}")
+        logger.info(f"{'GITHUB_HEAD_REF:':<30}{os.environ.get('GITHUB_HEAD_REF')}")
+        logger.info(f"{'GITHUB_BASE_REF:':<30}{os.environ.get('GITHUB_BASE_REF')}")
+        logger.info(f"{'GITHUB_REF:':<30}{os.environ.get('GITHUB_REF')}")
+        logger.info(f"{'GITHUB_WORKSPACE:':<30}{os.environ.get('GITHUB_WORKSPACE')}")
         # raise InvalidModelSchema('(3) Some exception error')
 
         self._scan_and_load_datarobot_models_metadata()
