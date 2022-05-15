@@ -29,9 +29,7 @@ class TestSchemaValidator:
                 model_schema[ModelSchema.MULTI_MODELS_KEY].append(
                     {
                         ModelSchema.MODEL_ENTRY_PATH_KEY: f"./path/to/{model_name}",
-                        ModelSchema.MODEL_ENTRY_META_KEY: _partial_model_schema(
-                            model_name
-                        ),
+                        ModelSchema.MODEL_ENTRY_META_KEY: _partial_model_schema(model_name),
                     }
                 )
         return model_schema
@@ -53,9 +51,7 @@ class TestSchemaValidator:
         assert not ModelSchema.is_multi_models_schema(single_model_schema)
 
     def test_is_multi_models_schema(self):
-        multi_model_schema = self.create_partial_model_schema(
-            is_single=False, num_models=2
-        )
+        multi_model_schema = self.create_partial_model_schema(is_single=False, num_models=2)
         assert ModelSchema.is_multi_models_schema(multi_model_schema)
         assert not ModelSchema.is_single_model_schema(multi_model_schema)
 
@@ -85,22 +81,16 @@ class TestSchemaValidator:
     @staticmethod
     def _validate_schema(is_single, model_schema):
         if is_single:
-            transformed_schema = ModelSchema().validate_and_transform_single(
-                model_schema
-            )
+            transformed_schema = ModelSchema().validate_and_transform_single(model_schema)
 
             # Validate existence of default values
             for glob_key in [
                 ModelSchema.INCLUDE_GLOB_KEY,
                 ModelSchema.EXCLUDE_GLOB_KEY,
             ]:
-                assert isinstance(
-                    transformed_schema[ModelSchema.VERSION_KEY][glob_key], list
-                )
+                assert isinstance(transformed_schema[ModelSchema.VERSION_KEY][glob_key], list)
         else:
-            transformed_schema = ModelSchema().validate_and_transform_multi(
-                model_schema
-            )
+            transformed_schema = ModelSchema().validate_and_transform_multi(model_schema)
 
             # Validate existence of default values
             for model_entry in transformed_schema[ModelSchema.MULTI_MODELS_KEY]:
@@ -109,9 +99,7 @@ class TestSchemaValidator:
                     ModelSchema.EXCLUDE_GLOB_KEY,
                 ]:
                     model_metadata = model_entry[ModelSchema.MODEL_ENTRY_META_KEY]
-                    assert isinstance(
-                        model_metadata[ModelSchema.VERSION_KEY][glob_key], list
-                    )
+                    assert isinstance(model_metadata[ModelSchema.VERSION_KEY][glob_key], list)
 
     @pytest.mark.parametrize(
         "class_label_key", ["positive_class_label", "negative_class_label", None]
@@ -179,9 +167,7 @@ class TestSchemaValidator:
 
         def _set_single_model_keys(comb, schema):
             if not is_single:
-                schema = schema[ModelSchema.MULTI_MODELS_KEY][0][
-                    ModelSchema.MODEL_ENTRY_META_KEY
-                ]
+                schema = schema[ModelSchema.MULTI_MODELS_KEY][0][ModelSchema.MODEL_ENTRY_META_KEY]
             for element in comb:
                 if isinstance(element, Key):
                     # The 'type' is not really important here
@@ -323,9 +309,7 @@ class TestSchemaValidator:
         assert f"Wrong key '{forbidden_key}'" in str(e)
 
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
-    def test_dependent_stability_test_check_keys(
-        self, is_single, regression_model_schema
-    ):
+    def test_dependent_stability_test_check_keys(self, is_single, regression_model_schema):
         regression_model_schema["test"] = {
             "test_data": "62779bef562155562769f932",
             "checks": {
@@ -341,6 +325,4 @@ class TestSchemaValidator:
             regression_model_schema = self._wrap_multi(regression_model_schema)
         with pytest.raises(InvalidModelSchema) as e:
             self._validate_schema(is_single, regression_model_schema)
-        "Stability test check minimum payload size (100) is higher than the maximum (50)" in str(
-            e
-        )
+        "Stability test check minimum payload size (100) is higher than the maximum (50)" in str(e)

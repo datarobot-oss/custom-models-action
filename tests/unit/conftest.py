@@ -98,9 +98,7 @@ def models_factory(repo_root_path, common_path, single_model_factory):
         with_exclude_glob=True,
         include_main_prog=True,
     ):
-        multi_models_yaml_content = (
-            {ModelSchema.MULTI_MODELS_KEY: []} if is_multi else None
-        )
+        multi_models_yaml_content = {ModelSchema.MULTI_MODELS_KEY: []} if is_multi else None
         for counter in range(num_models):
             model_name = f"model_{counter}"
             model_metadata = single_model_factory(

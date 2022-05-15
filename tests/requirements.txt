@@ -1,5 +1,5 @@
 -r ../src/requirements.txt
+-r ../deps/dev-requirements.txt
 bson
-black
 mock
 pytest
