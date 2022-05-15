@@ -81,33 +81,21 @@ class ModelSchema:
                         "block_deployment_if_fails": Or("yes", "no"),
                         "output_dataset": And(str, lambda i: ObjectId.is_valid(i)),
                         Optional("match_threshold"): And(float, lambda v: 0 <= v <= 1),
-                        Optional("passing_match_rate"): And(
-                            int, lambda v: 0 <= v <= 100
-                        ),
+                        Optional("passing_match_rate"): And(int, lambda v: 0 <= v <= 100),
                     },
                     Optional("performance"): {
                         "value": Or("yes", "no"),
                         "block_deployment_if_fails": Or("yes", "no"),
-                        Optional("maximum_response_time"): And(
-                            int, lambda v: 1 <= v <= 1800
-                        ),
-                        Optional("check_duration_limit"): And(
-                            int, lambda v: 1 <= v <= 1800
-                        ),
-                        Optional("number_of_parallel_users"): And(
-                            int, lambda v: 1 <= v <= 4
-                        ),
+                        Optional("maximum_response_time"): And(int, lambda v: 1 <= v <= 1800),
+                        Optional("check_duration_limit"): And(int, lambda v: 1 <= v <= 1800),
+                        Optional("number_of_parallel_users"): And(int, lambda v: 1 <= v <= 4),
                     },
                     Optional("stability"): {
                         "value": Or("yes", "no"),
                         "block_deployment_if_fails": Or("yes", "no"),
-                        Optional("total_prediction_requests"): And(
-                            int, lambda v: v >= 1
-                        ),
+                        Optional("total_prediction_requests"): And(int, lambda v: v >= 1),
                         Optional("passing_rate"): And(int, lambda v: 0 <= v <= 100),
-                        Optional("number_of_parallel_users"): And(
-                            int, lambda v: 1 <= v <= 4
-                        ),
+                        Optional("number_of_parallel_users"): And(int, lambda v: 1 <= v <= 4),
                         Optional("minimum_payload_size"): And(int, lambda v: v >= 1),
                         Optional("maximum_payload_size"): And(int, lambda v: v >= 1),
                     },
@@ -116,11 +104,7 @@ class ModelSchema:
         }
     )
     MULTI_MODELS_SCHEMA = Schema(
-        {
-            MULTI_MODELS_KEY: [
-                {MODEL_ENTRY_PATH_KEY: str, MODEL_ENTRY_META_KEY: MODEL_SCHEMA.schema}
-            ]
-        }
+        {MULTI_MODELS_KEY: [{MODEL_ENTRY_PATH_KEY: str, MODEL_ENTRY_META_KEY: MODEL_SCHEMA.schema}]}
     )
 
     @classmethod
@@ -193,9 +177,7 @@ class ModelSchema:
                 "mapping_classes",
             }
             if len(mutual_exclusive_keys & model_metadata.keys()) > 1:
-                raise InvalidModelSchema(
-                    f"Only one of '{mutual_exclusive_keys}' keys is expected"
-                )
+                raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is expected")
 
     @staticmethod
     def _validate_dependent_keys(model_metadata):
@@ -206,17 +188,12 @@ class ModelSchema:
                 raise InvalidModelSchema(
                     f"Binary model must be defined with the '{binary_label_keys}' keys."
                 )
-        elif (
-            model_target_type == "Multiclass"
-            and model_metadata.get("mapping_classes") is None
-        ):
+        elif model_target_type == "Multiclass" and model_metadata.get("mapping_classes") is None:
             raise InvalidModelSchema(
                 f"Multiclass model must be define with the 'mapping_classes' key."
             )
 
-        stability = (
-            model_metadata.get("test", {}).get("checks", {}).get("stability", {})
-        )
+        stability = model_metadata.get("test", {}).get("checks", {}).get("stability", {})
         if stability:
             minimum_payload_size = stability.get("minimum_payload_size", 1)
             maximum_payload_size = stability.get("maximum_payload_size", 1000)

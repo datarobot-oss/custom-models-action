@@ -36,8 +36,8 @@ jobs:
       - name: Install Reqruirements
         run: pip install -r ${{ github.workspace }}/tests/requirements.txt
 
-      - name: Check source code format (black)
-        run: black --check ${{ github.workspace }}
+      - name: Check source code format (pycodestyle + black)
+        run: make lint
 
       # Print out context information
       - name: Inspect context

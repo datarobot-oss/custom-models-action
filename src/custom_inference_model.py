@@ -118,9 +118,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
             with open(yaml_path) as f:
                 yaml_content = yaml.safe_load(f)
                 if self._model_schema.is_multi_models_schema(yaml_content):
-                    transformed = self._model_schema.validate_and_transform_multi(
-                        yaml_content
-                    )
+                    transformed = self._model_schema.validate_and_transform_multi(yaml_content)
                     for model_entry in transformed[self._model_schema.MULTI_MODELS_KEY]:
                         model_path = self._to_absolute(
                             model_entry[ModelSchema.MODEL_ENTRY_PATH_KEY],
@@ -130,9 +128,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
                         model_info = ModelInfo(yaml_path, model_path, model_metadata)
                         self._models_info.append(model_info)
                 elif self._model_schema.is_single_model_schema(yaml_content):
-                    transformed = self._model_schema.validate_and_transform_single(
-                        yaml_content
-                    )
+                    transformed = self._model_schema.validate_and_transform_single(yaml_content)
                     yaml_path = Path(yaml_path)
                     model_info = ModelInfo(yaml_path, yaml_path.parent, transformed)
                     self._models_info.append(model_info)
@@ -159,9 +155,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
                     )
                     included_paths.update(glob(include_glob_pattern, recursive=True))
             else:
-                included_paths.update(
-                    glob(f"{model_info.model_path}/**", recursive=True)
-                )
+                included_paths.update(glob(f"{model_info.model_path}/**", recursive=True))
 
             excluded_paths = set([])
             exclude_glob_patterns = model_info.metadata[ModelSchema.VERSION_KEY][
