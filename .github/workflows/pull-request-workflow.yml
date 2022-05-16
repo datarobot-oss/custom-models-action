@@ -83,7 +83,7 @@ jobs:
 
   run-unit-tests:
     # Run this job on any action of a PR, but skip the job upon merge to master
-    if: ${{ github.event.pull_request.merged != true && env.INSPECT_CONTEXT == 'false' }}
+    if: ${{ github.event.pull_request.merged != true }}
 
     needs: validate-code-style
 
@@ -104,7 +104,7 @@ jobs:
   # This workflow contains a single job called "build"
   datarobot-custom-inference-model:
     # Run this job on any action of a PR, but skip the job upon merge to master
-    if: $${ github.event.pull_request.merged != true && env.INSPECT_CONTEXT == 'false' }}
+    if: ${{ github.event.pull_request.merged != true }}
 
     needs: [validate-code-style, run-unit-tests]
 
@@ -115,23 +115,28 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
+        if: ${{ env.INSPECT_CONTEXT == 'false' }}
         with:
           fetch-depth: 0
 
       - name: Print out git log
+        if: ${{ env.INSPECT_CONTEXT == 'false' }}
         run: git log -n 10
 
       - name: get changed files
+        if: ${{ env.INSPECT_CONTEXT == 'false' }}
         id: getfile
         run: |
           echo "::set-output name=files::$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} | xargs)"
 
       - name: echo output
+        if: ${{ env.INSPECT_CONTEXT == 'false' }}
         run: |
           echo ${{ steps.getfile.outputs.files }}
           echo $(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} | xargs)
 
       - name: DataRobot Custom Inference Model
+        if: ${{ env.INSPECT_CONTEXT == 'false' }}
         id: custom-inference-model
         uses: ./actions/custom-inference-model
         with:
@@ -140,6 +145,7 @@ jobs:
           main-branch: master
 
       - name: DataRobot Custom Inference Model Results
+        if: ${{ env.INSPECT_CONTEXT == 'false' }}
         run: |
           echo "Test result: ${{ steps.custom-inference-model.outputs.message }}"
           echo "Test result: ${{ steps.custom-inference-model.outputs.returned-code }}"
