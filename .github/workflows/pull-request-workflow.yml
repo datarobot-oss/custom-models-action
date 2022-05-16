@@ -36,9 +36,11 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Install Reqruirements
+        if: ${{ env.INSPECT_CONTEXT == 'false' }}
         run: pip install -r ${{ github.workspace }}/tests/requirements.txt
 
       - name: Check source code format (pycodestyle + black)
+        if: ${{ env.INSPECT_CONTEXT == 'false' }}
         run: make lint
 
       # Print out context information
@@ -81,7 +83,7 @@ jobs:
 
   run-unit-tests:
     # Run this job on any action of a PR, but skip the job upon merge to master
-    if: github.event.pull_request.merged != true
+    if: github.event.pull_request.merged != true && ${{ env.INSPECT_CONTEXT == 'false' }}
 
     needs: validate-code-style
 
@@ -102,7 +104,7 @@ jobs:
   # This workflow contains a single job called "build"
   datarobot-custom-inference-model:
     # Run this job on any action of a PR, but skip the job upon merge to master
-    if: github.event.pull_request.merged != true
+    if: github.event.pull_request.merged != true && ${{ env.INSPECT_CONTEXT == 'false' }}
 
     needs: [validate-code-style, run-unit-tests]
 
