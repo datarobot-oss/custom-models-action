@@ -19,3 +19,7 @@ class ModelMainEntryPointNotFound(GenericException):
 
 class SharedAndLocalPathCollision(GenericException):
     pass
+
+
+class UnInitializedGitTool(GenericException):
+    pass
