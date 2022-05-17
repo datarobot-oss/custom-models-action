@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import logging
+import os
 import sys
 
 from custom_inference_model import CustomInferenceModel
@@ -15,20 +16,29 @@ def argparse_options(args=None):
     parser.add_argument(
         "--deploy",
         action="store_true",
-        help="Whether a action should be manage custom inference models or deployments ",
+        help="Whether a action should be manage custom inference models or deployments.",
     )
-    parser.add_argument("--webserver", required=True, help="DataRobot frontend webserver URL")
+    parser.add_argument("--webserver", required=True, help="DataRobot frontend webserver URL.")
     parser.add_argument(
-        "--api-token", required=True, help="DataRobot public API authentication token"
+        "--api-token", required=True, help="DataRobot public API authentication token."
     )
-    parser.add_argument("--branch", required=True, help="The branch against which PRs take action")
-    parser.add_argument("--root-dir", required=True, help="The workspace root directory")
+    parser.add_argument("--branch", required=True, help="The branch against which PRs take action.")
+    parser.add_argument("--root-dir", required=True, help="The workspace root directory.")
 
     return parser.parse_args(args)
 
 
+def setup_log_configuration():
+    log_level = os.environ.get("LOGLEVEL", "INFO").upper()
+    log_format = "%(asctime)s [%(levelname)s]  %(message)s"
+    try:
+        logging.basicConfig(format=log_format, level=log_level)
+    except ValueError:
+        logging.basicConfig(format=log_format, level=logging.INFO)
+
+
 def main(options):
-    logging.basicConfig(format="%(asctime)s [%(levelname)s]  %(message)s", level=logging.INFO)
+    setup_log_configuration()
 
     try:
         if options.deploy:
