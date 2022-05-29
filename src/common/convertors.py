@@ -1,6 +1,6 @@
 import re
 
-from exceptions import InvalidMemoryValue
+from common.exceptions import InvalidMemoryValue
 
 
 class MemoryConvertor:

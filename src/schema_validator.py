@@ -7,8 +7,8 @@ from schema import SchemaError
 from schema import Optional
 from schema import Or
 
-from convertors import MemoryConvertor
-from exceptions import InvalidModelSchema
+from common.convertors import MemoryConvertor
+from common.exceptions import InvalidModelSchema
 
 logger = logging.getLogger()
 

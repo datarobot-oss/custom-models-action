@@ -9,8 +9,8 @@ from pathlib import Path
 import yaml
 from git import Repo
 
-from exceptions import ModelMainEntryPointNotFound, SharedAndLocalPathCollision
-from git_tool import GitTool
+from common.exceptions import ModelMainEntryPointNotFound, SharedAndLocalPathCollision
+from common.git_tool import GitTool
 from schema_validator import ModelSchema
 
 logger = logging.getLogger()
