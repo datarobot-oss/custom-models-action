@@ -18,86 +18,133 @@ class ModelSchema:
     MODEL_ENTRY_PATH_KEY = "model_path"
     MODEL_ENTRY_META_KEY = "model_metadata"
     MODEL_ID_KEY = "git_datarobot_model_id"
+
+    TARGET_TYPE_KEY = "target_type"
+    TARGET_TYPE_BINARY_KEY = "Binary"
+    TARGET_TYPE_REGRESSION_KEY = "Regression"
+    TARGET_TYPE_MULTICLASS_KEY = "Multiclass"
+    TARGET_TYPE_ANOMALY_DETECTION_KEY = "Anomaly Detection"
+    TARGET_TYPE_UNSTRUCTURED_BINARY_KEY = "Unstructured (Binary)"
+    TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY = "Unstructured (Regression)"
+    TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY = "Unstructured (Multiclass)"
+    TARGET_TYPE_UNSTRUCTURED_OTHER_KEY = "Unstructured (Other)"
+
+    TARGET_NAME_KEY = "target_name"
+    PREDICTION_THRESHOLD_KEY = "prediction_threshold"
+    POSITIVE_CLASS_LABEL_KEY = "positive_class_label"
+    NEGATIVE_CLASS_LABEL_KEY = "negative_class_label"
+    MAPPING_CLASSES_KEY = "mapping_classes"
+    LANGUAGE_KEY = "language"
+
+    SETTINGS_KEY = "settings"
+    NAME_KEY = "name"
+    DESCRIPTION_KEY = "description"
+    TRAINING_DATASET_KEY = "training_dataset"
+    HOLDOUT_DATASET_KEY = "holdout_dataset"
+
     DEPLOYMENT_ID_KEY = "git_datarobot_deployment_id"
+
     VERSION_KEY = "version"
+    MODEL_ENV_KEY = "model_environment"
     INCLUDE_GLOB_KEY = "include_glob_pattern"
     EXCLUDE_GLOB_KEY = "exclude_glob_pattern"
+    MEMORY_KEY = "memory"
+    REPLICAS_KEY = "replicas"
+
+    TEST_KEY = "test"
+    TEST_DATA_KEY = "test_data"
+
+    CHECKS_KEY = "checks"
+    NULL_IMPUTATION_KEY = "null_imputation"
+    CHECK_VALUE_KEY = "value"
+    BLOCK_DEPLOYMENT_IF_FAILS_KEY = "block_deployment_if_fails"
+    SIDE_EFFECT_KEY = "side_effect"
+    PREDICTION_VERIFICATION_KEY = "prediction_verification"
+    OUTPUT_DATASET_KEY = "output_dataset"
+    MATCH_THRESHOLD_KEY = "match_threshold"
+    PASSING_MATCH_RATE_KEY = "passing_match_rate"
+    PERFORMANCE_KEY = "performance"
+    MAXIMUM_RESPONSE_TIME_KEY = "maximum_response_time"
+    CHECK_DURATION_LIMIT_KEY = "check_duration_limit"
+    NUMBER_OF_PARALLEL_USERS_KEY = "number_of_parallel_users"
+    STABILITY_KEY = "stability"
+    TOTAL_PREDICTION_REQUESTS_KEY = "total_prediction_requests"
+    PASSING_RATE_KEY = "passing_rate"
+    NUMBER_OF_PARALLEL_USERS_KEY = "number_of_parallel_users"
+    MINIMUM_PAYLOAD_SIZE_KEY = "minimum_payload_size"
+    MAXIMUM_PAYLOAD_SIZE_KEY = "maximum_payload_size"
 
     MODEL_SCHEMA = Schema(
         {
             MODEL_ID_KEY: str,
             Optional(DEPLOYMENT_ID_KEY): str,
-            "target_type": Or(
-                "Binary",
-                "Regression",
-                "Multiclass",
-                "Anomaly Detection",
-                "Unstructured (Binary)",
-                "Unstructured (Regression)",
-                "Unstructured (Multiclass)",
-                "Unstructured (Other)",
+            TARGET_TYPE_KEY: Or(
+                TARGET_TYPE_BINARY_KEY,
+                TARGET_TYPE_REGRESSION_KEY,
+                TARGET_TYPE_MULTICLASS_KEY,
+                TARGET_TYPE_ANOMALY_DETECTION_KEY,
+                TARGET_TYPE_UNSTRUCTURED_BINARY_KEY,
+                TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY,
+                TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
+                TARGET_TYPE_UNSTRUCTURED_OTHER_KEY,
             ),
-            "target_name": str,
-            Optional("prediction_threshold"): And(float, lambda n: 0 <= n <= 1),
-            Optional("positive_class_label"): str,
-            Optional("negative_class_label"): str,
-            Optional("mapping_classes"): list,
-            Optional("language"): str,
-            Optional("settings"): {
-                Optional("name"): str,
-                Optional("description"): str,
-                Optional("training_dataset"): And(str, lambda i: ObjectId.is_valid(i)),
-                Optional("holdout_dataset"): And(str, lambda i: ObjectId.is_valid(i)),
+            TARGET_NAME_KEY: str,
+            Optional(PREDICTION_THRESHOLD_KEY): And(float, lambda n: 0 <= n <= 1),
+            Optional(POSITIVE_CLASS_LABEL_KEY): str,
+            Optional(NEGATIVE_CLASS_LABEL_KEY): str,
+            Optional(MAPPING_CLASSES_KEY): list,
+            Optional(LANGUAGE_KEY): str,
+            Optional(SETTINGS_KEY): {
+                Optional(NAME_KEY): str,
+                Optional(DESCRIPTION_KEY): str,
+                Optional(TRAINING_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
+                Optional(HOLDOUT_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
             },
             VERSION_KEY: {
-                "model_environment": And(str, lambda i: ObjectId.is_valid(i)),
+                MODEL_ENV_KEY: And(str, lambda i: ObjectId.is_valid(i)),
                 Optional(INCLUDE_GLOB_KEY, default=[]): And(
                     list, lambda l: all(isinstance(e, str) for e in l)
                 ),
                 Optional(EXCLUDE_GLOB_KEY, default=[]): And(
                     list, lambda l: all(isinstance(x, str) for x in l)
                 ),
-                Optional("memory"): Use(lambda v: MemoryConvertor.to_bytes(v)),
-                Optional("replicas"): And(int, lambda r: r > 0),
+                Optional(MEMORY_KEY): Use(lambda v: MemoryConvertor.to_bytes(v)),
+                Optional(REPLICAS_KEY): And(int, lambda r: r > 0),
             },
-            Optional("test"): {
-                "test_data": And(str, lambda i: ObjectId.is_valid(i)),
-                Optional("memory"): Use(lambda v: MemoryConvertor.to_bytes(v)),
-                Optional("checks"): {
-                    Optional("null_imputation"): {
-                        "value": Or("yes", "no"),
-                        "block_deployment_if_fails": Or("yes", "no"),
+            Optional(TEST_KEY): {
+                TEST_DATA_KEY: And(str, lambda i: ObjectId.is_valid(i)),
+                Optional(MEMORY_KEY): Use(lambda v: MemoryConvertor.to_bytes(v)),
+                Optional(CHECKS_KEY): {
+                    Optional(NULL_IMPUTATION_KEY): {
+                        CHECK_VALUE_KEY: Or("yes", "no"),
+                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: Or("yes", "no"),
                     },
-                    Optional("side_effect"): {
-                        "value": Or("yes", "no"),
-                        "block_deployment_if_fails": Or("yes", "no"),
+                    Optional(SIDE_EFFECT_KEY): {
+                        CHECK_VALUE_KEY: Or("yes", "no"),
+                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: Or("yes", "no"),
                     },
-                    Optional("prediction_verification"): {
-                        "value": Or("yes", "no"),
-                        "block_deployment_if_fails": Or("yes", "no"),
+                    Optional(PREDICTION_VERIFICATION_KEY): {
+                        CHECK_VALUE_KEY: Or("yes", "no"),
+                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: Or("yes", "no"),
+                        OUTPUT_DATASET_KEY: And(str, lambda i: ObjectId.is_valid(i)),
+                        Optional(MATCH_THRESHOLD_KEY): And(float, lambda v: 0 <= v <= 1),
+                        Optional(PASSING_MATCH_RATE_KEY): And(int, lambda v: 0 <= v <= 100),
                     },
-                    Optional("prediction_verification"): {
-                        "value": Or("yes", "no"),
-                        "block_deployment_if_fails": Or("yes", "no"),
-                        "output_dataset": And(str, lambda i: ObjectId.is_valid(i)),
-                        Optional("match_threshold"): And(float, lambda v: 0 <= v <= 1),
-                        Optional("passing_match_rate"): And(int, lambda v: 0 <= v <= 100),
+                    Optional(PERFORMANCE_KEY): {
+                        CHECK_VALUE_KEY: Or("yes", "no"),
+                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: Or("yes", "no"),
+                        Optional(MAXIMUM_RESPONSE_TIME_KEY): And(int, lambda v: 1 <= v <= 1800),
+                        Optional(CHECK_DURATION_LIMIT_KEY): And(int, lambda v: 1 <= v <= 1800),
+                        Optional(NUMBER_OF_PARALLEL_USERS_KEY): And(int, lambda v: 1 <= v <= 4),
                     },
-                    Optional("performance"): {
-                        "value": Or("yes", "no"),
-                        "block_deployment_if_fails": Or("yes", "no"),
-                        Optional("maximum_response_time"): And(int, lambda v: 1 <= v <= 1800),
-                        Optional("check_duration_limit"): And(int, lambda v: 1 <= v <= 1800),
-                        Optional("number_of_parallel_users"): And(int, lambda v: 1 <= v <= 4),
-                    },
-                    Optional("stability"): {
-                        "value": Or("yes", "no"),
-                        "block_deployment_if_fails": Or("yes", "no"),
-                        Optional("total_prediction_requests"): And(int, lambda v: v >= 1),
-                        Optional("passing_rate"): And(int, lambda v: 0 <= v <= 100),
-                        Optional("number_of_parallel_users"): And(int, lambda v: 1 <= v <= 4),
-                        Optional("minimum_payload_size"): And(int, lambda v: v >= 1),
-                        Optional("maximum_payload_size"): And(int, lambda v: v >= 1),
+                    Optional(STABILITY_KEY): {
+                        CHECK_VALUE_KEY: Or("yes", "no"),
+                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: Or("yes", "no"),
+                        Optional(TOTAL_PREDICTION_REQUESTS_KEY): And(int, lambda v: v >= 1),
+                        Optional(PASSING_RATE_KEY): And(int, lambda v: 0 <= v <= 100),
+                        Optional(NUMBER_OF_PARALLEL_USERS_KEY): And(int, lambda v: 1 <= v <= 4),
+                        Optional(MINIMUM_PAYLOAD_SIZE_KEY): And(int, lambda v: v >= 1),
+                        Optional(MAXIMUM_PAYLOAD_SIZE_KEY): And(int, lambda v: v >= 1),
                     },
                 },
             },
@@ -170,33 +217,53 @@ class ModelSchema:
 
     @staticmethod
     def _validate_mutual_exclusive_keys(model_metadata):
-        for binary_class_label_key in ["positive_class_label", "negative_class_label"]:
+        for binary_class_label_key in [
+            ModelSchema.POSITIVE_CLASS_LABEL_KEY,
+            ModelSchema.NEGATIVE_CLASS_LABEL_KEY,
+        ]:
             mutual_exclusive_keys = {
-                "prediction_threshold",
+                ModelSchema.PREDICTION_THRESHOLD_KEY,
                 binary_class_label_key,
-                "mapping_classes",
+                ModelSchema.MAPPING_CLASSES_KEY,
             }
             if len(mutual_exclusive_keys & model_metadata.keys()) > 1:
                 raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is expected")
 
     @staticmethod
     def _validate_dependent_keys(model_metadata):
-        model_target_type = model_metadata["target_type"]
-        if model_target_type == "Binary":
-            binary_label_keys = {"positive_class_label", "negative_class_label"}
+        model_target_type = model_metadata[ModelSchema.TARGET_TYPE_KEY]
+        if model_target_type in [
+            ModelSchema.TARGET_TYPE_BINARY_KEY,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY,
+        ]:
+            binary_label_keys = {
+                ModelSchema.POSITIVE_CLASS_LABEL_KEY,
+                ModelSchema.NEGATIVE_CLASS_LABEL_KEY,
+            }
             if len(binary_label_keys & set(model_metadata.keys())) != 2:
                 raise InvalidModelSchema(
                     f"Binary model must be defined with the '{binary_label_keys}' keys."
                 )
-        elif model_target_type == "Multiclass" and model_metadata.get("mapping_classes") is None:
+        elif (
+            model_target_type
+            in [
+                ModelSchema.TARGET_TYPE_MULTICLASS_KEY,
+                ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
+            ]
+            and model_metadata.get(ModelSchema.MAPPING_CLASSES_KEY) is None
+        ):
             raise InvalidModelSchema(
                 f"Multiclass model must be define with the 'mapping_classes' key."
             )
 
-        stability = model_metadata.get("test", {}).get("checks", {}).get("stability", {})
+        stability = (
+            model_metadata.get(ModelSchema.TEST_KEY, {})
+            .get(ModelSchema.CHECKS_KEY, {})
+            .get(ModelSchema.STABILITY_KEY, {})
+        )
         if stability:
-            minimum_payload_size = stability.get("minimum_payload_size", 1)
-            maximum_payload_size = stability.get("maximum_payload_size", 1000)
+            minimum_payload_size = stability.get(ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY, 1)
+            maximum_payload_size = stability.get(ModelSchema.MAXIMUM_PAYLOAD_SIZE_KEY, 1000)
             if maximum_payload_size < minimum_payload_size:
                 raise InvalidModelSchema(
                     f"Stability test check minimum payload size ({minimum_payload_size}) "

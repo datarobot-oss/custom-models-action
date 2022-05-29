@@ -15,9 +15,9 @@ class TestSchemaValidator:
         def _partial_model_schema(name):
             return {
                 ModelSchema.MODEL_ID_KEY: str(uuid.uuid4()),
-                "target_name": "target_feature_col",
-                "settings": {"name": name},
-                ModelSchema.VERSION_KEY: {"model_environment": str(ObjectId())},
+                ModelSchema.TARGET_NAME_KEY: "target_feature_col",
+                ModelSchema.SETTINGS_KEY: {"name": name},
+                ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: str(ObjectId())},
             }
 
         if is_single:
@@ -38,10 +38,10 @@ class TestSchemaValidator:
     def regression_model_schema(self):
         return {
             ModelSchema.MODEL_ID_KEY: "abc123",
-            "target_type": "Regression",
-            "target_name": "target_column",
+            ModelSchema.TARGET_TYPE_KEY: "Regression",
+            ModelSchema.TARGET_NAME_KEY: "target_column",
             ModelSchema.VERSION_KEY: {
-                "model_environment": "627785ea562155d227c6a56c",
+                ModelSchema.MODEL_ENV_KEY: "627785ea562155d227c6a56c",
             },
         }
 
@@ -58,9 +58,9 @@ class TestSchemaValidator:
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
     def test_for_binary_model(self, is_single):
         def _set_binary_keys(schema):
-            schema["target_type"] = "Binary"
-            schema["positive_class_label"] = "1"
-            schema["negative_class_label"] = "0"
+            schema[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_BINARY_KEY
+            schema[ModelSchema.POSITIVE_CLASS_LABEL_KEY] = "1"
+            schema[ModelSchema.NEGATIVE_CLASS_LABEL_KEY] = "0"
 
         self._validate_for_model_type(is_single, _set_binary_keys)
 
@@ -102,54 +102,64 @@ class TestSchemaValidator:
                     assert isinstance(model_metadata[ModelSchema.VERSION_KEY][glob_key], list)
 
     @pytest.mark.parametrize(
-        "class_label_key", ["positive_class_label", "negative_class_label", None]
+        "binary_target_type",
+        [ModelSchema.TARGET_TYPE_BINARY_KEY, ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY],
+    )
+    @pytest.mark.parametrize(
+        "class_label_key",
+        [ModelSchema.POSITIVE_CLASS_LABEL_KEY, ModelSchema.NEGATIVE_CLASS_LABEL_KEY, None],
     )
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
-    def test_missing_key_for_binary_model(self, is_single, class_label_key):
+    def test_missing_key_for_binary_model(self, binary_target_type, class_label_key, is_single):
         def _set_binary_keys(schema):
-            schema["target_type"] = "Binary"
+            schema[ModelSchema.TARGET_TYPE_KEY] = binary_target_type
             if class_label_key:
                 schema[class_label_key] = "fake"
 
         with pytest.raises(InvalidModelSchema):
             self._validate_for_model_type(is_single, _set_binary_keys)
 
+    @pytest.mark.parametrize(
+        "regression_target_type",
+        [
+            ModelSchema.TARGET_TYPE_REGRESSION_KEY,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY,
+        ],
+    )
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
-    def test_for_regression_model(self, is_single):
+    def test_for_regression_model(self, regression_target_type, is_single):
         def _set_regression_key(schema):
-            schema["target_type"] = "Regression"
+            schema[ModelSchema.TARGET_TYPE_KEY] = regression_target_type
 
         self._validate_for_model_type(is_single, _set_regression_key)
 
+    @pytest.mark.parametrize(
+        "multiclass_target_type",
+        [
+            ModelSchema.TARGET_TYPE_MULTICLASS_KEY,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
+        ],
+    )
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
-    def test_for_multiclass_model(self, is_single):
+    def test_for_multiclass_model(self, multiclass_target_type, is_single):
         def _set_multiclass_keys(schema):
-            schema["target_type"] = "Multiclass"
-            schema["mapping_classes"] = ["1", "2", "3"]
+            schema[ModelSchema.TARGET_TYPE_KEY] = multiclass_target_type
+            schema[ModelSchema.MAPPING_CLASSES_KEY] = ["1", "2", "3"]
 
         self._validate_for_model_type(is_single, _set_multiclass_keys)
 
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
     def test_missing_key_for_multiclass_model(self, is_single):
         def _set_multiclass_keys(schema):
-            schema["target_type"] = "Multiclass"
+            schema[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_MULTICLASS_KEY
 
         with pytest.raises(InvalidModelSchema):
             self._validate_for_model_type(is_single, _set_multiclass_keys)
 
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
-    @pytest.mark.parametrize(
-        "target_type",
-        [
-            "Unstructured (Binary)",
-            "Unstructured (Regression)",
-            "Unstructured (Multiclass)",
-            "Unstructured (Other)",
-        ],
-    )
-    def test_for_unstructured_model_types(self, is_single, target_type):
+    def test_for_unstructured_model_type(self, is_single):
         def _set_unstructured_keys(schema):
-            schema["target_type"] = target_type
+            schema[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY
 
         self._validate_for_model_type(is_single, _set_unstructured_keys)
 
@@ -157,12 +167,28 @@ class TestSchemaValidator:
     def test_invalid_mutual_exclusive_keys(self, is_single):
         Key = namedtuple("Key", ["type", "name", "value"])
         mutual_exclusive_keys = {
-            Key(type="Regression", name="prediction_threshold", value=0.5),
-            (
-                Key(type="Binary", name="positive_class_label", value="1"),
-                Key(type="Binary", name="negative_class_label", value="0"),
+            Key(
+                type=ModelSchema.TARGET_TYPE_REGRESSION_KEY,
+                name=ModelSchema.PREDICTION_THRESHOLD_KEY,
+                value=0.5,
             ),
-            Key(type="Multiclass", name="mapping_classes", value=("a", "b", "c")),
+            (
+                Key(
+                    type=ModelSchema.TARGET_TYPE_BINARY_KEY,
+                    name=ModelSchema.POSITIVE_CLASS_LABEL_KEY,
+                    value="1",
+                ),
+                Key(
+                    type=ModelSchema.TARGET_TYPE_BINARY_KEY,
+                    name=ModelSchema.NEGATIVE_CLASS_LABEL_KEY,
+                    value="0",
+                ),
+            ),
+            Key(
+                type=ModelSchema.TARGET_TYPE_MULTICLASS_KEY,
+                name=ModelSchema.MAPPING_CLASSES_KEY,
+                value=("a", "b", "c"),
+            ),
         }
 
         def _set_single_model_keys(comb, schema):
@@ -171,12 +197,12 @@ class TestSchemaValidator:
             for element in comb:
                 if isinstance(element, Key):
                     # The 'type' is not really important here
-                    schema["target_type"] = element.type
+                    schema[ModelSchema.TARGET_TYPE_KEY] = element.type
                     schema[element.name] = element.value
                 else:
                     for key in element:
                         # The 'type' is not really important here
-                        schema["target_type"] = key.type
+                        schema[ModelSchema.TARGET_TYPE_KEY] = key.type
                         schema[key.name] = key.value
 
         model_schema = self.create_partial_model_schema(is_single, num_models=1)
@@ -191,10 +217,10 @@ class TestSchemaValidator:
         "mandatory_key_to_skip",
         [
             ModelSchema.MODEL_ID_KEY,
-            "target_type",
-            "target_name",
+            ModelSchema.TARGET_TYPE_KEY,
+            ModelSchema.TARGET_NAME_KEY,
             ModelSchema.VERSION_KEY,
-            "version.model_environment",
+            f"{ModelSchema.VERSION_KEY}.{ModelSchema.MODEL_ENV_KEY}",
         ],
     )
     def test_missing_mandatory_keys(
@@ -232,62 +258,62 @@ class TestSchemaValidator:
         full_model_schema = {
             ModelSchema.MODEL_ID_KEY: "abc123",
             ModelSchema.DEPLOYMENT_ID_KEY: "edf456",
-            "target_type": "Binary",
-            "target_name": "target_column",
-            "positive_class_label": "1",
-            "negative_class_label": "0",
-            "language": "Python",
-            "settings": {
-                "name": "Awesome Model",
-                "description": "My awesome model",
-                "training_dataset": "627790ba56215587b3021632",
-                "holdout_dataset": "627790ca5621558b55c78d78",
+            ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_BINARY_KEY,
+            ModelSchema.TARGET_NAME_KEY: "target_column",
+            ModelSchema.POSITIVE_CLASS_LABEL_KEY: "1",
+            ModelSchema.NEGATIVE_CLASS_LABEL_KEY: "0",
+            ModelSchema.LANGUAGE_KEY: "Python",
+            ModelSchema.SETTINGS_KEY: {
+                ModelSchema.NAME_KEY: "Awesome Model",
+                ModelSchema.DESCRIPTION_KEY: "My awesome model",
+                ModelSchema.TRAINING_DATASET_KEY: "627790ba56215587b3021632",
+                ModelSchema.HOLDOUT_DATASET_KEY: "627790ca5621558b55c78d78",
             },
             ModelSchema.VERSION_KEY: {
-                "model_environment": "627790db5621558eedc4c7fa",
-                "include_glob_pattern": ["./"],
-                "exclude_glob_pattern": ["README.md", "out/"],
-                "memory": "100Mi",
-                "replicas": 3,
+                ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
+                ModelSchema.INCLUDE_GLOB_KEY: ["./"],
+                ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
+                ModelSchema.MEMORY_KEY: "100Mi",
+                ModelSchema.REPLICAS_KEY: 3,
             },
-            "test": {
-                "test_data": "62779143562155aa34a3d65b",
-                "memory": "100Mi",
-                "checks": {
-                    "null_imputation": {
-                        "value": "yes",
-                        "block_deployment_if_fails": "yes",
+            ModelSchema.TEST_KEY: {
+                ModelSchema.TEST_DATA_KEY: "62779143562155aa34a3d65b",
+                ModelSchema.MEMORY_KEY: "100Mi",
+                ModelSchema.CHECKS_KEY: {
+                    ModelSchema.NULL_IMPUTATION_KEY: {
+                        ModelSchema.CHECK_VALUE_KEY: "yes",
+                        ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
                     },
-                    "side_effect": {
-                        "value": "yes",
-                        "block_deployment_if_fails": "yes",
+                    ModelSchema.SIDE_EFFECT_KEY: {
+                        ModelSchema.CHECK_VALUE_KEY: "yes",
+                        ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
                     },
-                    "prediction_verification": {
-                        "value": "yes",
-                        "block_deployment_if_fails": "yes",
+                    ModelSchema.PREDICTION_VERIFICATION_KEY: {
+                        ModelSchema.CHECK_VALUE_KEY: "yes",
+                        ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
                     },
-                    "prediction_verification": {
-                        "value": "yes",
-                        "block_deployment_if_fails": "no",
-                        "output_dataset": "627791f5562155d63f367b05",
-                        "match_threshold": 0.9,
-                        "passing_match_rate": 85,
+                    ModelSchema.PREDICTION_VERIFICATION_KEY: {
+                        ModelSchema.CHECK_VALUE_KEY: "yes",
+                        ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "no",
+                        ModelSchema.OUTPUT_DATASET_KEY: "627791f5562155d63f367b05",
+                        ModelSchema.MATCH_THRESHOLD_KEY: 0.9,
+                        ModelSchema.PASSING_MATCH_RATE_KEY: 85,
                     },
-                    "performance": {
-                        "value": "yes",
-                        "block_deployment_if_fails": "no",
-                        "maximum_response_time": 50,
-                        "check_duration_limit": 100,
-                        "number_of_parallel_users": 3,
+                    ModelSchema.PERFORMANCE_KEY: {
+                        ModelSchema.CHECK_VALUE_KEY: "yes",
+                        ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "no",
+                        ModelSchema.MAXIMUM_RESPONSE_TIME_KEY: 50,
+                        ModelSchema.CHECK_DURATION_LIMIT_KEY: 100,
+                        ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY: 3,
                     },
-                    "stability": {
-                        "value": "no",
-                        "block_deployment_if_fails": "yes",
-                        "total_prediction_requests": 50,
-                        "passing_rate": 95,
-                        "number_of_parallel_users": 1,
-                        "minimum_payload_size": 100,
-                        "maximum_payload_size": 1000,
+                    ModelSchema.STABILITY_KEY: {
+                        ModelSchema.CHECK_VALUE_KEY: "no",
+                        ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
+                        ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY: 50,
+                        ModelSchema.PASSING_RATE_KEY: 95,
+                        ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY: 1,
+                        ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY: 100,
+                        ModelSchema.MAXIMUM_PAYLOAD_SIZE_KEY: 1000,
                     },
                 },
             },
@@ -310,14 +336,14 @@ class TestSchemaValidator:
 
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
     def test_dependent_stability_test_check_keys(self, is_single, regression_model_schema):
-        regression_model_schema["test"] = {
-            "test_data": "62779bef562155562769f932",
-            "checks": {
-                "stability": {
-                    "value": "yes",
-                    "block_deployment_if_fails": "yes",
-                    "minimum_payload_size": 100,
-                    "maximum_payload_size": 50,
+        regression_model_schema[ModelSchema.TEST_KEY] = {
+            ModelSchema.TEST_DATA_KEY: "62779bef562155562769f932",
+            ModelSchema.CHECKS_KEY: {
+                ModelSchema.STABILITY_KEY: {
+                    ModelSchema.CHECK_VALUE_KEY: "yes",
+                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
+                    ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY: 100,
+                    ModelSchema.MAXIMUM_PAYLOAD_SIZE_KEY: 50,
                 }
             },
         }
@@ -325,4 +351,7 @@ class TestSchemaValidator:
             regression_model_schema = self._wrap_multi(regression_model_schema)
         with pytest.raises(InvalidModelSchema) as e:
             self._validate_schema(is_single, regression_model_schema)
-        "Stability test check minimum payload size (100) is higher than the maximum (50)" in str(e)
+        assert (
+            "Stability test check minimum payload size (100) is higher than the maximum (50)"
+            in str(e)
+        )
