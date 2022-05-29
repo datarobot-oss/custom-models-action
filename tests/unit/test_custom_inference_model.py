@@ -10,8 +10,8 @@ from mock.mock import PropertyMock
 
 from custom_inference_model import CustomInferenceModel
 from custom_inference_model import ModelInfo
-from exceptions import ModelMainEntryPointNotFound, SharedAndLocalPathCollision
-from git_tool import GitTool
+from common.exceptions import ModelMainEntryPointNotFound, SharedAndLocalPathCollision
+from common.git_tool import GitTool
 
 
 class TestCustomInferenceModel:

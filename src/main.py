@@ -6,7 +6,7 @@ import sys
 
 from custom_inference_model import CustomInferenceModel
 from custom_inference_deployment import CustomInferenceDeployment
-from exceptions import GenericException
+from common.exceptions import GenericException
 
 logger = logging.getLogger()
 

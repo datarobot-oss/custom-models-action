@@ -4,7 +4,7 @@ from collections import namedtuple
 import pytest
 from bson import ObjectId
 
-from exceptions import InvalidModelSchema
+from common.exceptions import InvalidModelSchema
 from itertools import combinations
 from schema_validator import ModelSchema
 
