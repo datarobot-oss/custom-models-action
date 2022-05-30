@@ -55,10 +55,14 @@ class TestSchemaValidator:
         assert ModelSchema.is_multi_models_schema(multi_model_schema)
         assert not ModelSchema.is_single_model_schema(multi_model_schema)
 
+    @pytest.mark.parametrize(
+        "binary_target_type",
+        [ModelSchema.TARGET_TYPE_BINARY_KEY, ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY],
+    )
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
-    def test_for_binary_model(self, is_single):
+    def test_for_binary_model(self, binary_target_type, is_single):
         def _set_binary_keys(schema):
-            schema[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_BINARY_KEY
+            schema[ModelSchema.TARGET_TYPE_KEY] = binary_target_type
             schema[ModelSchema.POSITIVE_CLASS_LABEL_KEY] = "1"
             schema[ModelSchema.NEGATIVE_CLASS_LABEL_KEY] = "0"
 
