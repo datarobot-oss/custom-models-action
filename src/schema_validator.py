@@ -33,7 +33,7 @@ class ModelSchema:
     PREDICTION_THRESHOLD_KEY = "prediction_threshold"
     POSITIVE_CLASS_LABEL_KEY = "positive_class_label"
     NEGATIVE_CLASS_LABEL_KEY = "negative_class_label"
-    MAPPING_CLASSES_KEY = "mapping_classes"
+    CLASS_LABELS_KEY = "class_labels"
     LANGUAGE_KEY = "language"
 
     SETTINGS_KEY = "settings"
@@ -92,7 +92,7 @@ class ModelSchema:
             Optional(PREDICTION_THRESHOLD_KEY): And(float, lambda n: 0 <= n <= 1),
             Optional(POSITIVE_CLASS_LABEL_KEY): str,
             Optional(NEGATIVE_CLASS_LABEL_KEY): str,
-            Optional(MAPPING_CLASSES_KEY): list,
+            Optional(CLASS_LABELS_KEY): list,
             Optional(LANGUAGE_KEY): str,
             Optional(SETTINGS_KEY): {
                 Optional(NAME_KEY): str,
@@ -245,7 +245,7 @@ class ModelSchema:
             mutual_exclusive_keys = {
                 cls.PREDICTION_THRESHOLD_KEY,
                 binary_class_label_key,
-                cls.MAPPING_CLASSES_KEY,
+                cls.CLASS_LABELS_KEY,
             }
             if len(mutual_exclusive_keys & model_metadata.keys()) > 1:
                 raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is expected")
@@ -263,7 +263,7 @@ class ModelSchema:
                 )
         elif (
             cls.is_multiclass(model_metadata)
-            and model_metadata.get(ModelSchema.MAPPING_CLASSES_KEY) is None
+            and model_metadata.get(ModelSchema.CLASS_LABELS_KEY) is None
         ):
             raise InvalidModelSchema(
                 f"Multiclass model must be define with the 'mapping_classes' key."

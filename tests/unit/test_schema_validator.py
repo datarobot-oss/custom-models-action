@@ -148,7 +148,7 @@ class TestSchemaValidator:
     def test_for_multiclass_model(self, multiclass_target_type, is_single):
         def _set_multiclass_keys(schema):
             schema[ModelSchema.TARGET_TYPE_KEY] = multiclass_target_type
-            schema[ModelSchema.MAPPING_CLASSES_KEY] = ["1", "2", "3"]
+            schema[ModelSchema.CLASS_LABELS_KEY] = ["1", "2", "3"]
 
         self._validate_for_model_type(is_single, _set_multiclass_keys)
 
@@ -190,7 +190,7 @@ class TestSchemaValidator:
             ),
             Key(
                 type=ModelSchema.TARGET_TYPE_MULTICLASS_KEY,
-                name=ModelSchema.MAPPING_CLASSES_KEY,
+                name=ModelSchema.CLASS_LABELS_KEY,
                 value=("a", "b", "c"),
             ),
         }
