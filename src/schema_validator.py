@@ -190,52 +190,69 @@ class ModelSchema:
 
         return cls.MULTI_MODELS_KEY in metadata
 
-    def validate_and_transform_single(self, model_metadata):
+    @classmethod
+    def is_binary(cls, metadata):
+        return metadata[ModelSchema.TARGET_TYPE_KEY] in [
+            cls.TARGET_TYPE_BINARY_KEY,
+            cls.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY,
+        ]
+
+    @classmethod
+    def is_regression(cls, metadata):
+        return metadata[ModelSchema.TARGET_TYPE_KEY] in [
+            cls.TARGET_TYPE_REGRESSION_KEY,
+            cls.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY,
+        ]
+
+    @classmethod
+    def is_multiclass(cls, metadata):
+        return metadata[ModelSchema.TARGET_TYPE_KEY] in [
+            cls.TARGET_TYPE_MULTICLASS_KEY,
+            cls.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
+        ]
+
+    @classmethod
+    def validate_and_transform_single(cls, model_metadata):
         try:
-            transformed = self.MODEL_SCHEMA.validate(model_metadata)
-            self._validate_single_model(transformed)
+            transformed = cls.MODEL_SCHEMA.validate(model_metadata)
+            cls._validate_single_model(transformed)
             return transformed
         except SchemaError as se:
             raise InvalidModelSchema(se.code)
 
-    def _validate_single_model(self, single_model_metadata):
-        self._validate_mutual_exclusive_keys(single_model_metadata)
-        self._validate_dependent_keys(single_model_metadata)
+    @classmethod
+    def _validate_single_model(cls, single_model_metadata):
+        cls._validate_mutual_exclusive_keys(single_model_metadata)
+        cls._validate_dependent_keys(single_model_metadata)
         logger.debug(
-            f"Model configuration is valid (id: {single_model_metadata[self.MODEL_ID_KEY]})."
+            f"Model configuration is valid (id: {single_model_metadata[cls.MODEL_ID_KEY]})."
         )
 
-    def validate_and_transform_multi(self, multi_models_metadata):
+    @classmethod
+    def validate_and_transform_multi(cls, multi_models_metadata):
         # Validates and transform
         try:
-            transformed = self.MULTI_MODELS_SCHEMA.validate(multi_models_metadata)
-            for model_entry in transformed[self.MULTI_MODELS_KEY]:
-                self._validate_single_model(model_entry[self.MODEL_ENTRY_META_KEY])
+            transformed = cls.MULTI_MODELS_SCHEMA.validate(multi_models_metadata)
+            for model_entry in transformed[cls.MULTI_MODELS_KEY]:
+                cls._validate_single_model(model_entry[cls.MODEL_ENTRY_META_KEY])
             return transformed
         except SchemaError as se:
             raise InvalidModelSchema(se.code)
 
-    @staticmethod
-    def _validate_mutual_exclusive_keys(model_metadata):
-        for binary_class_label_key in [
-            ModelSchema.POSITIVE_CLASS_LABEL_KEY,
-            ModelSchema.NEGATIVE_CLASS_LABEL_KEY,
-        ]:
+    @classmethod
+    def _validate_mutual_exclusive_keys(cls, model_metadata):
+        for binary_class_label_key in [cls.POSITIVE_CLASS_LABEL_KEY, cls.NEGATIVE_CLASS_LABEL_KEY]:
             mutual_exclusive_keys = {
-                ModelSchema.PREDICTION_THRESHOLD_KEY,
+                cls.PREDICTION_THRESHOLD_KEY,
                 binary_class_label_key,
-                ModelSchema.MAPPING_CLASSES_KEY,
+                cls.MAPPING_CLASSES_KEY,
             }
             if len(mutual_exclusive_keys & model_metadata.keys()) > 1:
                 raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is expected")
 
-    @staticmethod
-    def _validate_dependent_keys(model_metadata):
-        model_target_type = model_metadata[ModelSchema.TARGET_TYPE_KEY]
-        if model_target_type in [
-            ModelSchema.TARGET_TYPE_BINARY_KEY,
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY,
-        ]:
+    @classmethod
+    def _validate_dependent_keys(cls, model_metadata):
+        if cls.is_binary(model_metadata):
             binary_label_keys = {
                 ModelSchema.POSITIVE_CLASS_LABEL_KEY,
                 ModelSchema.NEGATIVE_CLASS_LABEL_KEY,
@@ -245,11 +262,7 @@ class ModelSchema:
                     f"Binary model must be defined with the '{binary_label_keys}' keys."
                 )
         elif (
-            model_target_type
-            in [
-                ModelSchema.TARGET_TYPE_MULTICLASS_KEY,
-                ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
-            ]
+            cls.is_multiclass(model_metadata)
             and model_metadata.get(ModelSchema.MAPPING_CLASSES_KEY) is None
         ):
             raise InvalidModelSchema(
