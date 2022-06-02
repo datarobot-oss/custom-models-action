@@ -23,3 +23,11 @@ class SharedAndLocalPathCollision(GenericException):
 
 class UnInitializedGitTool(GenericException):
     pass
+
+
+class HttpRequesterException(GenericException):
+    pass
+
+
+class DataRobotClientError(GenericException):
+    pass

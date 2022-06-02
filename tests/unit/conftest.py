@@ -138,6 +138,13 @@ def models_factory(repo_root_path, common_path_with_code, single_model_factory):
 
 
 @pytest.fixture
+def single_model_file_paths(models_factory, repo_root_path):
+    models_factory(1)
+    model_path = repo_root_path / "model_0"
+    return list(model_path.rglob("*.*"))
+
+
+@pytest.fixture
 def options(repo_root_path):
     return Namespace(root_dir=repo_root_path.absolute(), branch="master")
 
@@ -188,3 +195,70 @@ def init_repo_with_models_factory(git_repo, repo_root_path, models_factory):
         return repo_root_path
 
     return _inner
+
+
+@pytest.fixture
+def mock_full_binary_model_schema():
+    return {
+        ModelSchema.MODEL_ID_KEY: "abc123",
+        ModelSchema.DEPLOYMENT_ID_KEY: "edf456",
+        ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_BINARY_KEY,
+        ModelSchema.TARGET_NAME_KEY: "target_column",
+        ModelSchema.POSITIVE_CLASS_LABEL_KEY: "1",
+        ModelSchema.NEGATIVE_CLASS_LABEL_KEY: "0",
+        ModelSchema.LANGUAGE_KEY: "Python",
+        ModelSchema.SETTINGS_KEY: {
+            ModelSchema.NAME_KEY: "Awesome Model",
+            ModelSchema.DESCRIPTION_KEY: "My awesome model",
+            ModelSchema.TRAINING_DATASET_KEY: "627790ba56215587b3021632",
+            ModelSchema.HOLDOUT_DATASET_KEY: "627790ca5621558b55c78d78",
+        },
+        ModelSchema.VERSION_KEY: {
+            ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
+            ModelSchema.INCLUDE_GLOB_KEY: ["./"],
+            ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
+            ModelSchema.MEMORY_KEY: "100Mi",
+            ModelSchema.REPLICAS_KEY: 3,
+        },
+        ModelSchema.TEST_KEY: {
+            ModelSchema.TEST_DATA_KEY: "62779143562155aa34a3d65b",
+            ModelSchema.MEMORY_KEY: "100Mi",
+            ModelSchema.CHECKS_KEY: {
+                ModelSchema.NULL_IMPUTATION_KEY: {
+                    ModelSchema.CHECK_VALUE_KEY: "yes",
+                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
+                },
+                ModelSchema.SIDE_EFFECT_KEY: {
+                    ModelSchema.CHECK_VALUE_KEY: "yes",
+                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
+                },
+                ModelSchema.PREDICTION_VERIFICATION_KEY: {
+                    ModelSchema.CHECK_VALUE_KEY: "yes",
+                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
+                },
+                ModelSchema.PREDICTION_VERIFICATION_KEY: {
+                    ModelSchema.CHECK_VALUE_KEY: "yes",
+                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "no",
+                    ModelSchema.OUTPUT_DATASET_KEY: "627791f5562155d63f367b05",
+                    ModelSchema.MATCH_THRESHOLD_KEY: 0.9,
+                    ModelSchema.PASSING_MATCH_RATE_KEY: 85,
+                },
+                ModelSchema.PERFORMANCE_KEY: {
+                    ModelSchema.CHECK_VALUE_KEY: "yes",
+                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "no",
+                    ModelSchema.MAXIMUM_RESPONSE_TIME_KEY: 50,
+                    ModelSchema.CHECK_DURATION_LIMIT_KEY: 100,
+                    ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY: 3,
+                },
+                ModelSchema.STABILITY_KEY: {
+                    ModelSchema.CHECK_VALUE_KEY: "no",
+                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
+                    ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY: 50,
+                    ModelSchema.PASSING_RATE_KEY: 95,
+                    ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY: 1,
+                    ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY: 100,
+                    ModelSchema.MAXIMUM_PAYLOAD_SIZE_KEY: 1000,
+                },
+            },
+        },
+    }

@@ -258,71 +258,8 @@ class TestSchemaValidator:
         }
 
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
-    def test_full_model_schema(self, is_single):
-        full_model_schema = {
-            ModelSchema.MODEL_ID_KEY: "abc123",
-            ModelSchema.DEPLOYMENT_ID_KEY: "edf456",
-            ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_BINARY_KEY,
-            ModelSchema.TARGET_NAME_KEY: "target_column",
-            ModelSchema.POSITIVE_CLASS_LABEL_KEY: "1",
-            ModelSchema.NEGATIVE_CLASS_LABEL_KEY: "0",
-            ModelSchema.LANGUAGE_KEY: "Python",
-            ModelSchema.SETTINGS_KEY: {
-                ModelSchema.NAME_KEY: "Awesome Model",
-                ModelSchema.DESCRIPTION_KEY: "My awesome model",
-                ModelSchema.TRAINING_DATASET_KEY: "627790ba56215587b3021632",
-                ModelSchema.HOLDOUT_DATASET_KEY: "627790ca5621558b55c78d78",
-            },
-            ModelSchema.VERSION_KEY: {
-                ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
-                ModelSchema.INCLUDE_GLOB_KEY: ["./"],
-                ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
-                ModelSchema.MEMORY_KEY: "100Mi",
-                ModelSchema.REPLICAS_KEY: 3,
-            },
-            ModelSchema.TEST_KEY: {
-                ModelSchema.TEST_DATA_KEY: "62779143562155aa34a3d65b",
-                ModelSchema.MEMORY_KEY: "100Mi",
-                ModelSchema.CHECKS_KEY: {
-                    ModelSchema.NULL_IMPUTATION_KEY: {
-                        ModelSchema.CHECK_VALUE_KEY: "yes",
-                        ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
-                    },
-                    ModelSchema.SIDE_EFFECT_KEY: {
-                        ModelSchema.CHECK_VALUE_KEY: "yes",
-                        ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
-                    },
-                    ModelSchema.PREDICTION_VERIFICATION_KEY: {
-                        ModelSchema.CHECK_VALUE_KEY: "yes",
-                        ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
-                    },
-                    ModelSchema.PREDICTION_VERIFICATION_KEY: {
-                        ModelSchema.CHECK_VALUE_KEY: "yes",
-                        ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "no",
-                        ModelSchema.OUTPUT_DATASET_KEY: "627791f5562155d63f367b05",
-                        ModelSchema.MATCH_THRESHOLD_KEY: 0.9,
-                        ModelSchema.PASSING_MATCH_RATE_KEY: 85,
-                    },
-                    ModelSchema.PERFORMANCE_KEY: {
-                        ModelSchema.CHECK_VALUE_KEY: "yes",
-                        ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "no",
-                        ModelSchema.MAXIMUM_RESPONSE_TIME_KEY: 50,
-                        ModelSchema.CHECK_DURATION_LIMIT_KEY: 100,
-                        ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY: 3,
-                    },
-                    ModelSchema.STABILITY_KEY: {
-                        ModelSchema.CHECK_VALUE_KEY: "no",
-                        ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
-                        ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY: 50,
-                        ModelSchema.PASSING_RATE_KEY: 95,
-                        ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY: 1,
-                        ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY: 100,
-                        ModelSchema.MAXIMUM_PAYLOAD_SIZE_KEY: 1000,
-                    },
-                },
-            },
-        }
-
+    def test_full_model_schema(self, is_single, mock_full_binary_model_schema):
+        full_model_schema = mock_full_binary_model_schema.copy()
         if not is_single:
             full_model_schema = self._wrap_multi(full_model_schema)
 
@@ -359,3 +296,43 @@ class TestSchemaValidator:
             "Stability test check minimum payload size (100) is higher than the maximum (50)"
             in str(e)
         )
+
+
+class TestModelSchemaGetValue:
+    def test_top_metadata(self, mock_full_binary_model_schema):
+        input_metadata = mock_full_binary_model_schema
+        returned_value = ModelSchema.get_value(input_metadata)
+        assert returned_value == input_metadata
+
+    def test_first_level_key(self, mock_full_binary_model_schema):
+        input_metadata = mock_full_binary_model_schema
+        returned_value = ModelSchema.get_value(input_metadata, ModelSchema.SETTINGS_KEY)
+        assert returned_value == input_metadata[ModelSchema.SETTINGS_KEY]
+
+    def test_second_level_key(self, mock_full_binary_model_schema):
+        input_metadata = mock_full_binary_model_schema
+        returned_value = ModelSchema.get_value(
+            input_metadata, ModelSchema.SETTINGS_KEY, ModelSchema.DESCRIPTION_KEY
+        )
+        assert (
+            returned_value == input_metadata[ModelSchema.SETTINGS_KEY][ModelSchema.DESCRIPTION_KEY]
+        )
+
+    def test_non_existing_key_at_first_level(self, mock_full_binary_model_schema):
+        input_metadata = mock_full_binary_model_schema
+        returned_value = ModelSchema.get_value(input_metadata, "non-existing-key")
+        assert returned_value is None
+
+    def test_non_existing_key_at_second_level(self, mock_full_binary_model_schema):
+        input_metadata = mock_full_binary_model_schema
+        returned_value = ModelSchema.get_value(
+            input_metadata, ModelSchema.SETTINGS_KEY, "non-existing-key"
+        )
+        assert returned_value is None
+
+    def test_unrelated_keys_at_first_level(self, mock_full_binary_model_schema):
+        input_metadata = mock_full_binary_model_schema
+        returned_value = ModelSchema.get_value(
+            input_metadata, ModelSchema.TARGET_TYPE_KEY, ModelSchema.MODEL_ID_KEY
+        )
+        assert returned_value is None

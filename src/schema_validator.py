@@ -30,9 +30,15 @@ class ModelSchema:
     TARGET_TYPE_UNSTRUCTURED_OTHER_KEY = "Unstructured (Other)"
 
     TARGET_NAME_KEY = "target_name"
+
+    # Regression models
     PREDICTION_THRESHOLD_KEY = "prediction_threshold"
+
+    # Binary models
     POSITIVE_CLASS_LABEL_KEY = "positive_class_label"
     NEGATIVE_CLASS_LABEL_KEY = "negative_class_label"
+
+    # Multiclass models
     CLASS_LABELS_KEY = "class_labels"
     LANGUAGE_KEY = "language"
 
@@ -282,3 +288,30 @@ class ModelSchema:
                     f"Stability test check minimum payload size ({minimum_payload_size}) "
                     f"is higher than the maximum ({maximum_payload_size})"
                 )
+
+    @classmethod
+    def get_value(cls, metadata, *args):
+        """
+        Extract a value from the metadata, for a given key hierarchy. The assumption is that parent
+        keys are always dictionaries.
+
+        Parameters
+        ----------
+        metadata : dict
+            A model schema dictionary.
+        args : str
+            A variable number of strings, representing key hierarchy in the metadata.
+
+        Returns
+        -------
+            A value or None
+        """
+
+        value = metadata
+        for index, arg in enumerate(args):
+            if not isinstance(value, dict):
+                value = None
+                break
+
+            value = value.get(arg)
+        return value

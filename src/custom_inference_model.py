@@ -40,6 +40,27 @@ class ModelInfo:
     def model_file_paths(self):
         return self._model_file_paths
 
+    @property
+    def is_binary(self):
+        return ModelSchema.is_binary(self.metadata)
+
+    @property
+    def is_regression(self):
+        return ModelSchema.is_regression(self.metadata)
+
+    @property
+    def is_unstructured(self):
+        return self.metadata[ModelSchema.TARGET_TYPE_KEY] in [
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY,
+        ]
+
+    @property
+    def is_multiclass(self):
+        return ModelSchema.is_multiclass(self.metadata)
+
     def main_program_filepath(self):
         for p in self.model_file_paths:
             if p.name == "custom.py":
