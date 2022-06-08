@@ -48,6 +48,39 @@ class DrClient:
 
         raise HttpRequesterException(f"Client timed out waiting for {async_location} to resolve.")
 
+    def fetch_custom_models(self):
+        logger.info(f"Fetching custom models...")
+        return self._paginated_fetch(self.CUSTOM_MODELS_ROUTE)
+
+    def _paginated_fetch(self, route_url):
+        def _fetch_single_page(url, raw):
+            response = self._http_requester.get(url, raw)
+            if response.status_code != 200:
+                raise DataRobotClientError(
+                    f"Failed to fetch entities of a single page. "
+                    f"Response status: {response.status_code} "
+                    f"Response body: {response.json()}",
+                    code=response.status_code,
+                )
+
+            response_json = response.json()
+            _total_count = response_json["totalCount"]
+            _page_count = response_json["count"]
+            _next_page = response_json["next"]
+            _returned_models = response_json["data"]
+            logger.info(
+                f"Total: {_total_count}, page count: {_page_count}, Next page: {_next_page}"
+            )
+            return _returned_models, _next_page
+
+        returned_entities, next_page = _fetch_single_page(route_url, raw=False)
+        total_entities = returned_entities
+        while next_page:
+            returned_entities, next_page = _fetch_single_page(next_page, raw=True)
+            total_entities.extend(returned_entities)
+
+        return total_entities
+
     def create_custom_model(self, model_info):
         payload = self._setup_payload_for_custom_model_creation(model_info)
         response = self._http_requester.post(self.CUSTOM_MODELS_ROUTE, json=payload)
@@ -112,6 +145,12 @@ class DrClient:
                 f"Failed to delete custom model. Response status: {response.status_code}.",
                 code=response.status_code,
             )
+
+    def fetch_custom_model_versions(self, custom_model_id):
+        logger.info(f"Fetching custom model versions for model '{custom_model_id}' ...")
+        return self._paginated_fetch(
+            self.CUSTOM_MODELS_VERSION_ROUTE.format(model_id=custom_model_id)
+        )
 
     def create_custom_model_version(
         self,

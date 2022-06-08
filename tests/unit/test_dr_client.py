@@ -18,6 +18,36 @@ def api_token():
     return "123abc"
 
 
+def mock_paginated_responses(
+    total_num_entities, num_entities_in_page, url_factory, entity_response_factory_fn
+):
+    def _generate_for_single_page(page_index, num_entities, has_next):
+        models_in_page = [
+            entity_response_factory_fn(f"id-{page_index}-{index}") for index in range(num_entities)
+        ]
+        responses.add(
+            responses.GET,
+            url_factory(page_index),
+            json={
+                "totalCount": total_num_entities,
+                "count": num_entities,
+                "next": url_factory(page_index + 1) if has_next else None,
+                "data": models_in_page,
+            },
+            status=200,
+        )
+        return models_in_page
+
+    total_entities = {}
+    quotient, remainder = divmod(total_num_entities, num_entities_in_page)
+    for page in range(quotient):
+        has_next = remainder > 0 or page < quotient - 1
+        total_entities[page] = _generate_for_single_page(page, num_entities_in_page, has_next)
+    if remainder:
+        total_entities[quotient] = _generate_for_single_page(quotient, remainder, has_next=False)
+    return total_entities
+
+
 class TestCustomModelRoutes:
     @pytest.fixture
     def minimal_regression_model_info(self):
@@ -62,20 +92,34 @@ class TestCustomModelRoutes:
         )
 
     @pytest.fixture
-    def regression_model_response(self):
-        return {
-            "id": "123abc",
-            "custom_model_type": "inference",
-            "supports_binary_classification": False,
-            "supports_regression": True,
-            "supports_anomaly_detection": False,
-            "target_type": "Regression",
-            "prediction_threshold": 0.5,
-        }
+    def regression_model_response_factory(self):
+        def _inner(model_id):
+            return {
+                "id": model_id,
+                "custom_model_type": "inference",
+                "supports_binary_classification": False,
+                "supports_regression": True,
+                "supports_anomaly_detection": False,
+                "target_type": "Regression",
+                "prediction_threshold": 0.5,
+            }
+
+        return _inner
 
     @pytest.fixture
-    def custom_models_url(self, webserver):
-        return f"{webserver}/{DrClient.CUSTOM_MODELS_ROUTE}"
+    def regression_model_response(self, regression_model_response_factory):
+        return regression_model_response_factory("123abc")
+
+    @pytest.fixture
+    def custom_models_url_factory(self, paginated_url_factory):
+        def _inner(page=0):
+            return paginated_url_factory(DrClient.CUSTOM_MODELS_ROUTE, page)
+
+        return _inner
+
+    @pytest.fixture
+    def custom_models_url(self, custom_models_url_factory):
+        return custom_models_url_factory(page=0)
 
     def test_full_payload_setup_for_custom_model_creation(self, regression_model_info):
         payload = DrClient._setup_payload_for_custom_model_creation(regression_model_info)
@@ -147,8 +191,49 @@ class TestCustomModelRoutes:
             dr_client.delete_custom_model(custom_model_id)
         assert ex.value.code == status_code
 
+    @pytest.mark.parametrize(
+        "total_num_models, num_models_in_page",
+        [(2, 3), (2, 2), (4, 2), (4, 3)],
+        ids=[
+            "page-bigger-than-total-models",
+            "page-equal-total-models",
+            "page-lower-than-total-models-no-remainder",
+            "page-lower-than-total-models-with-remainder",
+        ],
+    )
+    @responses.activate
+    def test_fetch_custom_models_success(
+        self,
+        webserver,
+        api_token,
+        total_num_models,
+        num_models_in_page,
+        custom_models_url_factory,
+        regression_model_response_factory,
+    ):
+        expected_models_in_all_pages = mock_paginated_responses(
+            total_num_models,
+            num_models_in_page,
+            custom_models_url_factory,
+            regression_model_response_factory,
+        )
+        dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
+        total_models_response = dr_client.fetch_custom_models()
+        assert len(total_models_response) == total_num_models
+
+        total_expected_models = []
+        for models_per_page in expected_models_in_all_pages.values():
+            total_expected_models.extend(models_per_page)
+
+        for fetched_model in total_models_response:
+            assert fetched_model in total_expected_models
+
 
 class TestCustomModelVersionRoutes:
+    @pytest.fixture
+    def custom_model_id(self):
+        return str(ObjectId())
+
     @pytest.fixture
     def minimal_regression_model_info(self):
         metadata = {
@@ -197,31 +282,50 @@ class TestCustomModelVersionRoutes:
         return "4e784ec8fa76beebaaf4391f23e0a3f7f666d329"
 
     @pytest.fixture
-    def regression_model_version_response(self, main_branch_commit_sha, pull_request_commit_sha):
-        return {
-            "id": "456def",
-            "custom_model_id": "123abc",
-            "created": "2022-1-06 13:36:00",
-            "items": [
-                ("custom.py", "629741dc5621557833bd5aa1"),
-                ("util/helper.py", "629741dc5621557833bd5aa2"),
-            ],
-            "is_frozen": False,
-            "version_major": 1,
-            "version_minor": 2,
-            "label": "1.2",
-            "baseEnvironmentId": "629741dc5621557833bd5aa3",
-            "git_model_version": {
-                "main_branch_commit_sha": main_branch_commit_sha,
-                "pull_request_commit_sha": pull_request_commit_sha,
-            },
-        }
+    def regression_model_version_response_factory(
+        self, custom_model_id, main_branch_commit_sha, pull_request_commit_sha
+    ):
+        def _inner(version_id):
+            return {
+                "id": version_id,
+                "custom_model_id": custom_model_id,
+                "created": "2022-1-06 13:36:00",
+                "items": [
+                    {
+                        "id": "629741dc5621557833bd5aa1",
+                        "file_name": "custom.py",
+                        "file_path": "custom.py",
+                        "file_source": "s3",
+                    },
+                    {
+                        "id": "629741dc5621557833bd5aa2",
+                        "file_name": "util/helper.py",
+                        "file_path": "util/helper.py",
+                        "file_source": "s3",
+                    },
+                ],
+                "is_frozen": False,
+                "version_major": 1,
+                "version_minor": 2,
+                "label": "1.2",
+                "baseEnvironmentId": "629741dc5621557833bd5aa3",
+                "git_model_version": {
+                    "main_branch_commit_sha": main_branch_commit_sha,
+                    "pull_request_commit_sha": pull_request_commit_sha,
+                },
+            }
+
+        return _inner
 
     @pytest.fixture
-    def custom_models_version_url_factory(self, webserver):
-        def _inner(custom_model_id):
-            return f"{webserver}/{DrClient.CUSTOM_MODELS_VERSION_ROUTE}".format(
-                model_id=custom_model_id
+    def regression_model_version_response(self, regression_model_version_response_factory):
+        return regression_model_version_response_factory(str(ObjectId()))
+
+    @pytest.fixture
+    def custom_models_version_url_factory(self, custom_model_id, paginated_url_factory):
+        def _inner(page=0):
+            return paginated_url_factory(
+                f"{DrClient.CUSTOM_MODELS_VERSION_ROUTE}".format(model_id=custom_model_id), page
             )
 
         return _inner
@@ -289,14 +393,14 @@ class TestCustomModelVersionRoutes:
         self,
         webserver,
         api_token,
+        custom_model_id,
         regression_model_info,
         custom_models_version_url_factory,
         main_branch_commit_sha,
         pull_request_commit_sha,
         regression_model_version_response,
     ):
-        custom_model_id = str(ObjectId())
-        url = custom_models_version_url_factory(custom_model_id)
+        url = custom_models_version_url_factory()
         responses.add(responses.POST, url, json=regression_model_version_response, status=201)
         dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
         version_id = dr_client.create_custom_model_version(
@@ -309,6 +413,7 @@ class TestCustomModelVersionRoutes:
         self,
         webserver,
         api_token,
+        custom_model_id,
         regression_model_info,
         custom_models_version_url_factory,
         main_branch_commit_sha,
@@ -316,8 +421,7 @@ class TestCustomModelVersionRoutes:
         regression_model_version_response,
     ):
         status_code = 422
-        custom_model_id = str(ObjectId())
-        url = custom_models_version_url_factory(custom_model_id)
+        url = custom_models_version_url_factory()
         responses.add(responses.POST, url, json={}, status=status_code)
         dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
         with pytest.raises(DataRobotClientError) as ex:
@@ -328,3 +432,41 @@ class TestCustomModelVersionRoutes:
                 pull_request_commit_sha,
             )
         assert ex.value.code == status_code
+
+    @pytest.mark.parametrize(
+        "total_num_model_versions, num_model_versions_in_page",
+        [(2, 3), (2, 2), (4, 2), (4, 3)],
+        ids=[
+            "page-bigger-than-total-models",
+            "page-equal-total-models",
+            "page-lower-than-total-models-no-remainder",
+            "page-lower-than-total-models-with-remainder",
+        ],
+    )
+    @responses.activate
+    def test_fetch_custom_model_versions_success(
+        self,
+        webserver,
+        api_token,
+        custom_model_id,
+        total_num_model_versions,
+        num_model_versions_in_page,
+        custom_models_version_url_factory,
+        regression_model_version_response_factory,
+    ):
+        expected_versions_in_all_pages = mock_paginated_responses(
+            total_num_model_versions,
+            num_model_versions_in_page,
+            custom_models_version_url_factory,
+            regression_model_version_response_factory,
+        )
+        dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
+        total_versions_response = dr_client.fetch_custom_model_versions(custom_model_id)
+        assert len(total_versions_response) == total_num_model_versions
+
+        total_expected_versions = []
+        for versions_per_page in expected_versions_in_all_pages.values():
+            total_expected_versions.extend(versions_per_page)
+
+        for fetched_version in total_versions_response:
+            assert fetched_version in total_expected_versions
