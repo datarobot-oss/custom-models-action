@@ -1,5 +1,7 @@
 import requests
 
+from common.string_util import StringUtil
+
 
 class HttpRequester(object):
     def __init__(self, base_url, api_token=None):
@@ -7,10 +9,12 @@ class HttpRequester(object):
         self._base_url = base_url
         self._headers = {"Authorization": f"Token {api_token}"} if api_token else {}
 
+    @property
+    def webserver_api_path(self):
+        return self._base_url
+
     def _url(self, endpoint_sub_url):
-        if not endpoint_sub_url.endswith("/"):
-            endpoint_sub_url += "/"
-        return f"{self._base_url}/{endpoint_sub_url}"
+        return f"{self._base_url}{StringUtil.slash_suffix(endpoint_sub_url)}"
 
     def get(self, endpoint_sub_url, raw=False, **kwargs):
         url = endpoint_sub_url if raw else self._url(endpoint_sub_url)

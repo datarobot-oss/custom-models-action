@@ -1,7 +1,10 @@
+import json
+
 import pytest
 import responses
 from bson import ObjectId
 
+from common.data_types import FileInfo
 from common.exceptions import DataRobotClientError
 from custom_inference_model import ModelInfo
 from dr_client import DrClient
@@ -96,12 +99,13 @@ class TestCustomModelRoutes:
         def _inner(model_id):
             return {
                 "id": model_id,
-                "custom_model_type": "inference",
-                "supports_binary_classification": False,
-                "supports_regression": True,
-                "supports_anomaly_detection": False,
-                "target_type": "Regression",
-                "prediction_threshold": 0.5,
+                "gitModelId": f"git-id-{model_id}",
+                "customModelType": "inference",
+                "supportsBinaryClassification": False,
+                "supportsRegression": True,
+                "supportsAnomalyDetection": False,
+                "targetType": "Regression",
+                "predictionThreshold": 0.5,
             }
 
         return _inner
@@ -130,10 +134,9 @@ class TestCustomModelRoutes:
         assert "customModelType" in payload
         assert "targetType" in payload
         assert "targetName" in payload
-        assert "isUnstructuredKind" in payload
+        assert "isUnstructuredModelKind" in payload
         assert "gitModelId" in payload
         assert "predictionThreshold" in payload
-
         assert ("name" in payload) == optional_exist
         assert ("description" in payload) == optional_exist
         assert ("language" in payload) == optional_exist
@@ -173,22 +176,42 @@ class TestCustomModelRoutes:
         assert ex.value.code == status_code
 
     @responses.activate
-    def test_delete_custom_model_success(self, webserver, api_token, custom_models_url):
-        custom_model_id = str(ObjectId())
-        delete_url = f"{custom_models_url}/{custom_model_id}/"
+    def test_delete_custom_model_success(
+        self,
+        webserver,
+        api_token,
+        custom_models_url,
+        custom_models_url_factory,
+        regression_model_response_factory,
+    ):
+        expected_model = mock_paginated_responses(
+            1, 1, custom_models_url_factory, regression_model_response_factory
+        )
+        expected_model = expected_model[0][0]
+        delete_url = f"{custom_models_url}{expected_model['id']}/"
         responses.add(responses.DELETE, delete_url, json={}, status=204)
         dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
-        dr_client.delete_custom_model(custom_model_id)
+        dr_client.delete_custom_model_by_git_model_id(expected_model["gitModelId"])
 
     @responses.activate
-    def test_delete_custom_model_failure(self, webserver, api_token, custom_models_url):
-        custom_model_id = str(ObjectId())
-        delete_url = f"{custom_models_url}/{custom_model_id}/"
+    def test_delete_custom_model_failure(
+        self,
+        webserver,
+        api_token,
+        custom_models_url,
+        custom_models_url_factory,
+        regression_model_response_factory,
+    ):
+        expected_model = mock_paginated_responses(
+            1, 1, custom_models_url_factory, regression_model_response_factory
+        )
+        expected_model = expected_model[0][0]
+        delete_url = f"{custom_models_url}{expected_model['id']}/"
         status_code = 409
         responses.add(responses.DELETE, delete_url, json={}, status=status_code)
         dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
         with pytest.raises(DataRobotClientError) as ex:
-            dr_client.delete_custom_model(custom_model_id)
+            dr_client.delete_custom_model_by_git_model_id(expected_model["gitModelId"])
         assert ex.value.code == status_code
 
     @pytest.mark.parametrize(
@@ -339,13 +362,14 @@ class TestCustomModelVersionRoutes:
     ):
         file_objs = []
         try:
-            payload = DrClient._setup_payload_for_custom_model_version_creation(
+            changed_files_info = [FileInfo(p, p) for p in single_model_file_paths]
+            payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(
                 regression_model_info,
                 main_branch_commit_sha,
                 pull_request_commit_sha,
-                changed_file_paths=single_model_file_paths,
-                file_path_to_delete=["README.md"],
-                file_objs=file_objs,
+                changed_files_info=changed_files_info,
+                file_path_to_delete=None,
+                base_env_id=str(ObjectId()),
             )
             self._validate_mandatory_attributes_for_regression_model_version(
                 payload, optional_exist=True
@@ -357,31 +381,35 @@ class TestCustomModelVersionRoutes:
 
     @staticmethod
     def _validate_mandatory_attributes_for_regression_model_version(payload, optional_exist):
-        assert "baseEnvironmentId" in payload
-        assert "isMajorUpdate" in payload
+        keys, values = zip(*payload)
+        assert "baseEnvironmentId" in keys
+        assert "isMajorUpdate" in keys
 
-        assert "gitModelVersion" in payload
-        assert "mainBranchCommitSha" in payload["gitModelVersion"]
-        assert "pullRequestCommitSha" in payload["gitModelVersion"]
+        assert "gitModelVersion" in keys
+        git_model_version_json_str = [
+            v for v in values if isinstance(v, str) and "mainBranchCommitSha" in v
+        ]
+        assert git_model_version_json_str, git_model_version_json_str
+        git_model_version_json = json.loads(git_model_version_json_str[0])
+        assert "mainBranchCommitSha" in git_model_version_json
+        assert "pullRequestCommitSha" in git_model_version_json
 
         if optional_exist:
-            assert "file" in payload
-            assert "filePath" in payload
-            assert "filesToDelete" in payload
-            assert "maximumMemory" in payload
-            assert "replicas" in payload
+            assert "file" in keys
+            assert "filePath" in keys
+            assert "maximumMemory" in keys
+            assert "replicas" in keys
 
     def test_minimal_payload_setup_for_custom_model_version_creation(
         self, minimal_regression_model_info, main_branch_commit_sha, pull_request_commit_sha
     ):
-        file_objs = []
-        payload = DrClient._setup_payload_for_custom_model_version_creation(
+        payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(
             minimal_regression_model_info,
             main_branch_commit_sha,
             pull_request_commit_sha,
             None,
             None,
-            file_objs,
+            base_env_id=str(ObjectId()),
         )
         self._validate_mandatory_attributes_for_regression_model_version(
             payload, optional_exist=False
