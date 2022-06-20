@@ -29,11 +29,13 @@ class MemoryConvertor:
         if not unit:
             return int(num)
 
-        return num * cls.UNIT_TO_BYTES[unit]
+        return int(num) * cls.UNIT_TO_BYTES[unit]
 
     @classmethod
     def _extract_unit_fields(cls, memory):
         match = re.match(r"^([0-9]+)(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei){,1}$", memory)
         if not match:
             raise InvalidMemoryValue(f"The memory value format is invalid: {memory}")
-        return match.groups()
+
+        num, unit = match.groups()
+        return int(num), unit
