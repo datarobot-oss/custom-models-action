@@ -1,5 +1,6 @@
 GitPython
 PyYAML
 bson
-# datarobot
 schema
+requests
+requests_toolbelt

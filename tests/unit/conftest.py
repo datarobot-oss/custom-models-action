@@ -286,6 +286,6 @@ def mock_full_binary_model_schema():
 def paginated_url_factory(webserver):
     def _inner(base_url, page=0):
         suffix = "" if page == 0 else f"/page-{page}/"
-        return f"{webserver}/{base_url}{suffix}"
+        return f"{webserver}/api/v2/{base_url}{suffix}"
 
     return _inner

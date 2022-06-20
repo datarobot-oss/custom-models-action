@@ -1,10 +1,13 @@
+import json
 import logging
 import time
 
-import responses
+import requests
+from requests_toolbelt import MultipartEncoder
 
 from common.exceptions import HttpRequesterException, DataRobotClientError
 from common.http_requester import HttpRequester
+from common.string_util import StringUtil
 from schema_validator import ModelSchema
 
 logger = logging.getLogger(__name__)
@@ -16,6 +19,9 @@ class DrClient:
     CUSTOM_MODELS_VERSION_ROUTE = "customModels/{model_id}/versions/"
 
     def __init__(self, datarobot_webserver, datarobot_api_token):
+        if "v2" not in datarobot_webserver:
+            datarobot_webserver = f"{StringUtil.slash_suffix(datarobot_webserver)}api/v2/"
+
         self._http_requester = HttpRequester(datarobot_webserver, datarobot_api_token)
 
     def _wait_for_async_resolution(self, async_location, max_wait=600, return_on_completed=False):
@@ -48,13 +54,20 @@ class DrClient:
 
         raise HttpRequesterException(f"Client timed out waiting for {async_location} to resolve.")
 
+    def is_accessible(self):
+        logger.info("Check if webserver is accessible ...")
+        response = self._http_requester.get(
+            f"{self._http_requester.webserver_api_path}/ping", raw=True
+        )
+        return response.status_code == 200 and response.json()["response"] == "pong"
+
     def fetch_custom_models(self):
-        logger.info(f"Fetching custom models...")
+        logger.info("Fetching custom models...")
         return self._paginated_fetch(self.CUSTOM_MODELS_ROUTE)
 
-    def _paginated_fetch(self, route_url):
+    def _paginated_fetch(self, route_url, **kwargs):
         def _fetch_single_page(url, raw):
-            response = self._http_requester.get(url, raw)
+            response = self._http_requester.get(url, raw, **kwargs)
             if response.status_code != 200:
                 raise DataRobotClientError(
                     f"Failed to fetch entities of a single page. "
@@ -105,7 +118,7 @@ class DrClient:
             "customModelType": "inference",  # Currently, there's support only for inference models
             "targetType": target_type,
             "targetName": metadata[ModelSchema.TARGET_NAME_KEY],
-            "isUnstructuredKind": model_info.is_unstructured,
+            "isUnstructuredModelKind": model_info.is_unstructured,
             "gitModelId": metadata[ModelSchema.MODEL_ID_KEY],
         }
 
@@ -124,7 +137,11 @@ class DrClient:
             payload["language"] = lang
 
         if model_info.is_regression:
-            payload["predictionThreshold"] = metadata[ModelSchema.PREDICTION_THRESHOLD_KEY]
+            regression_threshold = ModelSchema.get_value(
+                metadata, ModelSchema.PREDICTION_THRESHOLD_KEY
+            )
+            if regression_threshold is not None:
+                payload["predictionThreshold"] = regression_threshold
         elif model_info.is_binary:
             payload.update(
                 {
@@ -137,19 +154,10 @@ class DrClient:
 
         return payload
 
-    def delete_custom_model(self, custom_model_id):
-        sub_path = f"{self.CUSTOM_MODELS_ROUTE}/{custom_model_id}/"
-        response = self._http_requester.delete(sub_path)
-        if response.status_code != 204:
-            raise DataRobotClientError(
-                f"Failed to delete custom model. Response status: {response.status_code}.",
-                code=response.status_code,
-            )
-
-    def fetch_custom_model_versions(self, custom_model_id):
+    def fetch_custom_model_versions(self, custom_model_id, **kwargs):
         logger.info(f"Fetching custom model versions for model '{custom_model_id}' ...")
         return self._paginated_fetch(
-            self.CUSTOM_MODELS_VERSION_ROUTE.format(model_id=custom_model_id)
+            self.CUSTOM_MODELS_VERSION_ROUTE.format(model_id=custom_model_id), **kwargs
         )
 
     def create_custom_model_version(
@@ -158,29 +166,39 @@ class DrClient:
         model_info,
         main_branch_commit_sha,
         pull_request_commit_sha=None,
-        changed_files=None,
-        files_to_delete=None,
+        changed_files_info=None,
+        file_path_to_delete=None,
+        from_latest=False,
     ):
         file_objs = []
         try:
-            payload = self._setup_payload_for_custom_model_version_creation(
+            base_env_id = ModelSchema.get_value(
+                model_info.metadata, ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_KEY
+            )
+            payload, file_objs = self._setup_payload_for_custom_model_version_creation(
                 model_info,
                 main_branch_commit_sha,
                 pull_request_commit_sha,
-                changed_files,
-                files_to_delete,
-                file_objs,
+                changed_files_info,
+                file_path_to_delete=file_path_to_delete,
+                base_env_id=base_env_id,
             )
+            mp = MultipartEncoder(fields=payload)
+            headers = {"Content-Type": mp.content_type}
 
             url = self.CUSTOM_MODELS_VERSION_ROUTE.format(model_id=custom_model_id)
-            response = self._http_requester.post(url, json=payload)
+            if from_latest:
+                response = self._http_requester.patch(url, data=mp, headers=headers)
+            else:
+                response = self._http_requester.post(url, data=mp, headers=headers)
         finally:
             for file_obj in file_objs:
                 file_obj.close()
 
         if response.status_code != 201:
             raise DataRobotClientError(
-                f"Failed to create custom model version. "
+                "Failed to create custom model version "
+                f"({'from latest' if from_latest else 'new'}). "
                 f"Response status: {response.status_code} "
                 f"Response body: {response.json()}",
                 code=response.status_code,
@@ -196,50 +214,74 @@ class DrClient:
         model_info,
         main_branch_commit_sha,
         pull_request_commit_sha,
-        changed_file_paths,
-        file_path_to_delete,
-        file_objs,
+        changed_files_info,
+        file_path_to_delete=None,
+        base_env_id=None,
     ):
         metadata = model_info.metadata
-        payload = {
-            "baseEnvironmentId": ModelSchema.get_value(
-                metadata, ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_KEY
+        payload = [
+            ("isMajorUpdate", str(True)),
+            (
+                "gitModelVersion",
+                json.dumps(
+                    {
+                        "mainBranchCommitSha": main_branch_commit_sha,
+                        "pullRequestCommitSha": pull_request_commit_sha,
+                    }
+                ),
             ),
-            "isMajorUpdate": True,
-            "gitModelVersion": {
-                "mainBranchCommitSha": main_branch_commit_sha,
-                "pullRequestCommitSha": pull_request_commit_sha,
-            },
-        }
+        ]
 
-        cls._setup_model_version_files(changed_file_paths, file_path_to_delete, payload, file_objs)
+        file_objs = cls._setup_model_version_files(changed_files_info, file_path_to_delete, payload)
+
+        if base_env_id:
+            payload.append(("baseEnvironmentId", base_env_id))
 
         memory = ModelSchema.get_value(metadata, ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY)
         if memory:
-            payload["maximumMemory"] = memory
+            payload.append(("maximumMemory", str(memory)))
 
         replicas = ModelSchema.get_value(
             metadata, ModelSchema.VERSION_KEY, ModelSchema.REPLICAS_KEY
         )
         if replicas:
-            payload["replicas"] = replicas
+            payload.append(("replicas", str(replicas)))
 
-        return payload
+        return payload, file_objs
 
     @staticmethod
-    def _setup_model_version_files(changed_file_paths, file_paths_to_delete, payload, file_objs):
-        files = []
-        file_paths = []
-        for file_path in changed_file_paths or []:
-            file_path = str(file_path)
-            fd = open(file_path, "r")
+    def _setup_model_version_files(changed_files_info, file_paths_to_delete, payload):
+        file_objs = []
+        for file_info in changed_files_info or []:
+            file_path = str(file_info.actual_path)
+            fd = open(file_path, "rb")
             file_objs.append(fd)
-            files.append((fd, file_path))
-            file_paths.append(file_path)
+            path_under_model = str(file_info.path_under_model)
 
-        if files:
-            payload["file"] = files
-            payload["filePath"] = file_paths
+            payload.append(("file", (path_under_model, fd)))
+            payload.append(("filePath", path_under_model))
 
         if file_paths_to_delete:
-            payload["filesToDelete"] = [str(fp) for fp in file_paths_to_delete]
+            payload.append(("filesToDelete", [str(fp) for fp in file_paths_to_delete]))
+
+        return file_objs
+
+    def delete_custom_model_by_model_id(self, custom_model_id):
+        sub_path = f"{self.CUSTOM_MODELS_ROUTE}{custom_model_id}/"
+        response = self._http_requester.delete(sub_path)
+        if response.status_code != 204:
+            raise DataRobotClientError(
+                f"Failed to delete custom model. Response status: {response.status_code}.",
+                code=response.status_code,
+            )
+
+    def delete_custom_model_by_git_model_id(self, git_model_id):
+        custom_models = self.fetch_custom_models()
+        try:
+            test_custom_model = next(cm for cm in custom_models if cm["gitModelId"] == git_model_id)
+            self.delete_custom_model_by_model_id(test_custom_model["id"])
+        except StopIteration:
+            raise DataRobotClientError(
+                f"Failed to delete custom model. Custom model with '{git_model_id}' "
+                f"git model ID was not found."
+            )
