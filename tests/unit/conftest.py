@@ -80,9 +80,10 @@ def single_model_factory(repo_root_path, common_path_with_code, excluded_src_pat
 
         single_model_metadata = {
             ModelSchema.MODEL_ID_KEY: str(uuid.uuid4()),
-            "target_type": "Regression",
-            "target_name": "Grade 2014",
-            "version": {"model_environment": str(ObjectId())},
+            ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
+            ModelSchema.TARGET_NAME_KEY: "Grade 2014",
+            ModelSchema.SETTINGS_KEY: {ModelSchema.NAME_KEY: "My Awesome Model"},
+            ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: str(ObjectId())},
         }
         if with_include_glob:
             # noinspection PyTypeChecker
@@ -146,7 +147,12 @@ def single_model_file_paths(models_factory, repo_root_path):
 
 @pytest.fixture
 def options(repo_root_path):
-    return Namespace(root_dir=repo_root_path.absolute(), branch="master")
+    return Namespace(
+        webserver="www.dummy.com",
+        api_token="abc123",
+        root_dir=repo_root_path.absolute(),
+        branch="master",
+    )
 
 
 @pytest.fixture
@@ -159,6 +165,18 @@ def mock_prerequisites():
 def mock_github_env_variables():
     default_env_vars = {"GITHUB_EVENT_NAME": "push", "GITHUB_BASE_REF": "HEAD~1"}
     with patch.dict(os.environ, default_env_vars):
+        yield
+
+
+@pytest.fixture
+def mock_fetch_models_from_datarobot():
+    with patch.object(CustomInferenceModel, "_fetch_models_from_datarobot"):
+        yield
+
+
+@pytest.fixture
+def mock_should_not_upload_all_files():
+    with patch.object(CustomInferenceModel, "_should_upload_all_files", return_value=False):
         yield
 
 

@@ -58,6 +58,7 @@ class ModelSchema:
     REPLICAS_KEY = "replicas"
 
     TEST_KEY = "test"
+    TEST_SKIP_KEY = "skip"
     TEST_DATA_KEY = "test_data"
 
     CHECKS_KEY = "checks"
@@ -82,8 +83,8 @@ class ModelSchema:
 
     MODEL_SCHEMA = Schema(
         {
-            MODEL_ID_KEY: str,
-            Optional(DEPLOYMENT_ID_KEY): str,
+            MODEL_ID_KEY: And(str, len),
+            Optional(DEPLOYMENT_ID_KEY): And(str, len),
             TARGET_TYPE_KEY: Or(
                 TARGET_TYPE_BINARY_KEY,
                 TARGET_TYPE_REGRESSION_KEY,
@@ -94,31 +95,36 @@ class ModelSchema:
                 TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
                 TARGET_TYPE_UNSTRUCTURED_OTHER_KEY,
             ),
-            TARGET_NAME_KEY: str,
+            TARGET_NAME_KEY: And(str, len),
             Optional(PREDICTION_THRESHOLD_KEY): And(float, lambda n: 0 <= n <= 1),
-            Optional(POSITIVE_CLASS_LABEL_KEY): str,
-            Optional(NEGATIVE_CLASS_LABEL_KEY): str,
+            Optional(POSITIVE_CLASS_LABEL_KEY): And(str, len),
+            Optional(NEGATIVE_CLASS_LABEL_KEY): And(str, len),
             Optional(CLASS_LABELS_KEY): list,
-            Optional(LANGUAGE_KEY): str,
-            Optional(SETTINGS_KEY): {
-                Optional(NAME_KEY): str,
-                Optional(DESCRIPTION_KEY): str,
+            Optional(LANGUAGE_KEY): And(str, len),
+            SETTINGS_KEY: {
+                NAME_KEY: And(str, len),
+                Optional(DESCRIPTION_KEY): And(str, len),
                 Optional(TRAINING_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
                 Optional(HOLDOUT_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
             },
             VERSION_KEY: {
                 MODEL_ENV_KEY: And(str, lambda i: ObjectId.is_valid(i)),
                 Optional(INCLUDE_GLOB_KEY, default=[]): And(
-                    list, lambda l: all(isinstance(e, str) for e in l)
+                    list, lambda l: all(isinstance(e, str) and len(e) > 0 for e in l)
                 ),
                 Optional(EXCLUDE_GLOB_KEY, default=[]): And(
-                    list, lambda l: all(isinstance(x, str) for x in l)
+                    list, lambda l: all(isinstance(x, str) and len(x) > 0 for x in l)
                 ),
                 Optional(MEMORY_KEY): Use(lambda v: MemoryConvertor.to_bytes(v)),
                 Optional(REPLICAS_KEY): And(int, lambda r: r > 0),
             },
             Optional(TEST_KEY): {
-                TEST_DATA_KEY: And(str, lambda i: ObjectId.is_valid(i)),
+                # The skip attribute allows users to have the test section in their yaml file
+                # and still disable testing
+                Optional(TEST_SKIP_KEY, default=False): bool,
+                Optional(TEST_DATA_KEY, default=None): And(
+                    str, lambda i: i is None or ObjectId.is_valid(i)
+                ),
                 Optional(MEMORY_KEY): Use(lambda v: MemoryConvertor.to_bytes(v)),
                 Optional(CHECKS_KEY): {
                     Optional(NULL_IMPUTATION_KEY): {
@@ -157,7 +163,11 @@ class ModelSchema:
         }
     )
     MULTI_MODELS_SCHEMA = Schema(
-        {MULTI_MODELS_KEY: [{MODEL_ENTRY_PATH_KEY: str, MODEL_ENTRY_META_KEY: MODEL_SCHEMA.schema}]}
+        {
+            MULTI_MODELS_KEY: [
+                {MODEL_ENTRY_PATH_KEY: And(str, len), MODEL_ENTRY_META_KEY: MODEL_SCHEMA.schema}
+            ]
+        }
     )
 
     @classmethod
@@ -230,6 +240,7 @@ class ModelSchema:
     def _validate_single_model(cls, single_model_metadata):
         cls._validate_mutual_exclusive_keys(single_model_metadata)
         cls._validate_dependent_keys(single_model_metadata)
+        cls._validate_data_integrity(single_model_metadata)
         logger.debug(
             f"Model configuration is valid (id: {single_model_metadata[cls.MODEL_ID_KEY]})."
         )
@@ -287,6 +298,20 @@ class ModelSchema:
                 raise InvalidModelSchema(
                     f"Stability test check minimum payload size ({minimum_payload_size}) "
                     f"is higher than the maximum ({maximum_payload_size})"
+                )
+
+    @classmethod
+    def _validate_data_integrity(cls, model_metadata):
+        if ModelSchema.TEST_KEY in model_metadata:
+            skip_test_value = cls.get_value(
+                model_metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_SKIP_KEY
+            )
+            test_dataset_value = cls.get_value(
+                model_metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_DATA_KEY
+            )
+            if not skip_test_value and not ObjectId.is_valid(test_dataset_value):
+                raise InvalidModelSchema(
+                    f"Test data is invalid. Please provide a valid catalog ID from DataRobot."
                 )
 
     @classmethod
