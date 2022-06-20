@@ -40,9 +40,8 @@ class TestSchemaValidator:
             ModelSchema.MODEL_ID_KEY: "abc123",
             ModelSchema.TARGET_TYPE_KEY: "Regression",
             ModelSchema.TARGET_NAME_KEY: "target_column",
-            ModelSchema.VERSION_KEY: {
-                ModelSchema.MODEL_ENV_KEY: "627785ea562155d227c6a56c",
-            },
+            ModelSchema.SETTINGS_KEY: {ModelSchema.NAME_KEY: "My Awesome Model"},
+            ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: "627785ea562155d227c6a56c"},
         }
 
     def test_is_single_models_schema(self):
@@ -224,6 +223,8 @@ class TestSchemaValidator:
             ModelSchema.TARGET_TYPE_KEY,
             ModelSchema.TARGET_NAME_KEY,
             ModelSchema.VERSION_KEY,
+            ModelSchema.SETTINGS_KEY,
+            f"{ModelSchema.SETTINGS_KEY}.{ModelSchema.NAME_KEY}",
             f"{ModelSchema.VERSION_KEY}.{ModelSchema.MODEL_ENV_KEY}",
         ],
     )
