@@ -1,16 +1,20 @@
-import os
-import re
 from abc import ABC
 from abc import abstractmethod
-import logging
+from enum import Enum
 from glob import glob
 from pathlib import Path
-
+import logging
+import os
+import re
 import yaml
-from git import Repo
 
-from common.exceptions import ModelMainEntryPointNotFound, SharedAndLocalPathCollision
+from common.data_types import DataRobotModel
+from common.data_types import FileInfo
+from common.exceptions import ModelMainEntryPointNotFound
+from common.exceptions import SharedAndLocalPathCollision
+from common.exceptions import UnexpectedResult
 from common.git_tool import GitTool
+from dr_client import DrClient
 from schema_validator import ModelSchema
 
 logger = logging.getLogger()
@@ -22,7 +26,9 @@ class ModelInfo:
         self._model_path = Path(model_path)
         self._metadata = metadata
         self._model_file_paths = []
-        self.is_affected_by_commit = False
+        self.should_upload_all_files = False
+        self.changed_or_new_files = []
+        self.deleted_file_ids = []
 
     @property
     def yaml_filepath(self):
@@ -35,6 +41,10 @@ class ModelInfo:
     @property
     def metadata(self):
         return self._metadata
+
+    @property
+    def git_model_id(self):
+        return self.metadata[ModelSchema.MODEL_ID_KEY]
 
     @property
     def model_file_paths(self):
@@ -73,15 +83,39 @@ class ModelInfo:
     def set_paths(self, paths):
         self._model_file_paths = [Path(p) for p in paths]
 
+    @property
+    def is_affected_by_commit(self):
+        return (
+            self.should_upload_all_files
+            or len(self.changed_or_new_files) > 0
+            or len(self.deleted_file_ids) > 0
+        )
+
+    @property
+    def should_run_test(self):
+        return ModelSchema.TEST_KEY in self.metadata and not ModelSchema.get_value(
+            self.metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_SKIP_KEY
+        )
+
 
 class CustomInferenceModelBase(ABC):
     def __init__(self, options):
         self._options = options
         self._repo = GitTool(self.options.root_dir)
+        logger.info(f"GITHUB_EVENT_NAME: {self.event_name}")
+        logger.info(f"GITHUB_SHA: {self.github_sha}")
 
     @property
     def options(self):
         return self._options
+
+    @property
+    def event_name(self):
+        return os.environ.get("GITHUB_EVENT_NAME")
+
+    @property
+    def github_sha(self):
+        return os.environ.get("GITHUB_SHA")
 
     @abstractmethod
     def run(self):
@@ -92,10 +126,16 @@ class CustomInferenceModelBase(ABC):
 
 
 class CustomInferenceModel(CustomInferenceModelBase):
+    class RelativeTo(Enum):
+        ROOT = 1
+        MODEL = 2
+
     def __init__(self, options):
         super().__init__(options)
         os.environ["GIT_PYTHON_TRACE"] = "full"
         self._models_info = []
+        self._datarobot_models = {}
+        self._dr_client = DrClient(self.options.webserver, self.options.api_token)
 
     @property
     def models_info(self):
@@ -119,9 +159,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
         self._scan_and_load_datarobot_models_metadata()
         self._collect_datarobot_model_files()
-        self._lookup_affected_models_by_the_current_action()
         self._fetch_models_from_datarobot()
-        self._create_affected_model_versions_in_datarobot()
+        self._lookup_affected_models_by_the_current_action()
+        self._apply_datarobot_actions_for_affected_models()
 
         print(
             """
@@ -135,22 +175,17 @@ class CustomInferenceModel(CustomInferenceModelBase):
         )
 
     def _prerequisites(self):
-        logger.info(f"GITHUB_SHA: {os.environ.get('GITHUB_SHA')}")
-
-        github_event_name = os.environ.get("GITHUB_EVENT_NAME")
-        logger.info(f"GITHUB_EVENT_NAME: {github_event_name}")
-
         supported_events = ["push", "pull_request"]
-        if github_event_name not in supported_events:
+        if self.event_name not in supported_events:
             logger.warning(
                 "Skip custom inference model action. It is expected to be executed only "
-                f"on {supported_events} events. Current event: {github_event_name}."
+                f"on {supported_events} events. Current event: {self.event_name}."
             )
             return False
 
         base_ref = os.environ.get("GITHUB_BASE_REF")
         logger.info(f"GITHUB_BASE_REF: {base_ref}.")
-        if github_event_name == "pull_request" and base_ref != self.options.branch:
+        if self.event_name == "pull_request" and base_ref != self.options.branch:
             logger.info(
                 "Skip custom inference model action. It is executed only when the referenced "
                 f"branch is {self.options.branch}. Current ref branch: {base_ref}."
@@ -239,7 +274,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
     @staticmethod
     def _normalize_paths(paths):
+        # Handle this kind of paths: /a/./b/ ==> /a/b, /a//b ==> /a/b
         re_p1 = re.compile(r"/\./|//")
+        # Handle this kind of path: ./a/b ==> a/b
         re_p2 = re.compile(r"^\./")
         paths = [re_p1.sub("/", p) for p in paths]
         return set([re_p2.sub("", p) for p in paths])
@@ -247,7 +284,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def _validate_model_integrity(self, model_info):
         if not model_info.main_program_exists():
             raise ModelMainEntryPointNotFound(
-                f"Model (Id: {model_info.metadata[ModelSchema.MODEL_ID_KEY]}) main entry point "
+                f"Model (Id: {model_info.git_model_id}) main entry point "
                 f"not found (custom.py).\n"
                 f"Existing files: {model_info.model_file_paths}"
             )
@@ -255,27 +292,35 @@ class CustomInferenceModel(CustomInferenceModelBase):
         self._validate_collision_between_local_and_shared(model_info)
 
     def _validate_collision_between_local_and_shared(self, model_info):
-        model_path = model_info.model_path
         model_file_paths = model_info.model_file_paths
 
-        local_path_top_levels = set([])
-        shared_path_top_levels = set([])
+        relative_paths = {self.RelativeTo.MODEL: set([]), self.RelativeTo.ROOT: set([])}
         for path in model_file_paths:
-            if self._is_relative_to(path, model_path):
-                relative_path = path.relative_to(model_path)
-                if str(relative_path) != ".":
-                    local_path_top_levels.add(relative_path.parts[0])
-            elif self._is_relative_to(path, self.options.root_dir):
-                relative_path = path.relative_to(self.options.root_dir)
-                if str(relative_path) != ".":
-                    shared_path_top_levels.add(relative_path.parts[0])
+            relative_to, relative_path = self._get_relative_path(path, model_info)
+            if not relative_to:
+                raise UnexpectedResult(f"The path '{path}' is outside the repo.")
+            if str(relative_path) != ".":
+                relative_paths[relative_to].add(relative_path)
 
-        collisions = set(local_path_top_levels) & set(shared_path_top_levels)
+        collisions = relative_paths[self.RelativeTo.MODEL] & relative_paths[self.RelativeTo.ROOT]
         if collisions:
             raise SharedAndLocalPathCollision(
                 f"Invalid file tree. Shared file(s)/package(s) collide with local model's "
                 f"file(s)/package(s). Collisions: {collisions}."
             )
+
+    def _get_relative_path(self, path, model_info):
+        def _extract_path(p, root):
+            relative_path = p.relative_to(root)
+            extracted_path = relative_path.parts[0] if relative_path.parts else relative_path
+            return extracted_path
+
+        if self._is_relative_to(path, model_info.model_path):
+            return self.RelativeTo.MODEL, _extract_path(path, model_info.model_path)
+        elif self._is_relative_to(path, self.options.root_dir):
+            return self.RelativeTo.ROOT, _extract_path(path, self.options.root_dir)
+        else:
+            return None, None
 
     @staticmethod
     def _is_relative_to(a_path, b_path):
@@ -285,69 +330,189 @@ class CustomInferenceModel(CustomInferenceModelBase):
         except ValueError:
             return False
 
+    def _fetch_models_from_datarobot(self):
+        logger.info("Fetching models from DataRobot ...")
+        custom_inference_models = self._dr_client.fetch_custom_models()
+        for custom_model in custom_inference_models:
+            git_model_id = custom_model.get("gitModelId")
+            if git_model_id:
+                model_versions = self._dr_client.fetch_custom_model_versions(
+                    custom_model["id"], json={"limit": 1}
+                )
+                latest_version = model_versions[0] if model_versions else None
+                if not latest_version:
+                    logger.warning(
+                        "Model exists without a version! git_model_id: "
+                        f"{git_model_id}, custom_model_id: {custom_model['id']}"
+                    )
+                self._datarobot_models[git_model_id] = DataRobotModel(custom_model, latest_version)
+
     def _lookup_affected_models_by_the_current_action(self):
         logger.info("Lookup affected models by the current commit ...")
 
         for model_info in self.models_info:
-            model_info.is_affected_by_commit = False
+            model_info.changed_or_new_files = []
+            model_info.deleted_file_ids = []
+            model_info.should_upload_all_files = self._should_upload_all_files(model_info)
 
-        github_event_name = os.environ.get("GITHUB_EVENT_NAME")
-        if github_event_name == "pull_request":
-            self._lookup_affected_models_by_a_pull_request_action()
-        elif github_event_name == "push":
-            self._lookup_affected_models_by_a_push_action()
+        ancestor_ref = (
+            "pullRequestCommitSha" if self.event_name == "pull_request" else "mainBranchCommitSha"
+        )
+        self._lookup_affected_models(ancestor_ref)
 
-    def _lookup_affected_models_by_a_pull_request_action(self):
+    def _should_upload_all_files(self, model_info):
+        return (
+            not self._model_version_exists(model_info)
+            or self._is_dirty(model_info)
+            or not self._valid_ancestor(model_info)
+        )
+
+    def _model_version_exists(self, model_info):
+        return (
+            model_info.git_model_id in self._datarobot_models
+            and self._datarobot_models[model_info.git_model_id].latest_version
+        )
+
+    @staticmethod
+    def _is_dirty(model_info):
+        # TODO: Add support for 'dirty' in DataRobot for any action that was done by a non GitHub
+        #       action client
+        logger.warning(
+            f"Add support to check 'dirty' marker for custom model version. "
+            f"git_model_id: {model_info.git_model_id}"
+        )
+        return False
+
+    def _valid_ancestor(self, model_info):
+        ancestor_ref = (
+            "pullRequestCommitSha" if self.event_name == "pull_requests" else "mainBranchCommitSha"
+        )
+        ancestor_sha = self._get_latest_provisioned_model_git_version(model_info)[ancestor_ref]
+        if not ancestor_sha:
+            # Either the model has never provisioned of the user created a version with a non
+            # GitHub action client.
+            return False
+
+        # Users may have few local commits between remote pushes
+        return self._repo.is_ancestor_of(ancestor_sha, self.github_sha)
+
+    def _lookup_affected_models(self, ancestor_ref):
         # In a PR a merge commit is always the last commit, which we need to ignore.
-        merge_commit_sha = os.environ.get("GITHUB_SHA")
-        last_commit_sha = f"{merge_commit_sha}~1"
-        changed_files = self._repo.find_changed_files(last_commit_sha)
-        for changed_file in changed_files:
-            for model_info in self.models_info:
-                if changed_file in model_info.model_file_paths:
-                    logger.info(
-                        f"Changed file '{changed_file}' affects model "
-                        f"'{model_info.model_path.name}'"
-                    )
-                    model_info.is_affected_by_commit = True
+        if logger.isEnabledFor(logging.DEBUG):
+            self._repo.print_pretty_log()
 
-    def _lookup_affected_models_by_a_push_action(self):
-        # When a PR is merged to the main branch, we try to find the relevant files that
-        # were changed since the last provision to DataRobot.
         for model_info in self.models_info:
-            to_commit_sha = os.environ.get("GITHUB_SHA")
-            from_commit_sha = self._get_last_model_provisioned_git_sha(model_info)
-            if from_commit_sha is None:
-                # The assumption is that the model has never provisioned, so mark is as affected by
-                # the given commit
-                model_info.is_affected_by_commit = True
-            else:
-                changed_files = self._repo.find_changed_files(to_commit_sha, from_commit_sha)
-                for changed_file in changed_files:
-                    if changed_file in model_info.model_file_paths:
-                        logger.info(
-                            f"Changed file '{changed_file}' affects model "
-                            f"'{model_info.model_path.name}'"
-                        )
-                        model_info.is_affected_by_commit = True
+            if model_info.should_upload_all_files:
+                continue
+            from_commit_sha = self._get_latest_provisioned_model_git_version(model_info)[
+                ancestor_ref
+            ]
+            changed_files, deleted_files = self._repo.find_changed_files(
+                self.github_sha, from_commit_sha
+            )
+            self._handle_changed_or_new_files(model_info, changed_files)
+            self._handle_deleted_files(model_info, deleted_files)
 
-    def _get_last_model_provisioned_git_sha(self, model_info):
-        # TODO: read the last provisioned git sha from DataRobot CustomTask entity
-        return None
+    @staticmethod
+    def _handle_changed_or_new_files(model_info, changed_or_new_files):
+        for changed_file in changed_or_new_files:
+            if changed_file in model_info.model_file_paths:
+                logger.info(
+                    f"Changed/new file '{changed_file}' affects model "
+                    f"'{model_info.model_path.name}'"
+                )
+                model_info.changed_or_new_files.append(changed_file)
 
-    def _find_changed_files(self, from_commit_sha, to_commit_sha):
-        repo = Repo(self.options.root_dir)
-        to_commit = repo.commit(to_commit_sha)
-        diff = to_commit.diff(from_commit_sha)
+    def _handle_deleted_files(self, model_info, deleted_files):
+        for deleted_file in deleted_files:
+            # Being stateless, check each deleted file against the stored custom model version
+            # in DataRobot
+            if model_info.git_model_id in self._datarobot_models:
+                latest_version = self._datarobot_models[model_info.git_model_id].latest_version
+                if latest_version:
+                    _, relative_path = self._get_relative_path(deleted_file, model_info)
+                    if not relative_path:
+                        raise UnexpectedResult(f"The path '{deleted_file}' is outside the repo.")
 
-        changed_files = []
-        for git_index in diff:
-            changed_files.append(self.options.root_dir / git_index.a_path)
+                    model_info.deleted_file_ids.extend(
+                        [
+                            item["id"]
+                            for item in latest_version["items"]
+                            if relative_path == item["filePath"]
+                        ]
+                    )
 
-        return changed_files
+    def _get_latest_provisioned_model_git_version(self, model_info):
+        latest_version = self._datarobot_models[model_info.git_model_id].latest_version
+        return latest_version["gitModelVersion"]
 
-    def _fetch_models_from_datarobot(self):
-        logger.info("Fetching models from DataRobot ...")
+    def _apply_datarobot_actions_for_affected_models(self):
+        logger.info("Apply DataRobot actions for affected models ...")
+        for model_info in self._models_info:
+            if model_info.is_affected_by_commit:
+                logger.info(f"Model '{model_info.model_path}' is affected by commit.")
 
-    def _create_affected_model_versions_in_datarobot(self):
-        logger.info("Create affected model version in DataRobot ...")
+                custom_model_id = self._get_or_create_custom_model(model_info)
+                version_id = self._create_custom_model_version(custom_model_id, model_info)
+                if model_info.should_run_test:
+                    self._test_custom_model_version(custom_model_id, version_id, model_info)
+
+                logger.info(
+                    "Custom inference model version was successfully created. "
+                    f"git_model_id: {model_info.git_model_id}, model_id: {custom_model_id}, "
+                    f"version_id: {version_id}"
+                )
+
+    def _get_or_create_custom_model(self, model_info):
+        if model_info.git_model_id in self._datarobot_models:
+            custom_model_id = self._datarobot_models[model_info.git_model_id].model["id"]
+        else:
+            custom_model_id = self._dr_client.create_custom_model(model_info)
+            logger.info(f"Custom inference model was created: {custom_model_id}")
+        return custom_model_id
+
+    def _create_custom_model_version(self, custom_model_id, model_info):
+        if model_info.should_upload_all_files:
+            changed_files_info = self._get_relative_paths(model_info, model_info.model_file_paths)
+        else:
+            changed_files_info = self._get_relative_paths(
+                model_info, model_info.changed_or_new_files
+            )
+
+        logger.info(
+            "Create custom inference model version. git_model_id: "
+            f" {model_info.git_model_id}, from_latest: {model_info.should_upload_all_files}"
+        )
+
+        if self.event_name == "pull_request":
+            main_branch_commit_sha = self._repo.merge_base_commit_sha(
+                self.options.branch, self.github_sha
+            )
+            pull_request_commit_sha = self._repo.feature_branch_top_commit_sha_of_a_merge_commit(
+                self.github_sha
+            )
+        else:
+            main_branch_commit_sha = self.github_sha
+            pull_request_commit_sha = None
+
+        return self._dr_client.create_custom_model_version(
+            custom_model_id,
+            model_info,
+            main_branch_commit_sha,
+            pull_request_commit_sha,
+            changed_files_info,
+            model_info.deleted_file_ids,
+            from_latest=not model_info.should_upload_all_files,
+        )
+
+    def _get_relative_paths(self, model_info, paths, for_upload=True):
+        file_references = []
+        for path in paths:
+            _, relative_path = self._get_relative_path(path, model_info)
+            if str(relative_path) != ".":
+                file_ref = FileInfo(path, relative_path) if for_upload else relative_path
+                file_references.append(file_ref)
+        return file_references
+
+    def _test_custom_model_version(self, model_id, model_version_id, model_info):
+        logger.info("Executing custom model test ...")

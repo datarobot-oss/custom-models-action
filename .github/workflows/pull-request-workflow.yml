@@ -17,6 +17,8 @@ env:
   OUT_DIR: output-context/${{ github.event_name }}
   INSPECT_CONTEXT: false
   LOGLEVEL: debug
+  DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}
+  DATAROBOT_WEBSERVER: ${{ secrets.DATAROBOT_WEBSERVER }}
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -129,10 +131,11 @@ jobs:
 
       - name: DataRobot Custom Inference Model
         id: custom-inference-model
+        if: ${{ env.INSPECT_CONTEXT == 'false' }}
         uses: ./actions/custom-inference-model
         with:
-          api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
-          webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
+          api-token: $DATAROBOT_API_TOKEN
+          webserver: $DATAROBOT_WEBSERVER
           main-branch: master
 
       - name: DataRobot Custom Inference Model Results

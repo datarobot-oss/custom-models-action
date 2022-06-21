@@ -25,7 +25,9 @@ def argparse_options(args=None):
     parser.add_argument("--branch", required=True, help="The branch against which PRs take action.")
     parser.add_argument("--root-dir", required=True, help="The workspace root directory.")
 
-    return parser.parse_args(args)
+    options = parser.parse_args(args)
+
+    return options
 
 
 def setup_log_configuration():
@@ -37,7 +39,8 @@ def setup_log_configuration():
         logging.basicConfig(format=log_format, level=logging.INFO)
 
 
-def main(options):
+def main(args=None):
+    options = argparse_options(args)
     setup_log_configuration()
 
     try:
@@ -52,4 +55,4 @@ def main(options):
 
 
 if __name__ == "__main__":
-    main(argparse_options())
+    main()

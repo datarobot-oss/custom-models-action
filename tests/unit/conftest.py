@@ -175,8 +175,8 @@ def mock_fetch_models_from_datarobot():
 
 
 @pytest.fixture
-def mock_should_not_upload_all_files():
-    with patch.object(CustomInferenceModel, "_should_upload_all_files", return_value=False):
+def mock_model_version_exists():
+    with patch.object(CustomInferenceModel, "_model_version_exists", return_value=True):
         yield
 
 

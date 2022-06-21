@@ -9,6 +9,14 @@ class InvalidModelSchema(GenericException):
         super().__init__(msg.split("\n")[-1], code)
 
 
+class UnexpectedResult(GenericException):
+    pass
+
+
+class UnexpectedInput(GenericException):
+    pass
+
+
 class InvalidMemoryValue(GenericException):
     pass
 
@@ -25,9 +33,17 @@ class UnInitializedGitTool(GenericException):
     pass
 
 
+class NoCommonAncestor(GenericException):
+    pass
+
+
 class HttpRequesterException(GenericException):
     pass
 
 
 class DataRobotClientError(GenericException):
+    pass
+
+
+class NonMergeCommitError(GenericException):
     pass

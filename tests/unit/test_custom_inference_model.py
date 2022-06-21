@@ -63,7 +63,9 @@ class TestCustomInferenceModel:
         assert len(custom_inference_model._models_info) == (num_multi_models + num_single_models)
 
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
-    @pytest.mark.usefixtures("mock_prerequisites")
+    @pytest.mark.usefixtures(
+        "mock_prerequisites", "mock_fetch_models_from_datarobot", "mock_model_version_exists"
+    )
     def test_lookup_affected_models_by_a_push_to_the_main_branch(
         self,
         options,
@@ -94,8 +96,11 @@ class TestCustomInferenceModel:
                 os.environ, {"GITHUB_SHA": head_git_sha}
             ), patch.object(
                 CustomInferenceModel,
-                "_get_last_model_provisioned_git_sha",
-                return_value=last_provision_git_sha,
+                "_get_latest_provisioned_model_git_version",
+                return_value={
+                    "mainBranchCommitSha": last_provision_git_sha,
+                    "pullRequestCommitSha": None,
+                },
             ):
                 custom_inference_model._lookup_affected_models_by_the_current_action()
 
@@ -112,13 +117,18 @@ class TestCustomInferenceModel:
                 os.environ, {"GITHUB_SHA": head_git_sha}
             ), patch.object(
                 CustomInferenceModel,
-                "_get_last_model_provisioned_git_sha",
-                return_value=last_provision_git_sha,
+                "_get_latest_provisioned_model_git_version",
+                return_value={
+                    "mainBranchCommitSha": last_provision_git_sha,
+                    "pullRequestCommitSha": None,
+                },
             ):
                 custom_inference_model._lookup_affected_models_by_the_current_action()
-            assert (
-                len([m_info for m_info in models_info if m_info.is_affected_by_commit]) == reference
+
+            num_affected_models = len(
+                [m_info for m_info in models_info if m_info.is_affected_by_commit]
             )
+            assert num_affected_models == reference
 
 
 class TestGitTool:
@@ -139,23 +149,36 @@ class TestGitTool:
         )
 
         repo_tool = GitTool(repo_root_path)
-        changed_files = repo_tool.find_changed_files("HEAD~1")
-        assert len(changed_files) == 1, changed_files
+        changed_files1, deleted_files = repo_tool.find_changed_files("HEAD")
+        assert len(changed_files1) == 2, changed_files1
+        assert not deleted_files
+        changed_files2, _ = repo_tool.find_changed_files("HEAD", "HEAD~1")
+        assert len(changed_files2) == 2, changed_files2
+        assert set(changed_files2) == set(changed_files1)
 
-        changed_files2 = repo_tool.find_changed_files("HEAD~1", "HEAD~2")
-        assert len(changed_files2) == 1, changed_files2
-        assert changed_files == changed_files2
+        changed_files3, _ = repo_tool.find_changed_files("HEAD~1", "HEAD~2")
+        assert len(changed_files3) == 1, changed_files2
 
-        changed_files = repo_tool.find_changed_files("HEAD", "HEAD~2")
-        assert len(changed_files) == 2, changed_files
+        changed_files4, _ = repo_tool.find_changed_files("HEAD", "HEAD~2")
+        assert len(changed_files4) == 2, changed_files4
 
     @staticmethod
     def make_a_change_and_commit(git_repo, file_paths, index):
         for file_path in file_paths:
             with open(file_path, "a") as f:
-                f.write(f"# Automatic change ({index})")
+                f.write(f"\n# Automatic change ({index})")
         git_repo.index.add([str(f) for f in file_paths])
         git_repo.index.commit(f"Change number {index}")
+
+    def test_is_ancestor_of(
+        self, repo_root_path, git_repo, init_repo_with_models_factory, common_filepath
+    ):
+        init_repo_with_models_factory(1, is_multi=False)
+        repo_tool = GitTool(repo_root_path)
+        for index in range(1, 5):
+            self.make_a_change_and_commit(git_repo, [str(common_filepath)], index)
+            ancestor_ref = f"HEAD~{index}"
+            assert repo_tool.is_ancestor_of(ancestor_ref, "HEAD")
 
 
 class TestGlobPatterns:
@@ -172,6 +195,7 @@ class TestGlobPatterns:
         ids=["with-exclude-glob", "without-exclude-glob"],
     )
     @pytest.mark.usefixtures("mock_prerequisites")
+    @pytest.mark.usefixtures("mock_fetch_models_from_datarobot")
     def test_glob_patterns(
         self,
         models_factory,
@@ -234,6 +258,7 @@ class TestGlobPatterns:
 
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
     @pytest.mark.usefixtures("mock_prerequisites")
+    @pytest.mark.usefixtures("mock_fetch_models_from_datarobot")
     def test_missing_main_program(self, models_factory, common_path_with_code, options, is_multi):
         models_factory(1, is_multi, include_main_prog=False)
         custom_inference_model = CustomInferenceModel(options)
@@ -266,7 +291,7 @@ class TestGlobPatterns:
         ],
     )
     def test_local_and_shared_collisions(self, local_paths, shared_paths, collision_expected):
-        options = Namespace(root_dir="/repo")
+        options = Namespace(webserver="www.dummy.com", api_token="abc", root_dir="/repo")
         with patch.object(
             CustomInferenceModel, "models_info", new_callable=PropertyMock
         ) as mock_models_info_property, patch.object(
@@ -278,7 +303,7 @@ class TestGlobPatterns:
             mock_model_file_paths_property.return_value = [Path(p) for p in local_paths] + [
                 Path(p) for p in shared_paths
             ]
-            with patch("custom_inference_model.Repo.init"):
+            with patch("common.git_tool.Repo.init"), patch("custom_inference_model.DrClient"):
                 custom_inference_model = CustomInferenceModel(options)
                 if collision_expected:
                     with pytest.raises(SharedAndLocalPathCollision):
