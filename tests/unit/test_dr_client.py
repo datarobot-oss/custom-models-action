@@ -368,7 +368,7 @@ class TestCustomModelVersionRoutes:
                 main_branch_commit_sha,
                 pull_request_commit_sha,
                 changed_files_info=changed_files_info,
-                file_path_to_delete=None,
+                file_ids_to_delete=None,
                 base_env_id=str(ObjectId()),
             )
             self._validate_mandatory_attributes_for_regression_model_version(

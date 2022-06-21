@@ -160,6 +160,20 @@ class DrClient:
             self.CUSTOM_MODELS_VERSION_ROUTE.format(model_id=custom_model_id), **kwargs
         )
 
+    def fetch_custom_model_latest_version_by_git_model_id(self, git_model_id):
+        logger.info(f"Fetching custom model versions for git model '{git_model_id}' ...")
+
+        custom_models = self.fetch_custom_models()
+        custom_model = next(cm for cm in custom_models if cm.get("gitModelId") == git_model_id)
+        if not custom_model:
+            return None
+
+        cm_versions = self.fetch_custom_model_versions(custom_model["id"], json={"limit": 1})
+        if not cm_versions:
+            return None
+
+        return cm_versions[0]
+
     def create_custom_model_version(
         self,
         custom_model_id,
@@ -167,7 +181,7 @@ class DrClient:
         main_branch_commit_sha,
         pull_request_commit_sha=None,
         changed_files_info=None,
-        file_path_to_delete=None,
+        file_ids_to_delete=None,
         from_latest=False,
     ):
         file_objs = []
@@ -180,7 +194,7 @@ class DrClient:
                 main_branch_commit_sha,
                 pull_request_commit_sha,
                 changed_files_info,
-                file_path_to_delete=file_path_to_delete,
+                file_ids_to_delete=file_ids_to_delete,
                 base_env_id=base_env_id,
             )
             mp = MultipartEncoder(fields=payload)
@@ -215,7 +229,7 @@ class DrClient:
         main_branch_commit_sha,
         pull_request_commit_sha,
         changed_files_info,
-        file_path_to_delete=None,
+        file_ids_to_delete=None,
         base_env_id=None,
     ):
         metadata = model_info.metadata
@@ -232,7 +246,7 @@ class DrClient:
             ),
         ]
 
-        file_objs = cls._setup_model_version_files(changed_files_info, file_path_to_delete, payload)
+        file_objs = cls._setup_model_version_files(changed_files_info, file_ids_to_delete, payload)
 
         if base_env_id:
             payload.append(("baseEnvironmentId", base_env_id))
@@ -250,7 +264,7 @@ class DrClient:
         return payload, file_objs
 
     @staticmethod
-    def _setup_model_version_files(changed_files_info, file_paths_to_delete, payload):
+    def _setup_model_version_files(changed_files_info, file_ids_to_delete, payload):
         file_objs = []
         for file_info in changed_files_info or []:
             file_path = str(file_info.actual_path)
@@ -261,8 +275,8 @@ class DrClient:
             payload.append(("file", (path_under_model, fd)))
             payload.append(("filePath", path_under_model))
 
-        if file_paths_to_delete:
-            payload.append(("filesToDelete", [str(fp) for fp in file_paths_to_delete]))
+        for file_id_to_delete in file_ids_to_delete or []:
+            payload.append(("filesToDelete", file_id_to_delete))
 
         return file_objs
 
