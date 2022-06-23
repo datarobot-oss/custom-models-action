@@ -60,12 +60,7 @@ class ModelInfo:
 
     @property
     def is_unstructured(self):
-        return self.metadata[ModelSchema.TARGET_TYPE_KEY] in [
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY,
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY,
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY,
-        ]
+        return ModelSchema.is_unstructured(self.metadata)
 
     @property
     def is_multiclass(self):
@@ -516,3 +511,4 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
     def _test_custom_model_version(self, model_id, model_version_id, model_info):
         logger.info("Executing custom model test ...")
+        self._dr_client.run_custom_model_version_testing(model_id, model_version_id, model_info)

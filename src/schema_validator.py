@@ -62,17 +62,18 @@ class ModelSchema:
     TEST_DATA_KEY = "test_data"
 
     CHECKS_KEY = "checks"
-    NULL_IMPUTATION_KEY = "null_imputation"
-    CHECK_VALUE_KEY = "value"
+    NULL_VALUE_IMPUTATION_KEY = "null_value_imputation"
+    CHECK_ENABLED_KEY = "enabled"
     BLOCK_DEPLOYMENT_IF_FAILS_KEY = "block_deployment_if_fails"
-    SIDE_EFFECT_KEY = "side_effect"
+    SIDE_EFFECTS_KEY = "side_effects"
     PREDICTION_VERIFICATION_KEY = "prediction_verification"
     OUTPUT_DATASET_KEY = "output_dataset"
+    PREDICTIONS_COLUMN = "predictions_column"
     MATCH_THRESHOLD_KEY = "match_threshold"
     PASSING_MATCH_RATE_KEY = "passing_match_rate"
     PERFORMANCE_KEY = "performance"
     MAXIMUM_RESPONSE_TIME_KEY = "maximum_response_time"
-    CHECK_DURATION_LIMIT_KEY = "check_duration_limit"
+    MAXIMUM_EXECUTION_TIME = "max_execution_time"
     NUMBER_OF_PARALLEL_USERS_KEY = "number_of_parallel_users"
     STABILITY_KEY = "stability"
     TOTAL_PREDICTION_REQUESTS_KEY = "total_prediction_requests"
@@ -122,36 +123,35 @@ class ModelSchema:
                 # The skip attribute allows users to have the test section in their yaml file
                 # and still disable testing
                 Optional(TEST_SKIP_KEY, default=False): bool,
-                Optional(TEST_DATA_KEY, default=None): And(
-                    str, lambda i: i is None or ObjectId.is_valid(i)
-                ),
+                Optional(TEST_DATA_KEY): And(str, lambda i: ObjectId.is_valid(i)),
                 Optional(MEMORY_KEY): Use(lambda v: MemoryConvertor.to_bytes(v)),
                 Optional(CHECKS_KEY): {
-                    Optional(NULL_IMPUTATION_KEY): {
-                        CHECK_VALUE_KEY: Or("yes", "no"),
-                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: Or("yes", "no"),
+                    Optional(NULL_VALUE_IMPUTATION_KEY): {
+                        CHECK_ENABLED_KEY: bool,
+                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: bool,
                     },
-                    Optional(SIDE_EFFECT_KEY): {
-                        CHECK_VALUE_KEY: Or("yes", "no"),
-                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: Or("yes", "no"),
+                    Optional(SIDE_EFFECTS_KEY): {
+                        CHECK_ENABLED_KEY: bool,
+                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: bool,
                     },
                     Optional(PREDICTION_VERIFICATION_KEY): {
-                        CHECK_VALUE_KEY: Or("yes", "no"),
-                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: Or("yes", "no"),
+                        CHECK_ENABLED_KEY: bool,
+                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: bool,
                         OUTPUT_DATASET_KEY: And(str, lambda i: ObjectId.is_valid(i)),
+                        PREDICTIONS_COLUMN: And(str, len),
                         Optional(MATCH_THRESHOLD_KEY): And(float, lambda v: 0 <= v <= 1),
                         Optional(PASSING_MATCH_RATE_KEY): And(int, lambda v: 0 <= v <= 100),
                     },
                     Optional(PERFORMANCE_KEY): {
-                        CHECK_VALUE_KEY: Or("yes", "no"),
-                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: Or("yes", "no"),
+                        CHECK_ENABLED_KEY: bool,
+                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: bool,
                         Optional(MAXIMUM_RESPONSE_TIME_KEY): And(int, lambda v: 1 <= v <= 1800),
-                        Optional(CHECK_DURATION_LIMIT_KEY): And(int, lambda v: 1 <= v <= 1800),
+                        Optional(MAXIMUM_EXECUTION_TIME): And(int, lambda v: 1 <= v <= 1800),
                         Optional(NUMBER_OF_PARALLEL_USERS_KEY): And(int, lambda v: 1 <= v <= 4),
                     },
                     Optional(STABILITY_KEY): {
-                        CHECK_VALUE_KEY: Or("yes", "no"),
-                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: Or("yes", "no"),
+                        CHECK_ENABLED_KEY: bool,
+                        BLOCK_DEPLOYMENT_IF_FAILS_KEY: bool,
                         Optional(TOTAL_PREDICTION_REQUESTS_KEY): And(int, lambda v: v >= 1),
                         Optional(PASSING_RATE_KEY): And(int, lambda v: 0 <= v <= 100),
                         Optional(NUMBER_OF_PARALLEL_USERS_KEY): And(int, lambda v: 1 <= v <= 4),
@@ -225,6 +225,15 @@ class ModelSchema:
         return metadata[ModelSchema.TARGET_TYPE_KEY] in [
             cls.TARGET_TYPE_MULTICLASS_KEY,
             cls.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
+        ]
+
+    @classmethod
+    def is_unstructured(cls, metadata):
+        return metadata[ModelSchema.TARGET_TYPE_KEY] in [
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY,
         ]
 
     @classmethod
@@ -309,7 +318,11 @@ class ModelSchema:
             test_dataset_value = cls.get_value(
                 model_metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_DATA_KEY
             )
-            if not skip_test_value and not ObjectId.is_valid(test_dataset_value):
+            if (
+                not skip_test_value
+                and not cls.is_unstructured(model_metadata)
+                and not ObjectId.is_valid(test_dataset_value)
+            ):
                 raise InvalidModelSchema(
                     f"Test data is invalid. Please provide a valid catalog ID from DataRobot."
                 )

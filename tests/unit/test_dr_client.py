@@ -6,7 +6,9 @@ from bson import ObjectId
 
 from common.data_types import FileInfo
 from common.exceptions import DataRobotClientError
+from common.string_util import StringUtil
 from custom_inference_model import ModelInfo
+from dr_api_attrs import DrApiAttrs
 from dr_client import DrClient
 from schema_validator import ModelSchema
 
@@ -498,3 +500,50 @@ class TestCustomModelVersionRoutes:
 
         for fetched_version in total_versions_response:
             assert fetched_version in total_expected_versions
+
+    class TestCustomModelsTestingRoute:
+        @pytest.mark.parametrize("loaded_checks", [None, {}], ids=["none", "empty_dict"])
+        def test_minimal_custom_model_testing_configuration(self, loaded_checks):
+            configuration = DrClient._build_tests_configuration(loaded_checks)
+            assert configuration == {"longRunningService": "fail", "errorCheck": "fail"}
+
+        @pytest.mark.parametrize("loaded_checks", [None, {}], ids=["none", "empty_dict"])
+        def test_minimal_custom_model_testing_parameters(self, loaded_checks):
+            parameters = DrClient._build_tests_parameters(loaded_checks)
+            assert not parameters
+
+        def test_full_custom_model_testing_configuration(self, mock_full_custom_model_checks):
+            assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
+            configuration = DrClient._build_tests_configuration(mock_full_custom_model_checks)
+            for check in DrApiAttrs.DR_TEST_CHECK_MAP.keys():
+                assert DrApiAttrs.to_dr_test_check(check) in configuration
+            for check in {"longRunningService", "errorCheck"}:
+                assert check in configuration
+
+        def test_full_custom_model_testing_configuration_with_all_disabled_checks(
+            self, mock_full_custom_model_checks
+        ):
+            assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
+            for check, info in mock_full_custom_model_checks.items():
+                info[ModelSchema.CHECK_ENABLED_KEY] = False
+            configuration = DrClient._build_tests_configuration(mock_full_custom_model_checks)
+            assert configuration == {"longRunningService": "fail", "errorCheck": "fail"}
+
+        def test_full_custom_model_testing_parameters(self, mock_full_custom_model_checks):
+            assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
+            parameters = DrClient._build_tests_parameters(mock_full_custom_model_checks)
+            for check in {
+                ModelSchema.PREDICTION_VERIFICATION_KEY,
+                ModelSchema.PERFORMANCE_KEY,
+                ModelSchema.STABILITY_KEY,
+            }:
+                assert DrApiAttrs.to_dr_test_check(check) in parameters
+
+        def test_full_custom_model_testing_parameters_with_all_disabled_checks(
+            self, mock_full_custom_model_checks
+        ):
+            assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
+            for check, info in mock_full_custom_model_checks.items():
+                info[ModelSchema.CHECK_ENABLED_KEY] = False
+            parameters = DrClient._build_tests_parameters(mock_full_custom_model_checks)
+            assert not parameters
