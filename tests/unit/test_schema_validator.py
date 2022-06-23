@@ -282,8 +282,8 @@ class TestSchemaValidator:
             ModelSchema.TEST_DATA_KEY: "62779bef562155562769f932",
             ModelSchema.CHECKS_KEY: {
                 ModelSchema.STABILITY_KEY: {
-                    ModelSchema.CHECK_VALUE_KEY: "yes",
-                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
+                    ModelSchema.CHECK_ENABLED_KEY: True,
+                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: True,
                     ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY: 100,
                     ModelSchema.MAXIMUM_PAYLOAD_SIZE_KEY: 50,
                 }

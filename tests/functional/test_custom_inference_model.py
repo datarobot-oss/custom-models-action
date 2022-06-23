@@ -122,14 +122,27 @@ def cleanup(dr_client, model_metadata):
         pass
 
 
+@pytest.fixture
+def upload_dataset_for_testing(dr_client, model_metadata):
+    if ModelSchema.TEST_KEY in model_metadata:
+        test_dataset_filepath = (
+            Path(__file__).parent / ".." / "datasets" / "juniors_3_year_stats_regression_small.csv"
+        )
+        dataset_id = dr_client.upload_dataset(test_dataset_filepath)
+        model_metadata[ModelSchema.TEST_KEY][ModelSchema.TEST_DATA_KEY] = dataset_id
+
+        yield dataset_id
+        dr_client.delete_dataset(dataset_id)
+
+
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible")
+@pytest.mark.usefixtures("build_repo_for_testing", "cleanup", "upload_dataset_for_testing")
 class TestCustomInferenceModel:
     class Change(Enum):
         INCREASE_MEMORY = 1
         ADD_FILE = 2
         REMOVE_FILE = 3
 
-    @pytest.mark.usefixtures("build_repo_for_testing", "cleanup")
     def test_e2e_pull_request(
         self,
         dr_client,
@@ -275,7 +288,6 @@ class TestCustomInferenceModel:
                 ]
             )
 
-    @pytest.mark.usefixtures("build_repo_for_testing", "cleanup")
     def test_e2e_push(self, repo_root_path, git_repo, model_metadata_yaml_file, main_branch_name):
         # 1. Make three changes, one at a time on the main branch
         for _ in range(3):

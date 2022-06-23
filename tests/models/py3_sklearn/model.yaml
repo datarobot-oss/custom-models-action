@@ -7,4 +7,7 @@ settings:
   name: My Awsome GitHub Model
 
 version:
-  model_environment: 5e8c889607389fe0f466c72d
+  model_environment: 5e8c889607389fe0f466c72d  # Make sure this is the environment ID in your system
+
+test:
+  test_data: 62b2d5f90587cedfefd2a4a1  # Will be replaced during a functional test

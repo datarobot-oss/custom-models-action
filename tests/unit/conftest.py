@@ -216,7 +216,45 @@ def init_repo_with_models_factory(git_repo, repo_root_path, models_factory):
 
 
 @pytest.fixture
-def mock_full_binary_model_schema():
+def mock_full_custom_model_checks():
+    return {
+        ModelSchema.NULL_VALUE_IMPUTATION_KEY: {
+            ModelSchema.CHECK_ENABLED_KEY: True,
+            ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: True,
+        },
+        ModelSchema.SIDE_EFFECTS_KEY: {
+            ModelSchema.CHECK_ENABLED_KEY: True,
+            ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: True,
+        },
+        ModelSchema.PREDICTION_VERIFICATION_KEY: {
+            ModelSchema.CHECK_ENABLED_KEY: True,
+            ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: False,
+            ModelSchema.OUTPUT_DATASET_KEY: "627791f5562155d63f367b05",
+            ModelSchema.PREDICTIONS_COLUMN: "Grade 2014",
+            ModelSchema.MATCH_THRESHOLD_KEY: 0.9,
+            ModelSchema.PASSING_MATCH_RATE_KEY: 85,
+        },
+        ModelSchema.PERFORMANCE_KEY: {
+            ModelSchema.CHECK_ENABLED_KEY: True,
+            ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: False,
+            ModelSchema.MAXIMUM_RESPONSE_TIME_KEY: 50,
+            ModelSchema.MAXIMUM_EXECUTION_TIME: 100,
+            ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY: 3,
+        },
+        ModelSchema.STABILITY_KEY: {
+            ModelSchema.CHECK_ENABLED_KEY: True,
+            ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: True,
+            ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY: 50,
+            ModelSchema.PASSING_RATE_KEY: 95,
+            ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY: 1,
+            ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY: 100,
+            ModelSchema.MAXIMUM_PAYLOAD_SIZE_KEY: 1000,
+        },
+    }
+
+
+@pytest.fixture
+def mock_full_binary_model_schema(mock_full_custom_model_checks):
     return {
         ModelSchema.MODEL_ID_KEY: "abc123",
         ModelSchema.DEPLOYMENT_ID_KEY: "edf456",
@@ -240,44 +278,9 @@ def mock_full_binary_model_schema():
         },
         ModelSchema.TEST_KEY: {
             ModelSchema.TEST_DATA_KEY: "62779143562155aa34a3d65b",
+            ModelSchema.TEST_SKIP_KEY: False,
             ModelSchema.MEMORY_KEY: "100Mi",
-            ModelSchema.CHECKS_KEY: {
-                ModelSchema.NULL_IMPUTATION_KEY: {
-                    ModelSchema.CHECK_VALUE_KEY: "yes",
-                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
-                },
-                ModelSchema.SIDE_EFFECT_KEY: {
-                    ModelSchema.CHECK_VALUE_KEY: "yes",
-                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
-                },
-                ModelSchema.PREDICTION_VERIFICATION_KEY: {
-                    ModelSchema.CHECK_VALUE_KEY: "yes",
-                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
-                },
-                ModelSchema.PREDICTION_VERIFICATION_KEY: {
-                    ModelSchema.CHECK_VALUE_KEY: "yes",
-                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "no",
-                    ModelSchema.OUTPUT_DATASET_KEY: "627791f5562155d63f367b05",
-                    ModelSchema.MATCH_THRESHOLD_KEY: 0.9,
-                    ModelSchema.PASSING_MATCH_RATE_KEY: 85,
-                },
-                ModelSchema.PERFORMANCE_KEY: {
-                    ModelSchema.CHECK_VALUE_KEY: "yes",
-                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "no",
-                    ModelSchema.MAXIMUM_RESPONSE_TIME_KEY: 50,
-                    ModelSchema.CHECK_DURATION_LIMIT_KEY: 100,
-                    ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY: 3,
-                },
-                ModelSchema.STABILITY_KEY: {
-                    ModelSchema.CHECK_VALUE_KEY: "no",
-                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: "yes",
-                    ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY: 50,
-                    ModelSchema.PASSING_RATE_KEY: 95,
-                    ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY: 1,
-                    ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY: 100,
-                    ModelSchema.MAXIMUM_PAYLOAD_SIZE_KEY: 1000,
-                },
-            },
+            ModelSchema.CHECKS_KEY: mock_full_custom_model_checks,
         },
     }
 
