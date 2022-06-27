@@ -12,11 +12,11 @@ test-full: test-unit test-functional
 .PHONY: test-full
 
 test-unit:
-	set -ex; PYTHONPATH=src pytest tests/unit
+	set -ex; PYTHONPATH=.:src pytest tests/unit
 .PHONY: test-unit
 
 test-functional: validate-env-DATAROBOT_WEBSERVER validate-env-DATAROBOT_API_TOKEN
-	set -ex; PYTHONPATH=src pytest tests/functional
+	set -ex; PYTHONPATH=.:src pytest tests/functional
 .PHONY: test
 
 black:

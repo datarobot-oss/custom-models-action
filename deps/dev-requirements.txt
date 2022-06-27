@@ -1,2 +1,2 @@
-black
-pycodestyle
+black==22.3.0
+pycodestyle==2.8.0

@@ -26,6 +26,14 @@ def _write_to_file(file_path, content):
         f.write(content)
 
 
+def make_a_change_and_commit(git_repo, file_paths, index):
+    for file_path in file_paths:
+        with open(file_path, "a") as f:
+            f.write(f"\n# Automatic change ({index})")
+    git_repo.index.add([str(f) for f in file_paths])
+    git_repo.index.commit(f"Change number {index}")
+
+
 @pytest.fixture
 def common_path(repo_root_path):
     return repo_root_path / "common"
