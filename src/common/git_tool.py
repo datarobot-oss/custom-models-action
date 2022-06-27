@@ -30,6 +30,12 @@ class GitTool:
         except TypeError:
             return 0
 
+    def num_remotes(self):
+        return len(self.repo.remotes)
+
+    def remote_name(self):
+        return self.repo.remote().name if self.num_remotes() else None
+
     def find_changed_files(self, to_commit_sha, from_commit_sha=None):
         to_commit = self.repo.commit(to_commit_sha)
         if from_commit_sha:

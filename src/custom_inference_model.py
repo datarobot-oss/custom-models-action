@@ -187,6 +187,14 @@ class CustomInferenceModel(CustomInferenceModelBase):
             )
             return False
 
+        # NOTE: in the case of functional tests, the number of remotes is zero and still it's valid.
+        if self._repo.num_remotes() > 1:
+            logger.warning(
+                "Skip custom inference model action, because the given repository has more than "
+                "one remote configured."
+            )
+            return False
+
         num_commits = self._repo.num_commits()
         if num_commits < 2:
             logger.warning(
@@ -480,9 +488,13 @@ class CustomInferenceModel(CustomInferenceModelBase):
         )
 
         if self.event_name == "pull_request":
-            main_branch_commit_sha = self._repo.merge_base_commit_sha(
-                self.options.branch, self.github_sha
-            )
+            if self._repo.num_remotes() == 0:
+                # Only to support the functional tests, which do not have a remote repository.
+                main_branch = self.options.branch
+            else:
+                # This is the expected path when working against a remote GitHub repository.
+                main_branch = f"{self._repo.remote_name()}/{self.options.branch}"
+            main_branch_commit_sha = self._repo.merge_base_commit_sha(main_branch, self.github_sha)
             pull_request_commit_sha = self._repo.feature_branch_top_commit_sha_of_a_merge_commit(
                 self.github_sha
             )

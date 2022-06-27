@@ -11,7 +11,7 @@ from mock.mock import PropertyMock
 from custom_inference_model import CustomInferenceModel
 from custom_inference_model import ModelInfo
 from common.exceptions import ModelMainEntryPointNotFound, SharedAndLocalPathCollision
-from common.git_tool import GitTool
+from tests.unit.conftest import make_a_change_and_commit
 
 
 class TestCustomInferenceModel:
@@ -81,14 +81,12 @@ class TestCustomInferenceModel:
         custom_inference_model._collect_datarobot_model_files()
 
         # Change 1 - one common module
-        TestGitTool.make_a_change_and_commit(git_repo, [str(common_filepath)], 1)
+        make_a_change_and_commit(git_repo, [str(common_filepath)], 1)
 
         models_info = custom_inference_model.models_info
         for model_index in range(num_models):
             model_main_program_filepath = models_info[model_index].main_program_filepath()
-            TestGitTool.make_a_change_and_commit(
-                git_repo, [model_main_program_filepath], 2 + model_index
-            )
+            make_a_change_and_commit(git_repo, [model_main_program_filepath], 2 + model_index)
 
         head_git_sha = "HEAD"
         for last_provision_git_sha in [None, f"HEAD~{num_models}"]:
@@ -129,56 +127,6 @@ class TestCustomInferenceModel:
                 [m_info for m_info in models_info if m_info.is_affected_by_commit]
             )
             assert num_affected_models == reference
-
-
-class TestGitTool:
-    def test_changed_files_between_commits(
-        self, options, repo_root_path, git_repo, init_repo_with_models_factory, common_filepath
-    ):
-        init_repo_with_models_factory(2, is_multi=False)
-        custom_inference_model = CustomInferenceModel(options)
-        custom_inference_model._scan_and_load_datarobot_models_metadata()
-        custom_inference_model._collect_datarobot_model_files()
-
-        self.make_a_change_and_commit(git_repo, [str(common_filepath)], 1)
-
-        models_info = custom_inference_model.models_info
-        first_model_main_program_filepath = models_info[0].main_program_filepath()
-        self.make_a_change_and_commit(
-            git_repo, [str(common_filepath), first_model_main_program_filepath], 2
-        )
-
-        repo_tool = GitTool(repo_root_path)
-        changed_files1, deleted_files = repo_tool.find_changed_files("HEAD")
-        assert len(changed_files1) == 2, changed_files1
-        assert not deleted_files
-        changed_files2, _ = repo_tool.find_changed_files("HEAD", "HEAD~1")
-        assert len(changed_files2) == 2, changed_files2
-        assert set(changed_files2) == set(changed_files1)
-
-        changed_files3, _ = repo_tool.find_changed_files("HEAD~1", "HEAD~2")
-        assert len(changed_files3) == 1, changed_files2
-
-        changed_files4, _ = repo_tool.find_changed_files("HEAD", "HEAD~2")
-        assert len(changed_files4) == 2, changed_files4
-
-    @staticmethod
-    def make_a_change_and_commit(git_repo, file_paths, index):
-        for file_path in file_paths:
-            with open(file_path, "a") as f:
-                f.write(f"\n# Automatic change ({index})")
-        git_repo.index.add([str(f) for f in file_paths])
-        git_repo.index.commit(f"Change number {index}")
-
-    def test_is_ancestor_of(
-        self, repo_root_path, git_repo, init_repo_with_models_factory, common_filepath
-    ):
-        init_repo_with_models_factory(1, is_multi=False)
-        repo_tool = GitTool(repo_root_path)
-        for index in range(1, 5):
-            self.make_a_change_and_commit(git_repo, [str(common_filepath)], index)
-            ancestor_ref = f"HEAD~{index}"
-            assert repo_tool.is_ancestor_of(ancestor_ref, "HEAD")
 
 
 class TestGlobPatterns:
