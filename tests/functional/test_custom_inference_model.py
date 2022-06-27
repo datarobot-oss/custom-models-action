@@ -22,7 +22,7 @@ def webserver_accessible():
     webserver = os.environ.get("DATAROBOT_WEBSERVER")
     api_token = os.environ.get("DATAROBOT_API_TOKEN")
     if webserver and api_token:
-        return DrClient(webserver, api_token).is_accessible()
+        return DrClient(webserver, api_token, verify_cert=False).is_accessible()
     return False
 
 
@@ -109,7 +109,7 @@ def merge_branch_name():
 def dr_client():
     webserver = os.environ.get("DATAROBOT_WEBSERVER")
     api_token = os.environ.get("DATAROBOT_API_TOKEN")
-    return DrClient(webserver, api_token)
+    return DrClient(webserver, api_token, verify_cert=False)
 
 
 @pytest.fixture
@@ -261,6 +261,7 @@ class TestCustomInferenceModel:
                 [
                     "--webserver",
                     os.environ.get("DATAROBOT_WEBSERVER"),
+                    "--skip-cert-verification",
                     "--api-token",
                     os.environ.get("DATAROBOT_API_TOKEN"),
                     "--branch",
@@ -279,6 +280,7 @@ class TestCustomInferenceModel:
                 [
                     "--webserver",
                     os.environ.get("DATAROBOT_WEBSERVER"),
+                    "--skip-cert-verification",
                     "--api-token",
                     os.environ.get("DATAROBOT_API_TOKEN"),
                     "--branch",
@@ -299,3 +301,6 @@ class TestCustomInferenceModel:
             # 3. Run GitHub pull request action
             head_commit_sha = git_repo.head.commit.hexsha
             self._run_push_action(repo_root_path, git_repo, main_branch_name, head_commit_sha)
+
+    def test_is_accessible(self):
+        assert webserver_accessible()
