@@ -109,6 +109,14 @@ class CustomInferenceModelBase(ABC):
         return os.environ.get("GITHUB_EVENT_NAME")
 
     @property
+    def is_pull_request(self):
+        return self.event_name == "pull_request"
+
+    @property
+    def ancestor_attribute_ref(self):
+        return "pullRequestCommitSha" if self.is_pull_request else "mainBranchCommitSha"
+
+    @property
     def github_sha(self):
         return os.environ.get("GITHUB_SHA")
 
@@ -184,7 +192,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
         base_ref = os.environ.get("GITHUB_BASE_REF")
         logger.info(f"GITHUB_BASE_REF: {base_ref}.")
-        if self.event_name == "pull_request" and base_ref != self.options.branch:
+        if self.is_pull_request and base_ref != self.options.branch:
             logger.info(
                 "Skip custom inference model action. It is executed only when the referenced "
                 f"branch is {self.options.branch}. Current ref branch: {base_ref}."
@@ -362,10 +370,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
             model_info.deleted_file_ids = []
             model_info.should_upload_all_files = self._should_upload_all_files(model_info)
 
-        ancestor_ref = (
-            "pullRequestCommitSha" if self.event_name == "pull_request" else "mainBranchCommitSha"
-        )
-        self._lookup_affected_models(ancestor_ref)
+        self._lookup_affected_models()
 
     def _should_upload_all_files(self, model_info):
         return (
@@ -391,10 +396,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
         return False
 
     def _valid_ancestor(self, model_info):
-        ancestor_ref = (
-            "pullRequestCommitSha" if self.event_name == "pull_requests" else "mainBranchCommitSha"
-        )
-        ancestor_sha = self._get_latest_provisioned_model_git_version(model_info)[ancestor_ref]
+        ancestor_sha = self._get_latest_provisioned_model_git_version(model_info)[
+            self.ancestor_attribute_ref
+        ]
         if not ancestor_sha:
             # Either the model has never provisioned of the user created a version with a non
             # GitHub action client.
@@ -403,7 +407,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
         # Users may have few local commits between remote pushes
         return self._repo.is_ancestor_of(ancestor_sha, self.github_sha)
 
-    def _lookup_affected_models(self, ancestor_ref):
+    def _lookup_affected_models(self):
         # In a PR a merge commit is always the last commit, which we need to ignore.
         if logger.isEnabledFor(logging.DEBUG):
             self._repo.print_pretty_log()
@@ -412,7 +416,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
             if model_info.should_upload_all_files:
                 continue
             from_commit_sha = self._get_latest_provisioned_model_git_version(model_info)[
-                ancestor_ref
+                self.ancestor_attribute_ref
             ]
             changed_files, deleted_files = self._repo.find_changed_files(
                 self.github_sha, from_commit_sha
@@ -491,7 +495,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
             f" {model_info.git_model_id}, from_latest: {model_info.should_upload_all_files}"
         )
 
-        if self.event_name == "pull_request":
+        if self.is_pull_request:
             if self._repo.num_remotes() == 0:
                 # Only to support the functional tests, which do not have a remote repository.
                 main_branch = self.options.branch

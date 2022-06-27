@@ -80,9 +80,13 @@ class GitTool:
         return ancestor_commits[0].hexsha
 
     def is_ancestor_of(self, ancestor_commit_sha, top_commit_sha):
-        ancestor_commit = self.repo.commit(ancestor_commit_sha)
-        top_commit = self.repo.commit(top_commit_sha)
-        return self.repo.is_ancestor(ancestor_commit, top_commit)
+        try:
+            ancestor_commit = self.repo.commit(ancestor_commit_sha)
+            top_commit = self.repo.commit(top_commit_sha)
+            return self.repo.is_ancestor(ancestor_commit, top_commit)
+        except ValueError as ex:
+            logger.debug(f"Ancestor commit could not be found. Error: {str(ex)}")
+            return False
 
     def print_pretty_log(self):
         print(
