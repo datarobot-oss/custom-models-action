@@ -179,17 +179,6 @@ class CustomInferenceModel(CustomInferenceModelBase):
         self._lookup_affected_models_by_the_current_action()
         self._apply_datarobot_actions_for_affected_models()
 
-        print(
-            """
-            ::set-output name=new-model-created::True
-            ::set-output name=model-deleted::False
-            ::set-output name=new-model-version-created::True
-            ::set-output name=test-result::The test passed with success.
-            ::set-output name=returned-code::200.
-            ::set-output name=message::Custom model created and tested with success.
-            """
-        )
-
     def _prerequisites(self):
         supported_events = ["push", "pull_request"]
         if self.event_name not in supported_events:
@@ -493,11 +482,16 @@ class CustomInferenceModel(CustomInferenceModelBase):
         self._handle_deleted_models()
 
     def _handle_model_changes_or_creation(self):
+        total_affected_models = 0
+        total_created_models = 0
         for model_info in self._models_info:
             if model_info.is_affected_by_commit:
+                total_affected_models += 1
                 logger.info(f"Model '{model_info.model_path}' is affected by commit.")
 
-                custom_model_id = self._get_or_create_custom_model(model_info)
+                custom_model_id, already_existed = self._get_or_create_custom_model(model_info)
+                if not already_existed:
+                    total_created_models += 1
                 version_id = self._create_custom_model_version(custom_model_id, model_info)
                 if model_info.should_run_test:
                     self._test_custom_model_version(custom_model_id, version_id, model_info)
@@ -508,13 +502,20 @@ class CustomInferenceModel(CustomInferenceModelBase):
                     f"version_id: {version_id}"
                 )
 
+        # This print out is required in order to set the GitHub action output parameters
+        print(
+            f"::set-output name=total-affected-models::{total_affected_models}\n"
+            f"::set-output name=total-created-models::{total_created_models}\n"
+        )
+
     def _get_or_create_custom_model(self, model_info):
-        if model_info.git_model_id in self.datarobot_models:
+        already_exists = model_info.git_model_id in self.datarobot_models
+        if already_exists:
             custom_model_id = self.datarobot_models[model_info.git_model_id].model["id"]
         else:
             custom_model_id = self._dr_client.create_custom_model(model_info)
             logger.info(f"Custom inference model was created: {custom_model_id}")
-        return custom_model_id
+        return custom_model_id, already_exists
 
     def _create_custom_model_version(self, custom_model_id, model_info):
         if model_info.should_upload_all_files:

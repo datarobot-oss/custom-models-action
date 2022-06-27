@@ -60,9 +60,14 @@ def main(args=None):
             CustomInferenceDeployment(options).run()
         else:
             CustomInferenceModel(options).run()
+            print(
+                "::set-output name=message::"
+                "Custom inference model GitHub action completed with success.\n"
+            )
     except GenericException as e:
         # Avoid printing the stacktrace
         logger.error(str(e))
+        print(f"::set-output name=message::{str(e)}")
         sys.exit(e.code)
 
 
