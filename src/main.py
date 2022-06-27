@@ -22,10 +22,16 @@ def argparse_options(args=None):
     parser.add_argument(
         "--api-token", required=True, help="DataRobot public API authentication token."
     )
+    parser.add_argument(
+        "--skip-cert-verification",
+        action="store_true",
+        help="Whether a request to an HTTPS URL will be made without a certificate verification.",
+    )
     parser.add_argument("--branch", required=True, help="The branch against which PRs take action.")
     parser.add_argument("--root-dir", required=True, help="The workspace root directory.")
 
     options = parser.parse_args(args)
+    logger.debug(f"Command line args: {options}")
 
     return options
 

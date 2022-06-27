@@ -22,11 +22,11 @@ class DrClient:
     DATASETS_ROUTE = "datasets/"
     DATASET_UPLOAD_ROUTE = DATASETS_ROUTE + "fromFile/"
 
-    def __init__(self, datarobot_webserver, datarobot_api_token):
+    def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
             datarobot_webserver = f"{StringUtil.slash_suffix(datarobot_webserver)}api/v2/"
 
-        self._http_requester = HttpRequester(datarobot_webserver, datarobot_api_token)
+        self._http_requester = HttpRequester(datarobot_webserver, datarobot_api_token, verify_cert)
 
     def _wait_for_async_resolution(self, async_location, max_wait=600, return_on_completed=False):
         start_time = time.time()

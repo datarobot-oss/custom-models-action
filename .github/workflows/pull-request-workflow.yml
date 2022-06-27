@@ -102,7 +102,7 @@ jobs:
   # This workflow contains a single job called "build"
   datarobot-custom-inference-model:
     # Run this job on any action of a PR, but skip the job upon merge to master
-    if: ${{ github.event.pull_request.merged != true && false }}  # disable for now
+    if: ${{ github.event.pull_request.merged != true }}
 
     needs: [validate-code-style, run-unit-tests]
 
@@ -137,6 +137,7 @@ jobs:
           api-token: $DATAROBOT_API_TOKEN
           webserver: $DATAROBOT_WEBSERVER
           main-branch: master
+          skip-cert-verification: true
 
       - name: DataRobot Custom Inference Model Results
         run: |

@@ -157,7 +157,9 @@ class TestCustomModelRoutes:
         regression_model_response,
     ):
         responses.add(responses.POST, custom_models_url, json=regression_model_response, status=201)
-        dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
+        dr_client = DrClient(
+            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
+        )
         custom_model_id = dr_client.create_custom_model(regression_model_info)
         assert custom_model_id is not None
 
@@ -172,7 +174,9 @@ class TestCustomModelRoutes:
     ):
         status_code = 422
         responses.add(responses.POST, custom_models_url, json={}, status=status_code)
-        dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
+        dr_client = DrClient(
+            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
+        )
         with pytest.raises(DataRobotClientError) as ex:
             dr_client.create_custom_model(regression_model_info)
         assert ex.value.code == status_code
@@ -192,7 +196,9 @@ class TestCustomModelRoutes:
         expected_model = expected_model[0][0]
         delete_url = f"{custom_models_url}{expected_model['id']}/"
         responses.add(responses.DELETE, delete_url, json={}, status=204)
-        dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
+        dr_client = DrClient(
+            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
+        )
         dr_client.delete_custom_model_by_git_model_id(expected_model["gitModelId"])
 
     @responses.activate
@@ -211,7 +217,9 @@ class TestCustomModelRoutes:
         delete_url = f"{custom_models_url}{expected_model['id']}/"
         status_code = 409
         responses.add(responses.DELETE, delete_url, json={}, status=status_code)
-        dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
+        dr_client = DrClient(
+            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
+        )
         with pytest.raises(DataRobotClientError) as ex:
             dr_client.delete_custom_model_by_git_model_id(expected_model["gitModelId"])
         assert ex.value.code == status_code
@@ -242,7 +250,9 @@ class TestCustomModelRoutes:
             custom_models_url_factory,
             regression_model_response_factory,
         )
-        dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
+        dr_client = DrClient(
+            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
+        )
         total_models_response = dr_client.fetch_custom_models()
         assert len(total_models_response) == total_num_models
 
@@ -432,7 +442,9 @@ class TestCustomModelVersionRoutes:
     ):
         url = custom_models_version_url_factory()
         responses.add(responses.POST, url, json=regression_model_version_response, status=201)
-        dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
+        dr_client = DrClient(
+            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
+        )
         version_id = dr_client.create_custom_model_version(
             custom_model_id, regression_model_info, main_branch_commit_sha, pull_request_commit_sha
         )
@@ -453,7 +465,9 @@ class TestCustomModelVersionRoutes:
         status_code = 422
         url = custom_models_version_url_factory()
         responses.add(responses.POST, url, json={}, status=status_code)
-        dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
+        dr_client = DrClient(
+            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
+        )
         with pytest.raises(DataRobotClientError) as ex:
             dr_client.create_custom_model_version(
                 custom_model_id,
@@ -490,7 +504,9 @@ class TestCustomModelVersionRoutes:
             custom_models_version_url_factory,
             regression_model_version_response_factory,
         )
-        dr_client = DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token)
+        dr_client = DrClient(
+            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
+        )
         total_versions_response = dr_client.fetch_custom_model_versions(custom_model_id)
         assert len(total_versions_response) == total_num_model_versions
 

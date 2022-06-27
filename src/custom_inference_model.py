@@ -130,7 +130,11 @@ class CustomInferenceModel(CustomInferenceModelBase):
         os.environ["GIT_PYTHON_TRACE"] = "full"
         self._models_info = []
         self._datarobot_models = {}
-        self._dr_client = DrClient(self.options.webserver, self.options.api_token)
+        self._dr_client = DrClient(
+            self.options.webserver,
+            self.options.api_token,
+            verify_cert=not self.options.skip_cert_verification,
+        )
 
     @property
     def models_info(self):

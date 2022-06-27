@@ -8,6 +8,9 @@ inputs:
   webserver: # id of input
     description: 'DataRobot frontend web server'
     required: true
+  skip-cert-verification: # id of input
+    description: 'Whether a request to an HTTPS URL will be made without a certificate verification'
+    required: false
   main-branch:  # id of input
     description: 'The main branch for PRs to take an action on'
     required: false
@@ -38,9 +41,15 @@ runs:
       shell: bash
     - id: custom-inference-model
       run: |
+        if ${{ inputs.skip-cert-verification }} == true; then
+          verify_cert_arg="--skip-cert-verification"
+        else
+          verify_cert_arg=""
+        fi
         python ${GITHUB_ACTION_PATH}/../../src/main.py \
           --api-token ${{ inputs.api-token }} \
           --webserver ${{ inputs.webserver }} \
+          ${verify_cert_arg} \
           --branch ${{ inputs.main-branch }} \
           --root-dir "${{ github.workspace }}"
       shell: bash

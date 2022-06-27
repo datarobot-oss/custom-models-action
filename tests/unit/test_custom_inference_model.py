@@ -10,7 +10,8 @@ from mock.mock import PropertyMock
 
 from custom_inference_model import CustomInferenceModel
 from custom_inference_model import ModelInfo
-from common.exceptions import ModelMainEntryPointNotFound, SharedAndLocalPathCollision
+from common.exceptions import ModelMainEntryPointNotFound
+from common.exceptions import SharedAndLocalPathCollision
 from tests.unit.conftest import make_a_change_and_commit
 
 
@@ -239,7 +240,12 @@ class TestGlobPatterns:
         ],
     )
     def test_local_and_shared_collisions(self, local_paths, shared_paths, collision_expected):
-        options = Namespace(webserver="www.dummy.com", api_token="abc", root_dir="/repo")
+        options = Namespace(
+            webserver="www.dummy.com",
+            api_token="abc",
+            skip_cert_verification=True,
+            root_dir="/repo",
+        )
         with patch.object(
             CustomInferenceModel, "models_info", new_callable=PropertyMock
         ) as mock_models_info_property, patch.object(

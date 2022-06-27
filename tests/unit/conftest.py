@@ -158,6 +158,7 @@ def options(repo_root_path):
     return Namespace(
         webserver="www.dummy.com",
         api_token="abc123",
+        skip_cert_verification=True,
         root_dir=repo_root_path.absolute(),
         branch="master",
     )
