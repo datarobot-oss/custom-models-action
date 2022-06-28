@@ -29,6 +29,12 @@ def argparse_options(args=None):
     )
     parser.add_argument("--branch", required=True, help="The branch against which PRs take action.")
     parser.add_argument("--root-dir", required=True, help="The workspace root directory.")
+    parser.add_argument(
+        "--allow-model-deletion",
+        action="store_true",
+        help="Whether to detect local deleted model definitions and consequently delete them in "
+        "DataRobot.",
+    )
 
     options = parser.parse_args(args)
     logger.debug(f"Command line args: {options}")

@@ -10,7 +10,11 @@ import yaml
 
 from common.data_types import DataRobotModel
 from common.data_types import FileInfo
-from common.exceptions import ModelMainEntryPointNotFound
+from common.exceptions import (
+    ModelMainEntryPointNotFound,
+    DataRobotClientError,
+    IllegalModelDeletion,
+)
 from common.exceptions import SharedAndLocalPathCollision
 from common.exceptions import UnexpectedResult
 from common.git_tool import GitTool
@@ -147,6 +151,10 @@ class CustomInferenceModel(CustomInferenceModelBase):
     @property
     def models_info(self):
         return self._models_info
+
+    @property
+    def datarobot_models(self):
+        return self._datarobot_models
 
     def run(self):
         """
@@ -360,7 +368,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
                         "Model exists without a version! git_model_id: "
                         f"{git_model_id}, custom_model_id: {custom_model['id']}"
                     )
-                self._datarobot_models[git_model_id] = DataRobotModel(custom_model, latest_version)
+                self.datarobot_models[git_model_id] = DataRobotModel(custom_model, latest_version)
 
     def _lookup_affected_models_by_the_current_action(self):
         logger.info("Lookup affected models by the current commit ...")
@@ -381,8 +389,8 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
     def _model_version_exists(self, model_info):
         return (
-            model_info.git_model_id in self._datarobot_models
-            and self._datarobot_models[model_info.git_model_id].latest_version
+            model_info.git_model_id in self.datarobot_models
+            and self.datarobot_models[model_info.git_model_id].latest_version
         )
 
     @staticmethod
@@ -438,8 +446,8 @@ class CustomInferenceModel(CustomInferenceModelBase):
         for deleted_file in deleted_files:
             # Being stateless, check each deleted file against the stored custom model version
             # in DataRobot
-            if model_info.git_model_id in self._datarobot_models:
-                latest_version = self._datarobot_models[model_info.git_model_id].latest_version
+            if model_info.git_model_id in self.datarobot_models:
+                latest_version = self.datarobot_models[model_info.git_model_id].latest_version
                 if latest_version:
                     _, relative_path = self._get_relative_path(deleted_file, model_info)
                     if not relative_path:
@@ -454,11 +462,15 @@ class CustomInferenceModel(CustomInferenceModelBase):
                     )
 
     def _get_latest_provisioned_model_git_version(self, model_info):
-        latest_version = self._datarobot_models[model_info.git_model_id].latest_version
+        latest_version = self.datarobot_models[model_info.git_model_id].latest_version
         return latest_version["gitModelVersion"]
 
     def _apply_datarobot_actions_for_affected_models(self):
         logger.info("Apply DataRobot actions for affected models ...")
+        self._handle_model_changes_or_creation()
+        self._handle_deleted_models()
+
+    def _handle_model_changes_or_creation(self):
         for model_info in self._models_info:
             if model_info.is_affected_by_commit:
                 logger.info(f"Model '{model_info.model_path}' is affected by commit.")
@@ -475,8 +487,8 @@ class CustomInferenceModel(CustomInferenceModelBase):
                 )
 
     def _get_or_create_custom_model(self, model_info):
-        if model_info.git_model_id in self._datarobot_models:
-            custom_model_id = self._datarobot_models[model_info.git_model_id].model["id"]
+        if model_info.git_model_id in self.datarobot_models:
+            custom_model_id = self.datarobot_models[model_info.git_model_id].model["id"]
         else:
             custom_model_id = self._dr_client.create_custom_model(model_info)
             logger.info(f"Custom inference model was created: {custom_model_id}")
@@ -532,3 +544,66 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def _test_custom_model_version(self, model_id, model_version_id, model_info):
         logger.info("Executing custom model test ...")
         self._dr_client.run_custom_model_version_testing(model_id, model_version_id, model_info)
+
+    def _handle_deleted_models(self):
+        if not self.options.allow_model_deletion:
+            logger.info("Skip handling models deletion because it is not enabled.")
+            return
+
+        missing_locally_id_to_git_id = {}
+        for git_model_id, datarobot_model in self.datarobot_models.items():
+            if all(git_model_id != model_info.git_model_id for model_info in self._models_info):
+                missing_locally_id_to_git_id[datarobot_model.model["id"]] = git_model_id
+
+        if missing_locally_id_to_git_id:
+            model_ids_to_fetch = list(missing_locally_id_to_git_id.keys())
+            deployments = self._dr_client.fetch_custom_model_deployments(model_ids_to_fetch)
+            if self.is_pull_request:
+                # Only check that deleted models are not deployed in DataRobot. If so, make sure to
+                # report a failure.
+                self._validate_that_model_to_be_deleted_is_not_deployed(
+                    missing_locally_id_to_git_id, deployments
+                )
+            else:
+                self._actually_delete_models(missing_locally_id_to_git_id, deployments)
+
+    @staticmethod
+    def _validate_that_model_to_be_deleted_is_not_deployed(
+        missing_locally_id_to_git_id, deployments
+    ):
+        # Only check that deleted models are not deployed in DataRobot. If so, make sure to
+        # report a failure.
+        logger.info("Detecting that deployed models are not deleted ...")
+        if deployments:
+            # TODO: do not raise an error for 'dirty' models, because anyway these should not be
+            #  deleted.
+            msg = ""
+            for deployment in deployments:
+                msg += (
+                    f"Deployment: {deployment['id']}, "
+                    f"model_id: {deployment['customModel']['id']}, "
+                    f"git_model_id: {missing_locally_id_to_git_id[deployment['customModel']['id']]}"
+                    "\n"
+                )
+            raise IllegalModelDeletion(
+                f"Models cannot be deleted because of existing deployments.\n{msg}"
+            )
+
+    def _actually_delete_models(self, missing_locally_id_to_git_id, deployments):
+        logger.info("Deleting models ...")
+        for model_id, git_model_id in missing_locally_id_to_git_id.items():
+            # TODO: skip deletion of 'dirty' models. Only show a warning.
+            if any(model_id == deployment["customModel"]["id"] for deployment in deployments):
+                logger.warning(
+                    f"Skipping model deletion because it is deployed. "
+                    f"git_model_id: {git_model_id}, model_id: {model_id}"
+                )
+                continue
+            try:
+                self._dr_client.delete_custom_model_by_model_id(model_id)
+                logger.info(
+                    f"Model was deleted with success. git_model_id: {git_model_id}, "
+                    f"model_id: {model_id}"
+                )
+            except DataRobotClientError as ex:
+                logger.error(str(ex))

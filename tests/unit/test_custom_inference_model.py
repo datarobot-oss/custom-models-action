@@ -1,3 +1,4 @@
+import contextlib
 import os
 from argparse import Namespace
 
@@ -8,10 +9,12 @@ import pytest
 
 from mock.mock import PropertyMock
 
+from common.data_types import DataRobotModel
 from custom_inference_model import CustomInferenceModel
 from custom_inference_model import ModelInfo
-from common.exceptions import ModelMainEntryPointNotFound
+from common.exceptions import ModelMainEntryPointNotFound, IllegalModelDeletion
 from common.exceptions import SharedAndLocalPathCollision
+from dr_client import DrClient
 from tests.unit.conftest import make_a_change_and_commit
 
 
@@ -130,6 +133,120 @@ class TestCustomInferenceModel:
             assert num_affected_models == reference
 
 
+class TestCustomInferenceModelDeletion:
+    def test_models_deletion_without_allowed_input_arg(self, options):
+        options.allow_model_deletion = False
+        custom_inference_model = CustomInferenceModel(options)
+        with patch.object(DrClient, "fetch_custom_model_deployments") as mock_fetch_deployments:
+            custom_inference_model._handle_deleted_models()
+            mock_fetch_deployments.assert_not_called()
+
+    @pytest.fixture
+    def git_model_id(self):
+        return "git-model-1111"
+
+    @pytest.fixture
+    def model_id(self):
+        return "model-id-2222"
+
+    @contextlib.contextmanager
+    def _mock_local_models(self, git_model_id):
+        with patch.object(
+            CustomInferenceModel, "models_info", new_callable=PropertyMock
+        ) as models_info_property, patch.object(
+            ModelInfo, "git_model_id", new_callable=PropertyMock
+        ) as model_info_git_model_id:
+            models_info_property.return_value = ModelInfo("yaml-path", "model-path", None)
+            model_info_git_model_id.return_value = git_model_id
+            yield
+
+    @contextlib.contextmanager
+    def _mock_fetched_models_that_do_not_exist_locally(self, git_model_id, model_id):
+        with patch.object(
+            CustomInferenceModel, "datarobot_models", new_callable=PropertyMock
+        ) as datarobot_models:
+            # Ensure it does not match to the local model definition
+            non_existing_git_model_id = f"a{git_model_id}"
+            datarobot_models.return_value = {
+                non_existing_git_model_id: DataRobotModel(
+                    model={"id": model_id}, latest_version=None
+                )
+            }
+            yield
+
+    @contextlib.contextmanager
+    def _mock_fetched_deployments(self, model_id, has_deployment=False):
+        with patch.object(DrClient, "fetch_custom_model_deployments") as fetched_deployments:
+            fetched_deployments.return_value = (
+                [{"id": "dddd", "customModel": {"id": model_id}}] if has_deployment else []
+            )
+            yield
+
+    def test_models_deletion_for_pull_request_event_without_deployment(
+        self, options, git_model_id, model_id
+    ):
+        options.allow_model_deletion = True
+        custom_inference_model = CustomInferenceModel(options)
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request"}), self._mock_local_models(
+            git_model_id
+        ), self._mock_fetched_models_that_do_not_exist_locally(
+            git_model_id, model_id
+        ), self._mock_fetched_deployments(
+            model_id, has_deployment=False
+        ):
+            custom_inference_model._handle_deleted_models()
+
+    def test_models_deletion_for_pull_request_event_with_deployment(
+        self, options, git_model_id, model_id
+    ):
+        options.allow_model_deletion = True
+        custom_inference_model = CustomInferenceModel(options)
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request"}), self._mock_local_models(
+            git_model_id
+        ), self._mock_fetched_models_that_do_not_exist_locally(
+            git_model_id, model_id
+        ), self._mock_fetched_deployments(
+            model_id, has_deployment=True
+        ):
+            with pytest.raises(IllegalModelDeletion):
+                custom_inference_model._handle_deleted_models()
+
+    def test_models_deletion_for_push_event_and_no_deployments(
+        self, options, git_model_id, model_id
+    ):
+        options.allow_model_deletion = True
+        custom_inference_model = CustomInferenceModel(options)
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.object(
+            DrClient, "delete_custom_model_by_model_id"
+        ) as mock_dr_client_delete_cm, self._mock_local_models(
+            git_model_id
+        ), self._mock_fetched_models_that_do_not_exist_locally(
+            git_model_id, model_id
+        ), self._mock_fetched_deployments(
+            model_id, has_deployment=False
+        ):
+            custom_inference_model._handle_deleted_models()
+            mock_dr_client_delete_cm.assert_called_once()
+
+    def test_models_deletion_for_push_event_and_deployment(self, options, git_model_id, model_id):
+        options.allow_model_deletion = True
+        custom_inference_model = CustomInferenceModel(options)
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.object(
+            DrClient, "delete_custom_model_by_model_id"
+        ) as mock_dr_client_delete_cm, self._mock_local_models(
+            git_model_id
+        ), self._mock_fetched_models_that_do_not_exist_locally(
+            git_model_id, model_id
+        ), self._mock_fetched_deployments(
+            model_id, has_deployment=True
+        ):
+            custom_inference_model._handle_deleted_models()
+            mock_dr_client_delete_cm.assert_not_called()
+
+
+@pytest.mark.usefixtures(
+    "mock_prerequisites", "mock_fetch_models_from_datarobot", "mock_handle_deleted_models"
+)
 class TestGlobPatterns:
     @pytest.mark.parametrize("num_models", [1, 2, 3])
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
@@ -143,8 +260,6 @@ class TestGlobPatterns:
         [True, False],
         ids=["with-exclude-glob", "without-exclude-glob"],
     )
-    @pytest.mark.usefixtures("mock_prerequisites")
-    @pytest.mark.usefixtures("mock_fetch_models_from_datarobot")
     def test_glob_patterns(
         self,
         models_factory,
@@ -206,8 +321,6 @@ class TestGlobPatterns:
             assert Path(excluded_path) not in model_info.model_file_paths
 
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
-    @pytest.mark.usefixtures("mock_prerequisites")
-    @pytest.mark.usefixtures("mock_fetch_models_from_datarobot")
     def test_missing_main_program(self, models_factory, common_path_with_code, options, is_multi):
         models_factory(1, is_multi, include_main_prog=False)
         custom_inference_model = CustomInferenceModel(options)

@@ -161,6 +161,7 @@ def options(repo_root_path):
         skip_cert_verification=True,
         root_dir=repo_root_path.absolute(),
         branch="master",
+        allow_model_deletion=True,
     )
 
 
@@ -186,6 +187,12 @@ def mock_fetch_models_from_datarobot():
 @pytest.fixture
 def mock_model_version_exists():
     with patch.object(CustomInferenceModel, "_model_version_exists", return_value=True):
+        yield
+
+
+@pytest.fixture
+def mock_handle_deleted_models():
+    with patch.object(CustomInferenceModel, "_handle_deleted_models", return_value=True):
         yield
 
 

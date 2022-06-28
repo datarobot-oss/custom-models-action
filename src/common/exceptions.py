@@ -47,3 +47,7 @@ class DataRobotClientError(GenericException):
 
 class NonMergeCommitError(GenericException):
     pass
+
+
+class IllegalModelDeletion(GenericException):
+    pass

@@ -13,6 +13,7 @@ import yaml
 
 from common.convertors import MemoryConvertor
 from common.exceptions import DataRobotClientError
+from common.exceptions import IllegalModelDeletion
 from dr_client import DrClient
 from main import main
 from schema_validator import ModelSchema
@@ -118,7 +119,7 @@ def cleanup(dr_client, model_metadata):
 
     try:
         dr_client.delete_custom_model_by_git_model_id(model_metadata[ModelSchema.MODEL_ID_KEY])
-    except DataRobotClientError:
+    except (IllegalModelDeletion, DataRobotClientError):
         pass
 
 
@@ -142,8 +143,9 @@ class TestCustomInferenceModel:
         INCREASE_MEMORY = 1
         ADD_FILE = 2
         REMOVE_FILE = 3
+        DELETE_MODEL = 4
 
-    def test_e2e_pull_request(
+    def test_e2e_pull_request_event_with_multiple_changes(
         self,
         dr_client,
         repo_root_path,
@@ -167,8 +169,8 @@ class TestCustomInferenceModel:
         # 1. Create feature branch
         feature_branch = git_repo.create_head(feature_branch_name)
 
-        # 2. Make two changes, one at a time on a feature branch
-        for change in [self.Change.INCREASE_MEMORY, self.Change.ADD_FILE, self.Change.REMOVE_FILE]:
+        # 2. Make changes, one at a time on a feature branch
+        for change in changes:
             # 3. Checkout feature branch
             feature_branch.checkout()
 
@@ -217,7 +219,7 @@ class TestCustomInferenceModel:
 
             # 9. Checkout the main branch
             git_repo.heads.master.checkout()
-            if change != self.Change.REMOVE_FILE:
+            if change != changes[-1]:
                 # 10. Delete the merge branch
                 git_repo.delete_head(merge_branch, "--force")
 
@@ -268,6 +270,7 @@ class TestCustomInferenceModel:
                     main_branch_name,
                     "--root-dir",
                     str(repo_root_path),
+                    "--allow-model-deletion",
                 ]
             )
 
@@ -287,10 +290,96 @@ class TestCustomInferenceModel:
                     main_branch_name,
                     "--root-dir",
                     str(repo_root_path),
+                    "--allow-model-deletion",
                 ]
             )
 
-    def test_e2e_push(self, repo_root_path, git_repo, model_metadata_yaml_file, main_branch_name):
+    def test_e2e_pull_request_event_with_model_deletion(
+        self,
+        dr_client,
+        repo_root_path,
+        git_repo,
+        model_metadata,
+        model_metadata_yaml_file,
+        main_branch_name,
+        feature_branch_name,
+        merge_branch_name,
+    ):
+        """
+        This test first creates a PR with a simple change in order to create the model in
+        DataRobot. Afterwards, it creates a another PR to delete the model definition, which
+        should delete the model in DataRobot.
+        """
+        changes = [self.Change.INCREASE_MEMORY, self.Change.DELETE_MODEL]
+
+        # 1. Create a feature branch
+        feature_branch = git_repo.create_head(feature_branch_name)
+
+        # 2. Make changes, one at a time on a feature branch
+        for change in changes:
+            # 3. Checkout feature branch
+            feature_branch.checkout()
+
+            # 4. Make a change and commit it
+            if change == self.Change.INCREASE_MEMORY:
+                new_memory = self._increase_model_memory_by_1mb(model_metadata_yaml_file)
+                git_repo.git.add(model_metadata_yaml_file)
+                git_repo.git.commit("-m", f"Increase memory to {new_memory}")
+            elif change == self.Change.DELETE_MODEL:
+                os.remove(model_metadata_yaml_file)
+                git_repo.git.add(model_metadata_yaml_file)
+                git_repo.git.commit("-m", f"Delete the model definition file")
+
+            # 5. Create merge branch from master and check it out
+            merge_branch = git_repo.create_head(merge_branch_name, main_branch_name)
+            git_repo.head.reference = merge_branch
+            git_repo.head.reset(index=True, working_tree=True)
+
+            # 6. Merge feature branch --no-ff
+            git_repo.git.merge(feature_branch, "--no-ff")
+
+            # 7. Run GitHub pull request action
+            self._run_pull_request_action(
+                repo_root_path, git_repo, main_branch_name, merge_branch_name
+            )
+
+            # 8. Validation
+            if change == self.Change.INCREASE_MEMORY:
+                cm_version = dr_client.fetch_custom_model_latest_version_by_git_model_id(
+                    model_metadata[ModelSchema.MODEL_ID_KEY]
+                )
+                # Assuming `INCREASE_MEMORY` always first
+                assert cm_version["maximumMemory"] == MemoryConvertor.to_bytes(new_memory)
+            elif change == self.Change.DELETE_MODEL:
+                # The model is not deleted in the pull request, but only after merging.
+                pass
+            else:
+                assert False, f"Unexpected changed: '{change.name}'"
+
+            # 9. Checkout the main branch
+            git_repo.heads.master.checkout()
+            if change != changes[-1]:
+                # 10. Delete the merge branch only if there are yet more changes to apply
+                git_repo.delete_head(merge_branch, "--force")
+
+        # 11. Merge changes from the merge branch into the main branch
+        git_repo.git.merge(merge_branch, "--squash")
+        git_repo.git.add("--all")
+        git_repo.git.commit("-m", "Changes from merged feature branch")
+        head_commit_sha = git_repo.head.commit.hexsha
+        self._run_push_action(repo_root_path, git_repo, main_branch_name, head_commit_sha)
+
+        # 12. Validation. The model is actually deleted only upon merging.
+        assert change == self.Change.DELETE_MODEL
+        models = dr_client.fetch_custom_models()
+        if models:
+            assert all(
+                m.get("gitModelId") != model_metadata[ModelSchema.MODEL_ID_KEY] for m in models
+            )
+
+    def test_e2e_push_event_with_multiple_changes(
+        self, repo_root_path, git_repo, model_metadata_yaml_file, main_branch_name
+    ):
         # 1. Make three changes, one at a time on the main branch
         for _ in range(3):
             # 2. Make a change and commit it
