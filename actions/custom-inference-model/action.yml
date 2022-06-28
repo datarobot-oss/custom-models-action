@@ -22,21 +22,15 @@ inputs:
     required: false
     default: 'false'
 outputs:
-  new-model-created: # id of output
-    description: 'Whether a new custom inference model was created'
-    value: ${{ steps.custom-inference-model.outputs.new-model-created }}
-  model-deleted: # id of output
-    description: 'Whether an existing custom inference model was deleted'
-    value: ${{ steps.custom-inference-model.outputs.model-deleted }}
-  new-model-version-created: # id of output
-    description: 'Whether a new custom inference model version was created'
-    value: ${{ steps.custom-inference-model.outputs.new-model-version-created }}
-  test-result: # id of output
-    description: 'Whether the custom inference test was successful'
-    value: ${{ steps.custom-inference-model.outputs.test-result }}
-  returned-code: # id of output
-    description: 'The exist code from the GitHub action'
-    value: ${{ steps.custom-inference-model.outputs.returned-code }}
+  total-affected-models: # id of output
+    description: 'How many models were affected by this action.'
+    value: ${{ steps.custom-inference-model.outputs.total-affected-models }}
+  total-created-models: # id of output
+    description: 'How many new models were created.'
+    value: ${{ steps.custom-inference-model.outputs.total-created-models }}
+  total-deleted-models: # id of output
+    description: 'How many models were deleted.'
+    value: ${{ steps.custom-inference-model.outputs.total-deleted-models }}
   message: # id of output
     description: 'The output message from GitHub action'
     value: ${{ steps.custom-inference-model.outputs.message }}

@@ -141,6 +141,7 @@ jobs:
 
       - name: DataRobot Custom Inference Model Results
         run: |
-          echo "Test result: ${{ steps.custom-inference-model.outputs.message }}"
-          echo "Test result: ${{ steps.custom-inference-model.outputs.returned-code }}"
-          echo "Test result: ${{ steps.custom-inference-model.outputs.test-result }}"
+          echo "Total affected models: ${{ steps.custom-inference-model.outputs.total-affected-models }}"
+          echo "Total created models: ${{ steps.custom-inference-model.outputs.total-created-models }}"
+          echo "Total deleted models: ${{ steps.custom-inference-model.outputs.total-deleted-models }}"
+          echo "Message: ${{ steps.custom-inference-model.outputs.message }}"
