@@ -51,3 +51,7 @@ class NonMergeCommitError(GenericException):
 
 class IllegalModelDeletion(GenericException):
     pass
+
+
+class ModelMetadataAlreadyExists(GenericException):
+    pass

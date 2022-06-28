@@ -14,6 +14,7 @@ from common.exceptions import (
     ModelMainEntryPointNotFound,
     DataRobotClientError,
     IllegalModelDeletion,
+    ModelMetadataAlreadyExists,
 )
 from common.exceptions import SharedAndLocalPathCollision
 from common.exceptions import UnexpectedResult
@@ -225,6 +226,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
         return True
 
     def _scan_and_load_datarobot_models_metadata(self):
+        logger.info("Scanning and loading DataRobot model files ...")
         yaml_files = glob(f"{self.options.root_dir}/**/*.yaml", recursive=True)
         yaml_files.extend(glob(f"{self.options.root_dir}/**/*.yml", recursive=True))
         for yaml_path in yaml_files:
@@ -239,12 +241,31 @@ class CustomInferenceModel(CustomInferenceModelBase):
                         )
                         model_metadata = model_entry[ModelSchema.MODEL_ENTRY_META_KEY]
                         model_info = ModelInfo(yaml_path, model_path, model_metadata)
-                        self._models_info.append(model_info)
+                        self._add_new_model_info(model_info)
                 elif ModelSchema.is_single_model_schema(yaml_content):
                     transformed = ModelSchema.validate_and_transform_single(yaml_content)
                     yaml_path = Path(yaml_path)
                     model_info = ModelInfo(yaml_path, yaml_path.parent, transformed)
-                    self._models_info.append(model_info)
+                    self._add_new_model_info(model_info)
+
+    def _add_new_model_info(self, model_info):
+        try:
+            already_exists = next(
+                m for m in self._models_info if model_info.git_model_id == m.git_model_id
+            )
+            raise ModelMetadataAlreadyExists(
+                f"Model {model_info.git_model_id} already exists. "
+                f"New model yaml path: {model_info.yaml_filepath}. "
+                f"Existing model yaml path: {already_exists.yaml_filepath}."
+            )
+        except StopIteration:
+            pass
+
+        logger.info(
+            f"Adding new model metadata. Git model ID: {model_info.git_model_id}. "
+            f"Model metadata yaml path: {model_info.yaml_filepath}."
+        )
+        self._models_info.append(model_info)
 
     def _to_absolute(self, path, parent):
         match = re.match(r"^(/|\$ROOT/)", path)
@@ -256,6 +277,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
         return path
 
     def _collect_datarobot_model_files(self):
+        logger.info("Collecting DataRobot model files ...")
         for model_info in self.models_info:
             include_glob_patterns = model_info.metadata[ModelSchema.VERSION_KEY][
                 ModelSchema.INCLUDE_GLOB_KEY

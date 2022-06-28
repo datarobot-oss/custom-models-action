@@ -12,7 +12,11 @@ from mock.mock import PropertyMock
 from common.data_types import DataRobotModel
 from custom_inference_model import CustomInferenceModel
 from custom_inference_model import ModelInfo
-from common.exceptions import ModelMainEntryPointNotFound, IllegalModelDeletion
+from common.exceptions import (
+    IllegalModelDeletion,
+    ModelMainEntryPointNotFound,
+    ModelMetadataAlreadyExists,
+)
 from common.exceptions import SharedAndLocalPathCollision
 from dr_client import DrClient
 from tests.unit.conftest import make_a_change_and_commit
@@ -38,6 +42,16 @@ class TestCustomInferenceModel:
         custom_inference_model = CustomInferenceModel(options)
         custom_inference_model._scan_and_load_datarobot_models_metadata()
         assert len(custom_inference_model._models_info) == num_models
+
+    def test_scan_and_load_models_with_same_git_model_id_failure(
+        self, options, single_model_factory
+    ):
+        git_model_id = "same-git-model-id-111"
+        single_model_factory(f"model-1", write_metadata=True, git_model_id=git_model_id)
+        single_model_factory(f"model-2", write_metadata=True, git_model_id=git_model_id)
+        custom_inference_model = CustomInferenceModel(options)
+        with pytest.raises(ModelMetadataAlreadyExists):
+            custom_inference_model._scan_and_load_datarobot_models_metadata()
 
     @pytest.mark.parametrize("num_models", [0, 1, 3])
     def test_scan_and_load_models_from_one_multi_models_yaml_file(
