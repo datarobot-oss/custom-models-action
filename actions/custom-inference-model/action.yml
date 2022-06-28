@@ -15,6 +15,12 @@ inputs:
     description: 'The main branch for PRs to take an action on'
     required: false
     default: 'master'
+  allow-model-deletion:
+    description:  |
+      Whether to detected local deleted model definitions and consequently delete them
+      in DataRobot.
+    required: false
+    default: 'false'
 outputs:
   new-model-created: # id of output
     description: 'Whether a new custom inference model was created'
@@ -46,10 +52,16 @@ runs:
         else
           verify_cert_arg=""
         fi
+        if ${{ inputs.allow-model-deletion }} == true; then
+          allow_model_deletion_arg="--allow-model-deletion"
+        else
+          allow_model_deletion_arg=""
+        fi
         python ${GITHUB_ACTION_PATH}/../../src/main.py \
           --api-token ${{ inputs.api-token }} \
           --webserver ${{ inputs.webserver }} \
           ${verify_cert_arg} \
           --branch ${{ inputs.main-branch }} \
-          --root-dir "${{ github.workspace }}"
+          --root-dir "${{ github.workspace }}" \
+          ${allow_model_deletion_arg}
       shell: bash

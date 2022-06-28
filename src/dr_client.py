@@ -2,10 +2,11 @@ import json
 import logging
 import time
 
-import requests
 from requests_toolbelt import MultipartEncoder
 
-from common.exceptions import HttpRequesterException, DataRobotClientError
+from common.exceptions import DataRobotClientError
+from common.exceptions import HttpRequesterException
+from common.exceptions import IllegalModelDeletion
 from common.http_requester import HttpRequester
 from common.string_util import StringUtil
 from dr_api_attrs import DrApiAttrs
@@ -21,6 +22,7 @@ class DrClient:
     CUSTOM_MODELS_TEST_ROUTE = "customModelTests/"
     DATASETS_ROUTE = "datasets/"
     DATASET_UPLOAD_ROUTE = DATASETS_ROUTE + "fromFile/"
+    CUSTOM_MODEL_DEPLOYMENTS = "/customModelDeployments/"
 
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
@@ -59,14 +61,14 @@ class DrClient:
         raise HttpRequesterException(f"Client timed out waiting for {async_location} to resolve.")
 
     def is_accessible(self):
-        logger.info("Check if webserver is accessible ...")
+        logger.debug("Check if webserver is accessible ...")
         response = self._http_requester.get(
             f"{self._http_requester.webserver_api_path}/ping", raw=True
         )
         return response.status_code == 200 and response.json()["response"] == "pong"
 
     def fetch_custom_models(self):
-        logger.info("Fetching custom models...")
+        logger.debug("Fetching custom models...")
         return self._paginated_fetch(self.CUSTOM_MODELS_ROUTE)
 
     def _paginated_fetch(self, route_url, **kwargs):
@@ -85,7 +87,7 @@ class DrClient:
             _page_count = response_json["count"]
             _next_page = response_json["next"]
             _returned_models = response_json["data"]
-            logger.info(
+            logger.debug(
                 f"Total: {_total_count}, page count: {_page_count}, Next page: {_next_page}"
             )
             return _returned_models, _next_page
@@ -110,7 +112,7 @@ class DrClient:
             )
 
         custom_model_id = response.json()["id"]
-        logger.info(f"Custom model created successfully (ID: {custom_model_id})")
+        logger.debug(f"Custom model created successfully (ID: {custom_model_id})")
         return custom_model_id
 
     @staticmethod
@@ -159,13 +161,13 @@ class DrClient:
         return payload
 
     def fetch_custom_model_versions(self, custom_model_id, **kwargs):
-        logger.info(f"Fetching custom model versions for model '{custom_model_id}' ...")
+        logger.debug(f"Fetching custom model versions for model '{custom_model_id}' ...")
         return self._paginated_fetch(
             self.CUSTOM_MODELS_VERSION_ROUTE.format(model_id=custom_model_id), **kwargs
         )
 
     def fetch_custom_model_latest_version_by_git_model_id(self, git_model_id):
-        logger.info(f"Fetching custom model versions for git model '{git_model_id}' ...")
+        logger.debug(f"Fetching custom model versions for git model '{git_model_id}' ...")
 
         custom_models = self.fetch_custom_models()
         custom_model = next(cm for cm in custom_models if cm.get("gitModelId") == git_model_id)
@@ -289,20 +291,21 @@ class DrClient:
         response = self._http_requester.delete(sub_path)
         if response.status_code != 204:
             raise DataRobotClientError(
-                f"Failed to delete custom model. Response status: {response.status_code}.",
+                f"Failed to delete custom model. Error: {response.json()}.",
                 code=response.status_code,
             )
 
     def delete_custom_model_by_git_model_id(self, git_model_id):
         custom_models = self.fetch_custom_models()
         try:
-            test_custom_model = next(cm for cm in custom_models if cm["gitModelId"] == git_model_id)
-            self.delete_custom_model_by_model_id(test_custom_model["id"])
-        except StopIteration:
-            raise DataRobotClientError(
-                f"Failed to delete custom model. Custom model with '{git_model_id}' "
-                f"git model ID was not found."
+            test_custom_model = next(
+                cm for cm in custom_models if cm.get("gitModelId") == git_model_id
             )
+        except StopIteration:
+            raise IllegalModelDeletion(
+                f"Given custom model does not exist. git_model_id: {git_model_id}."
+            )
+        self.delete_custom_model_by_model_id(test_custom_model["id"])
 
     def run_custom_model_version_testing(self, model_id, model_version_id, model_info):
         """
@@ -335,7 +338,7 @@ class DrClient:
                         f"Custom model version check failed.\nCheck: '{check}'.\nStatus: {status}."
                         f"\nMessage: {result['message']}"
                     )
-        logger.info(
+        logger.debug(
             f"Custom model testing pass with success. Git model ID: {model_info.git_model_id}"
         )
 
@@ -462,10 +465,17 @@ class DrClient:
         location = response.headers["Location"]
         resource = self._wait_for_async_resolution(location)
         dataset_id = resource.split("/")[-2]
-        logger.info(f"Dataset uploaded successfully (ID: {dataset_id})")
+        logger.debug(f"Dataset uploaded successfully (ID: {dataset_id})")
         return dataset_id
 
     def delete_dataset(self, dataset_id):
         response = self._http_requester.delete(f"{self.DATASETS_ROUTE}{dataset_id}/")
         if response.status_code != 204:
             raise DataRobotClientError(f"Failed deleting dataset ID '{dataset_id}'")
+
+    def fetch_custom_model_deployments(self, model_ids):
+        logger.debug(f"Fetching custom model deployments for model ids: '{model_ids}' ...")
+
+        return self._paginated_fetch(
+            self.CUSTOM_MODEL_DEPLOYMENTS, json={"customModelIds": model_ids}
+        )
