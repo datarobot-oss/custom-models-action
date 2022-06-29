@@ -10,7 +10,7 @@ logger = logging.getLogger()
 
 
 class GitTool:
-    repo = None
+    GITHUB_COMMIT_URL_PATTERN = "https://github.com/{user_and_project}/commit/{sha}"
 
     def __init__(self, git_repo_path):
         self._repo = Repo.init(git_repo_path)

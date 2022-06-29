@@ -6,7 +6,6 @@ from bson import ObjectId
 
 from common.data_types import FileInfo
 from common.exceptions import DataRobotClientError
-from common.string_util import StringUtil
 from custom_inference_model import ModelInfo
 from dr_api_attrs import DrApiAttrs
 from dr_client import DrClient
@@ -317,8 +316,12 @@ class TestCustomModelVersionRoutes:
         return "4e784ec8fa76beebaaf4391f23e0a3f7f666d329"
 
     @pytest.fixture
+    def commit_url(self, pull_request_commit_sha):
+        return f"https://github.com/user/project/{pull_request_commit_sha}"
+
+    @pytest.fixture
     def regression_model_version_response_factory(
-        self, custom_model_id, main_branch_commit_sha, pull_request_commit_sha
+        self, custom_model_id, commit_url, main_branch_commit_sha, pull_request_commit_sha
     ):
         def _inner(version_id):
             return {
@@ -345,6 +348,7 @@ class TestCustomModelVersionRoutes:
                 "label": "1.2",
                 "baseEnvironmentId": "629741dc5621557833bd5aa3",
                 "git_model_version": {
+                    "commit_url": commit_url,
                     "main_branch_commit_sha": main_branch_commit_sha,
                     "pull_request_commit_sha": pull_request_commit_sha,
                 },
@@ -368,6 +372,7 @@ class TestCustomModelVersionRoutes:
     def test_full_payload_setup_for_custom_model_version_creation(
         self,
         regression_model_info,
+        commit_url,
         main_branch_commit_sha,
         pull_request_commit_sha,
         single_model_file_paths,
@@ -377,6 +382,7 @@ class TestCustomModelVersionRoutes:
             changed_files_info = [FileInfo(p, p) for p in single_model_file_paths]
             payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(
                 regression_model_info,
+                commit_url,
                 main_branch_commit_sha,
                 pull_request_commit_sha,
                 changed_files_info=changed_files_info,
@@ -401,8 +407,9 @@ class TestCustomModelVersionRoutes:
         git_model_version_json_str = [
             v for v in values if isinstance(v, str) and "mainBranchCommitSha" in v
         ]
-        assert git_model_version_json_str, git_model_version_json_str
+        assert git_model_version_json_str, values
         git_model_version_json = json.loads(git_model_version_json_str[0])
+        assert "commitUrl" in git_model_version_json
         assert "mainBranchCommitSha" in git_model_version_json
         assert "pullRequestCommitSha" in git_model_version_json
 
@@ -413,10 +420,15 @@ class TestCustomModelVersionRoutes:
             assert "replicas" in keys
 
     def test_minimal_payload_setup_for_custom_model_version_creation(
-        self, minimal_regression_model_info, main_branch_commit_sha, pull_request_commit_sha
+        self,
+        minimal_regression_model_info,
+        commit_url,
+        main_branch_commit_sha,
+        pull_request_commit_sha,
     ):
         payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(
             minimal_regression_model_info,
+            commit_url,
             main_branch_commit_sha,
             pull_request_commit_sha,
             None,
