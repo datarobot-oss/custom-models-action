@@ -104,6 +104,7 @@ class CustomInferenceModelBase(ABC):
         self._repo = GitTool(self.options.root_dir)
         logger.info(f"GITHUB_EVENT_NAME: {self.event_name}")
         logger.info(f"GITHUB_SHA: {self.github_sha}")
+        logger.info(f"GITHUB_REPOSITORY: {self.github_repository}")
 
     @property
     def options(self):
@@ -124,6 +125,10 @@ class CustomInferenceModelBase(ABC):
     @property
     def github_sha(self):
         return os.environ.get("GITHUB_SHA")
+
+    @property
+    def github_repository(self):
+        return os.environ.get("GITHUB_REPOSITORY")
 
     @abstractmethod
     def run(self):
@@ -545,13 +550,24 @@ class CustomInferenceModel(CustomInferenceModelBase):
             pull_request_commit_sha = self._repo.feature_branch_top_commit_sha_of_a_merge_commit(
                 self.github_sha
             )
+            commit_url = GitTool.GITHUB_COMMIT_URL_PATTERN.format(
+                user_and_project=self.github_repository, sha=pull_request_commit_sha
+            )
         else:
             main_branch_commit_sha = self.github_sha
             pull_request_commit_sha = None
+            commit_url = GitTool.GITHUB_COMMIT_URL_PATTERN.format(
+                user_and_project=self.github_repository, sha=main_branch_commit_sha
+            )
+        logger.info(
+            f"GitHub commit URL: {commit_url}, main branch commit sha: {main_branch_commit_sha}, "
+            f"pull request commit sha: {pull_request_commit_sha}"
+        )
 
         return self._dr_client.create_custom_model_version(
             custom_model_id,
             model_info,
+            commit_url,
             main_branch_commit_sha,
             pull_request_commit_sha,
             changed_files_info,

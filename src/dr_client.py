@@ -184,6 +184,7 @@ class DrClient:
         self,
         custom_model_id,
         model_info,
+        commit_url,
         main_branch_commit_sha,
         pull_request_commit_sha=None,
         changed_files_info=None,
@@ -197,6 +198,7 @@ class DrClient:
             )
             payload, file_objs = self._setup_payload_for_custom_model_version_creation(
                 model_info,
+                commit_url,
                 main_branch_commit_sha,
                 pull_request_commit_sha,
                 changed_files_info,
@@ -232,6 +234,7 @@ class DrClient:
     def _setup_payload_for_custom_model_version_creation(
         cls,
         model_info,
+        commit_url,
         main_branch_commit_sha,
         pull_request_commit_sha,
         changed_files_info,
@@ -245,6 +248,7 @@ class DrClient:
                 "gitModelVersion",
                 json.dumps(
                     {
+                        "commitUrl": commit_url,
                         "mainBranchCommitSha": main_branch_commit_sha,
                         "pullRequestCommitSha": pull_request_commit_sha,
                     }
