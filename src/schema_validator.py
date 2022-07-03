@@ -13,11 +13,126 @@ from common.exceptions import InvalidModelSchema
 logger = logging.getLogger()
 
 
-class ModelSchema:
+class SharedSchema:
+    MODEL_ID_KEY = "git_datarobot_model_id"
+    SETTINGS_SECTION_KEY = "settings"
+
+    @classmethod
+    def _validate_and_transform_single(cls, schema, metadata):
+        try:
+            transformed = schema.validate(metadata)
+            cls._validate_single_transformed(transformed)
+            return transformed
+        except SchemaError as se:
+            raise InvalidModelSchema(se.code)
+
+    @classmethod
+    def _validate_single_transformed(cls, single_transformed_metadata):
+        cls._validate_mutual_exclusive_keys(single_transformed_metadata)
+        cls._validate_dependent_keys(single_transformed_metadata)
+        cls._validate_data_integrity(single_transformed_metadata)
+
+    @classmethod
+    def _validate_and_transform_multi(cls, schema, multi_metadata):
+        # Validates and transform
+        try:
+            transformed = schema.validate(multi_metadata)
+            for single_metadata in cls._next_single_transformed(transformed):
+                cls._validate_single_transformed(single_metadata)
+            return transformed
+        except SchemaError as se:
+            raise InvalidModelSchema(se.code)
+
+    @classmethod
+    def _next_single_transformed(cls, transformed_metadata):
+        """
+        A generator that must be implemented by a derived class. It returns the next
+        metadata entry in a multi metadata definition.
+
+        Parameters
+        ----------
+        transformed_metadata : dict
+            A multi metadata structure.
+
+
+        Returns
+        -------
+        metadata : dict
+            A metadata that represents a single entity.
+        """
+        raise NotImplementedError("The '_next_metadata' must be implemented by a derived class.")
+
+    @classmethod
+    def _validate_mutual_exclusive_keys(cls, single_transformed_metadata):
+        """
+        Validates mutual exclusive keys in a single transformed metadata.
+        Expected to be implemented by inherited class.
+
+        Parameters
+        ----------
+        single_transformed_metadata : dict
+            A metadata representation of a single entity after validation and transformation.
+        """
+        pass
+
+    @classmethod
+    def _validate_dependent_keys(cls, single_transformed_metadata):
+        """
+        Validates dependent keys in a single transformed metadata.
+        Expected to be implemented by inherited class.
+
+        Parameters
+        ----------
+        single_transformed_metadata : dict
+            A metadata representation of a single entity after validation and transformation.
+        """
+        pass
+
+    @classmethod
+    def _validate_data_integrity(cls, single_transformed_metadata):
+        """
+        Validates data integrity in a single transformed metadata.
+        Expected to be implemented by inherited class.
+
+        Parameters
+        ----------
+        single_transformed_metadata : dict
+            A metadata representation of a single entity after validation and transformation.
+        """
+        pass
+
+    @classmethod
+    def get_value(cls, metadata, *args):
+        """
+        Extract a value from the metadata, for a given key hierarchy. The assumption is that parent
+        keys are always dictionaries.
+
+        Parameters
+        ----------
+        metadata : dict
+            A model schema dictionary.
+        args : str
+            A variable number of strings, representing key hierarchy in the metadata.
+
+        Returns
+        -------
+            A value or None
+        """
+
+        value = metadata
+        for index, arg in enumerate(args):
+            if not isinstance(value, dict):
+                value = None
+                break
+
+            value = value.get(arg)
+        return value
+
+
+class ModelSchema(SharedSchema):
     MULTI_MODELS_KEY = "datarobot_models"
     MODEL_ENTRY_PATH_KEY = "model_path"
     MODEL_ENTRY_META_KEY = "model_metadata"
-    MODEL_ID_KEY = "git_datarobot_model_id"
 
     TARGET_TYPE_KEY = "target_type"
     TARGET_TYPE_BINARY_KEY = "Binary"
@@ -42,13 +157,10 @@ class ModelSchema:
     CLASS_LABELS_KEY = "class_labels"
     LANGUAGE_KEY = "language"
 
-    SETTINGS_KEY = "settings"
     NAME_KEY = "name"
     DESCRIPTION_KEY = "description"
     TRAINING_DATASET_KEY = "training_dataset"
     HOLDOUT_DATASET_KEY = "holdout_dataset"
-
-    DEPLOYMENT_ID_KEY = "git_datarobot_deployment_id"
 
     VERSION_KEY = "version"
     MODEL_ENV_KEY = "model_environment"
@@ -84,8 +196,7 @@ class ModelSchema:
 
     MODEL_SCHEMA = Schema(
         {
-            MODEL_ID_KEY: And(str, len),
-            Optional(DEPLOYMENT_ID_KEY): And(str, len),
+            SharedSchema.MODEL_ID_KEY: And(str, len),
             TARGET_TYPE_KEY: Or(
                 TARGET_TYPE_BINARY_KEY,
                 TARGET_TYPE_REGRESSION_KEY,
@@ -102,7 +213,7 @@ class ModelSchema:
             Optional(NEGATIVE_CLASS_LABEL_KEY): And(str, len),
             Optional(CLASS_LABELS_KEY): list,
             Optional(LANGUAGE_KEY): And(str, len),
-            SETTINGS_KEY: {
+            SharedSchema.SETTINGS_SECTION_KEY: {
                 NAME_KEY: And(str, len),
                 Optional(DESCRIPTION_KEY): And(str, len),
                 Optional(TRAINING_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
@@ -182,11 +293,15 @@ class ModelSchema:
 
         Returns
         -------
-        ,
+        bool,
             Whether the given metadata is suspected to be a model metadata
         """
 
-        return cls.MODEL_ID_KEY in metadata
+        return (
+            isinstance(metadata, dict)
+            and cls.MODEL_ID_KEY in metadata
+            and not DeploymentSchema.is_single_deployment_schema(metadata)
+        )
 
     @classmethod
     def is_multi_models_schema(cls, metadata):
@@ -238,32 +353,22 @@ class ModelSchema:
 
     @classmethod
     def validate_and_transform_single(cls, model_metadata):
-        try:
-            transformed = cls.MODEL_SCHEMA.validate(model_metadata)
-            cls._validate_single_model(transformed)
-            return transformed
-        except SchemaError as se:
-            raise InvalidModelSchema(se.code)
-
-    @classmethod
-    def _validate_single_model(cls, single_model_metadata):
-        cls._validate_mutual_exclusive_keys(single_model_metadata)
-        cls._validate_dependent_keys(single_model_metadata)
-        cls._validate_data_integrity(single_model_metadata)
-        logger.debug(
-            f"Model configuration is valid (id: {single_model_metadata[cls.MODEL_ID_KEY]})."
-        )
+        model_metadata = cls._validate_and_transform_single(cls.MODEL_SCHEMA, model_metadata)
+        logger.debug(f"Model configuration is valid (id: {model_metadata[cls.MODEL_ID_KEY]}).")
+        return model_metadata
 
     @classmethod
     def validate_and_transform_multi(cls, multi_models_metadata):
-        # Validates and transform
-        try:
-            transformed = cls.MULTI_MODELS_SCHEMA.validate(multi_models_metadata)
-            for model_entry in transformed[cls.MULTI_MODELS_KEY]:
-                cls._validate_single_model(model_entry[cls.MODEL_ENTRY_META_KEY])
-            return transformed
-        except SchemaError as se:
-            raise InvalidModelSchema(se.code)
+        multi_model_metadata = cls._validate_and_transform_multi(
+            cls.MULTI_MODELS_SCHEMA, multi_models_metadata
+        )
+        logger.debug("Multi models configuration is valid.")
+        return multi_model_metadata
+
+    @classmethod
+    def _next_single_transformed(cls, multi_transformed):
+        for model_entry in multi_transformed[cls.MULTI_MODELS_KEY]:
+            yield model_entry[cls.MODEL_ENTRY_META_KEY]
 
     @classmethod
     def _validate_mutual_exclusive_keys(cls, model_metadata):
@@ -274,7 +379,7 @@ class ModelSchema:
                 cls.CLASS_LABELS_KEY,
             }
             if len(mutual_exclusive_keys & model_metadata.keys()) > 1:
-                raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is expected")
+                raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")
 
     @classmethod
     def _validate_dependent_keys(cls, model_metadata):
@@ -327,29 +432,154 @@ class ModelSchema:
                     f"Test data is invalid. Please provide a valid catalog ID from DataRobot."
                 )
 
+
+class DeploymentSchema(SharedSchema):
+    MULTI_DEPLOYMENTS_KEY = "datarobot_deployments"
+    DEPLOYMENT_ID_KEY = "git_datarobot_deployment_id"
+    MODEL_SHA_KEY = "model_sha"
+    LATEST_SHA_VALUE = "latest"
+
+    PREDICTION_ENVIRONMENT_KEY = "prediction_environment"  # Optional
+    ADDITIONAL_METADATA_KEY = "additional_metadata"  # Optional
+
+    # Deployment settings are optional, POST + PATCH
+    LABEL_KEY = "label"  # Settings, Optional
+    DESCRIPTION_KEY = "description"  # Settings, Optional
+    IMPORTANCE_KEY = "importance"  # Settings, Optional
+    IMPORTANCE_CRITICAL_VALUE = "CRITICAL"
+    IMPORTANCE_HIGH_VALUE = "HIGH"
+    IMPORTANCE_MODERATE_VALUE = ("MODERATE",)
+    IMPORTANCE_LOW_VALUE = ("LOW",)
+
+    # PATCH Only
+    ASSOCIATION_ID_KEY = "association_id"  # Settings, Optional
+    ENABLE_TARGET_DRIFT_KEY = "enable_target_drift"  # Settings, Optional
+    ENABLE_FEATURE_DRIFT_KEY = "enable_feature_drift"  # Settings, Optional
+    ENABLE_PREDICTIONS_COLLECTION_KEY = "enable_predictions_collection"  # Settings, Optional
+    ENABLE_ACTUALS = "enable_actuals"
+
+    ENABLE_SEGMENT_ANALYSIS_KEY = "segment_analysis"  # Settings, Optional
+    SEGMENT_ANALYSIS_ATTRIBUTES_KEY = (
+        "segment_analysis_attributes"  # Settings.segment_analysis, Optional
+    )
+
+    # The 'DATASET_WITH_PARTITIONING_COLUMN_KEY' is mutually exclusive with the
+    # 'TRAINING_DATASET_KEY' & 'HOLDOUT_DATASET_KEY'. The latter two are used with unstructured
+    # models.
+    DATASET_WITH_PARTITIONING_COLUMN_KEY = "dataset_with_partitioning_column"
+    TRAINING_DATASET_KEY = "training_dataset"
+    HOLDOUT_DATASET_KEY = "holdout_dataset"
+
+    DEPLOYMENT_SCHEMA = Schema(
+        {
+            DEPLOYMENT_ID_KEY: And(str, len),
+            SharedSchema.MODEL_ID_KEY: And(str, len),
+            # If not provided, the 'latest' is assumed
+            Optional(MODEL_SHA_KEY): And(
+                str, lambda sha: len(sha) == 40 or sha == DeploymentSchema.LATEST_SHA_VALUE
+            ),
+            # fromCustomModel + fromModelPackage
+            Optional(PREDICTION_ENVIRONMENT_KEY): And(str, lambda i: ObjectId.is_valid(i)),
+            Optional(SharedSchema.SETTINGS_SECTION_KEY): {
+                Optional(LABEL_KEY): And(str, len),  # fromModelPackage
+                Optional(ADDITIONAL_METADATA_KEY): {
+                    And(str, len): And(str, len)
+                },  # fromModelPackage
+                Optional(DESCRIPTION_KEY): And(str, len),  # fromModelPackage
+                Optional(IMPORTANCE_KEY): Or(  # fromModelPackage
+                    IMPORTANCE_CRITICAL_VALUE,
+                    IMPORTANCE_HIGH_VALUE,
+                    IMPORTANCE_MODERATE_VALUE,
+                    IMPORTANCE_LOW_VALUE,
+                ),
+                Optional(ASSOCIATION_ID_KEY): And(str, len),  # Update settings
+                Optional(ENABLE_TARGET_DRIFT_KEY): bool,  # Update settings
+                Optional(ENABLE_FEATURE_DRIFT_KEY): bool,  # Update settings
+                Optional(ENABLE_PREDICTIONS_COLLECTION_KEY): bool,  # Update settings
+                Optional(ENABLE_ACTUALS): bool,  # Update settings
+                Optional(ENABLE_SEGMENT_ANALYSIS_KEY): bool,  # Update settings
+                Optional(SEGMENT_ANALYSIS_ATTRIBUTES_KEY): And(  # Update settings
+                    list, lambda l: all(len(a) > 0 for a in l)
+                ),
+                Optional(DATASET_WITH_PARTITIONING_COLUMN_KEY): And(
+                    str, lambda i: ObjectId.is_valid(i)
+                ),
+                Optional(TRAINING_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
+                Optional(HOLDOUT_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
+            },
+        }
+    )
+    MULTI_DEPLOYMENTS_SCHEMA = Schema([DEPLOYMENT_SCHEMA.schema])
+
     @classmethod
-    def get_value(cls, metadata, *args):
+    def is_single_deployment_schema(cls, metadata):
         """
-        Extract a value from the metadata, for a given key hierarchy. The assumption is that parent
-        keys are always dictionaries.
+        Checks whether the given metadata is suspected to be a deployment metadata
 
         Parameters
         ----------
         metadata : dict
-            A model schema dictionary.
-        args : str
-            A variable number of strings, representing key hierarchy in the metadata.
+            A deployment metadata
 
         Returns
         -------
-            A value or None
+        bool,
+            Whether the given metadata is suspected to be a single deployment metadata
         """
 
-        value = metadata
-        for index, arg in enumerate(args):
-            if not isinstance(value, dict):
-                value = None
-                break
+        return isinstance(metadata, dict) and cls.DEPLOYMENT_ID_KEY in metadata
 
-            value = value.get(arg)
-        return value
+    @classmethod
+    def is_multi_deployments_schema(cls, metadata):
+        """
+        Checks whether the given metadata is a multi-deployments schema
+
+        Parameters
+        ----------
+        metadata : list
+            A multi-deployments metadata
+
+        Returns
+        -------
+        bool,
+            Whether the given metadata is suspected to be a a list of deployments metadata
+        """
+
+        return (
+            isinstance(metadata, list)
+            and isinstance(metadata[0], dict)
+            and DeploymentSchema.DEPLOYMENT_ID_KEY in metadata[0]
+        )
+
+    @classmethod
+    def validate_and_transform_single(cls, deployment_metadata):
+        cls._validate_and_transform_single(cls.DEPLOYMENT_SCHEMA, deployment_metadata)
+        logger.debug(
+            f"Deployment configuration is valid (id: {deployment_metadata[cls.DEPLOYMENT_ID_KEY]})."
+        )
+
+    @classmethod
+    def validate_and_transform_multi(cls, multi_deployments_metadata):
+        cls._validate_and_transform_multi(cls.MULTI_DEPLOYMENTS_SCHEMA, multi_deployments_metadata)
+        logger.debug("Multi deployments configuration is valid.")
+
+    @classmethod
+    def _next_single_transformed(cls, multi_transformed):
+        for deployment_entry in multi_transformed:
+            yield deployment_entry
+
+    @classmethod
+    def _validate_mutual_exclusive_keys(cls, model_metadata):
+        for dataset_for_unstructured in [cls.TRAINING_DATASET_KEY, cls.HOLDOUT_DATASET_KEY]:
+            mutual_exclusive_keys = {
+                dataset_for_unstructured,
+                cls.DATASET_WITH_PARTITIONING_COLUMN_KEY,
+            }
+            if (
+                len(
+                    mutual_exclusive_keys
+                    & model_metadata[DeploymentSchema.SETTINGS_SECTION_KEY].keys()
+                )
+                > 1
+            ):
+                raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")

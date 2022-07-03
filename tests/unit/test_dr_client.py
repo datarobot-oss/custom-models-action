@@ -74,12 +74,11 @@ class TestCustomModelRoutes:
     def regression_model_info(self):
         metadata = {
             ModelSchema.MODEL_ID_KEY: "abc123",
-            ModelSchema.DEPLOYMENT_ID_KEY: "edf456",
             ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
             ModelSchema.TARGET_NAME_KEY: "target_column",
             ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
             ModelSchema.LANGUAGE_KEY: "Python",
-            ModelSchema.SETTINGS_KEY: {
+            ModelSchema.SETTINGS_SECTION_KEY: {
                 ModelSchema.NAME_KEY: "Awesome Model",
                 ModelSchema.DESCRIPTION_KEY: "My awesome model",
             },
@@ -289,7 +288,6 @@ class TestCustomModelVersionRoutes:
     def regression_model_info(self):
         metadata = {
             ModelSchema.MODEL_ID_KEY: "abc123",
-            ModelSchema.DEPLOYMENT_ID_KEY: "edf456",
             ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
             ModelSchema.TARGET_NAME_KEY: "target_column",
             ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
