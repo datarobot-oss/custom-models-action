@@ -52,8 +52,8 @@ def setup_log_configuration():
 
 
 def main(args=None):
-    options = argparse_options(args)
     setup_log_configuration()
+    options = argparse_options(args)
 
     try:
         if options.deploy:

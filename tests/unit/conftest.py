@@ -12,6 +12,7 @@ from bson import ObjectId
 from git import Repo
 
 from custom_inference_model import CustomInferenceModel
+from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 
 
@@ -32,6 +33,50 @@ def make_a_change_and_commit(git_repo, file_paths, index):
             f.write(f"\n# Automatic change ({index})")
     git_repo.index.add([str(f) for f in file_paths])
     git_repo.index.commit(f"Change number {index}")
+
+
+def create_partial_model_schema(is_single=True, num_models=1):
+    def _partial_model_schema(name):
+        return {
+            ModelSchema.MODEL_ID_KEY: str(uuid.uuid4()),
+            ModelSchema.TARGET_NAME_KEY: "target_feature_col",
+            ModelSchema.SETTINGS_SECTION_KEY: {"name": name},
+            ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: str(ObjectId())},
+        }
+
+    if is_single:
+        model_schema = _partial_model_schema(f"single-model")
+    else:
+        model_schema = {ModelSchema.MULTI_MODELS_KEY: []}
+        for counter in range(1, num_models + 1):
+            model_name = f"model-{counter}"
+            model_schema[ModelSchema.MULTI_MODELS_KEY].append(
+                {
+                    ModelSchema.MODEL_ENTRY_PATH_KEY: f"./path/to/{model_name}",
+                    ModelSchema.MODEL_ENTRY_META_KEY: _partial_model_schema(model_name),
+                }
+            )
+    return model_schema
+
+
+def create_partial_deployment_schema(is_single=True, num_deployments=1):
+    def _partial_deployment_schema(name):
+        return {
+            DeploymentSchema.DEPLOYMENT_ID_KEY: str(uuid.uuid4()),
+            DeploymentSchema.MODEL_ID_KEY: str(uuid.uuid4()),
+            DeploymentSchema.SETTINGS_SECTION_KEY: {
+                DeploymentSchema.LABEL_KEY: name,
+            },
+        }
+
+    if is_single:
+        return _partial_deployment_schema(f"single-deployment")
+    else:
+        deployments_schema = []
+        for counter in range(1, num_deployments + 1):
+            single_deployment_schema = _partial_deployment_schema(f"deployment-{counter}")
+            deployments_schema.append(single_deployment_schema)
+        return deployments_schema
 
 
 @pytest.fixture
@@ -91,7 +136,7 @@ def single_model_factory(repo_root_path, common_path_with_code, excluded_src_pat
             ModelSchema.MODEL_ID_KEY: git_model_id if git_model_id else str(uuid.uuid4()),
             ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
             ModelSchema.TARGET_NAME_KEY: "Grade 2014",
-            ModelSchema.SETTINGS_KEY: {ModelSchema.NAME_KEY: "My Awesome Model"},
+            ModelSchema.SETTINGS_SECTION_KEY: {ModelSchema.NAME_KEY: "My Awesome Model"},
             ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: str(ObjectId())},
         }
         if with_include_glob:
@@ -274,13 +319,12 @@ def mock_full_custom_model_checks():
 def mock_full_binary_model_schema(mock_full_custom_model_checks):
     return {
         ModelSchema.MODEL_ID_KEY: "abc123",
-        ModelSchema.DEPLOYMENT_ID_KEY: "edf456",
         ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_BINARY_KEY,
         ModelSchema.TARGET_NAME_KEY: "target_column",
         ModelSchema.POSITIVE_CLASS_LABEL_KEY: "1",
         ModelSchema.NEGATIVE_CLASS_LABEL_KEY: "0",
         ModelSchema.LANGUAGE_KEY: "Python",
-        ModelSchema.SETTINGS_KEY: {
+        ModelSchema.SETTINGS_SECTION_KEY: {
             ModelSchema.NAME_KEY: "Awesome Model",
             ModelSchema.DESCRIPTION_KEY: "My awesome model",
             ModelSchema.TRAINING_DATASET_KEY: "627790ba56215587b3021632",

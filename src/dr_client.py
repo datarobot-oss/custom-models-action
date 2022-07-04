@@ -78,7 +78,7 @@ class DrClient:
                 raise DataRobotClientError(
                     f"Failed to fetch entities of a single page. "
                     f"Response status: {response.status_code} "
-                    f"Response body: {response.json()}",
+                    f"Response body: {response.text}",
                     code=response.status_code,
                 )
 
@@ -107,7 +107,7 @@ class DrClient:
             raise DataRobotClientError(
                 f"Failed to create custom model. "
                 f"Response status: {response.status_code} "
-                f"Response body: {response.json()}",
+                f"Response body: {response.text}",
                 code=response.status_code,
             )
 
@@ -128,12 +128,14 @@ class DrClient:
             "gitModelId": metadata[ModelSchema.MODEL_ID_KEY],
         }
 
-        name = ModelSchema.get_value(metadata, ModelSchema.SETTINGS_KEY, ModelSchema.NAME_KEY)
+        name = ModelSchema.get_value(
+            metadata, ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.NAME_KEY
+        )
         if name:
             payload["name"] = name
 
         description = ModelSchema.get_value(
-            metadata, ModelSchema.SETTINGS_KEY, ModelSchema.DESCRIPTION_KEY
+            metadata, ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.DESCRIPTION_KEY
         )
         if description:
             payload["description"] = description
@@ -222,7 +224,7 @@ class DrClient:
                 "Failed to create custom model version "
                 f"({'from latest' if from_latest else 'new'}). "
                 f"Response status: {response.status_code} "
-                f"Response body: {response.json()}",
+                f"Response body: {response.text}",
                 code=response.status_code,
             )
 
@@ -295,7 +297,7 @@ class DrClient:
         response = self._http_requester.delete(sub_path)
         if response.status_code != 204:
             raise DataRobotClientError(
-                f"Failed to delete custom model. Error: {response.json()}.",
+                f"Failed to delete custom model. Error: {response.text}.",
                 code=response.status_code,
             )
 
@@ -383,7 +385,7 @@ class DrClient:
             raise DataRobotClientError(
                 "Custom model version test failed. "
                 f"Response code: {response.status_code}. "
-                f"Response body: {response.json()}."
+                f"Response body: {response.text}."
             )
         return response
 

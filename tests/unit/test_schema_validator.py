@@ -1,4 +1,3 @@
-import uuid
 from collections import namedtuple
 
 import pytest
@@ -6,51 +5,31 @@ from bson import ObjectId
 
 from common.exceptions import InvalidModelSchema
 from itertools import combinations
-from schema_validator import ModelSchema
+from schema_validator import ModelSchema, DeploymentSchema
+from tests.unit.conftest import create_partial_deployment_schema
+from tests.unit.conftest import create_partial_model_schema
 
 
-class TestSchemaValidator:
-    @staticmethod
-    def create_partial_model_schema(is_single=True, num_models=1):
-        def _partial_model_schema(name):
-            return {
-                ModelSchema.MODEL_ID_KEY: str(uuid.uuid4()),
-                ModelSchema.TARGET_NAME_KEY: "target_feature_col",
-                ModelSchema.SETTINGS_KEY: {"name": name},
-                ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: str(ObjectId())},
-            }
-
-        if is_single:
-            model_schema = _partial_model_schema(f"single-model")
-        else:
-            model_schema = {ModelSchema.MULTI_MODELS_KEY: []}
-            for counter in range(1, num_models + 1):
-                model_name = f"model-{counter}"
-                model_schema[ModelSchema.MULTI_MODELS_KEY].append(
-                    {
-                        ModelSchema.MODEL_ENTRY_PATH_KEY: f"./path/to/{model_name}",
-                        ModelSchema.MODEL_ENTRY_META_KEY: _partial_model_schema(model_name),
-                    }
-                )
-        return model_schema
-
+class TestModelSchemaValidator:
     @pytest.fixture
     def regression_model_schema(self):
         return {
             ModelSchema.MODEL_ID_KEY: "abc123",
             ModelSchema.TARGET_TYPE_KEY: "Regression",
             ModelSchema.TARGET_NAME_KEY: "target_column",
-            ModelSchema.SETTINGS_KEY: {ModelSchema.NAME_KEY: "My Awesome Model"},
+            ModelSchema.SETTINGS_SECTION_KEY: {ModelSchema.NAME_KEY: "My Awesome Model"},
             ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: "627785ea562155d227c6a56c"},
         }
 
     def test_is_single_models_schema(self):
-        single_model_schema = self.create_partial_model_schema(is_single=True)
+        single_model_schema = create_partial_model_schema(is_single=True)
         assert ModelSchema.is_single_model_schema(single_model_schema)
         assert not ModelSchema.is_multi_models_schema(single_model_schema)
+        assert not DeploymentSchema.is_single_deployment_schema(single_model_schema)
+        assert not DeploymentSchema.is_multi_deployments_schema(single_model_schema)
 
     def test_is_multi_models_schema(self):
-        multi_model_schema = self.create_partial_model_schema(is_single=False, num_models=2)
+        multi_model_schema = create_partial_model_schema(is_single=False, num_models=2)
         assert ModelSchema.is_multi_models_schema(multi_model_schema)
         assert not ModelSchema.is_single_model_schema(multi_model_schema)
 
@@ -68,7 +47,7 @@ class TestSchemaValidator:
         self._validate_for_model_type(is_single, _set_binary_keys)
 
     def _validate_for_model_type(self, is_single, setup_model_keys_func):
-        model_schema = self.create_partial_model_schema(is_single, num_models=1)
+        model_schema = create_partial_model_schema(is_single, num_models=1)
         with pytest.raises(InvalidModelSchema):
             # Partial schema should fail
             self._validate_schema(is_single, model_schema)
@@ -84,7 +63,7 @@ class TestSchemaValidator:
     @staticmethod
     def _validate_schema(is_single, model_schema):
         if is_single:
-            transformed_schema = ModelSchema().validate_and_transform_single(model_schema)
+            transformed_schema = ModelSchema.validate_and_transform_single(model_schema)
 
             # Validate existence of default values
             for glob_key in [
@@ -93,7 +72,7 @@ class TestSchemaValidator:
             ]:
                 assert isinstance(transformed_schema[ModelSchema.VERSION_KEY][glob_key], list)
         else:
-            transformed_schema = ModelSchema().validate_and_transform_multi(model_schema)
+            transformed_schema = ModelSchema.validate_and_transform_multi(model_schema)
 
             # Validate existence of default values
             for model_entry in transformed_schema[ModelSchema.MULTI_MODELS_KEY]:
@@ -208,7 +187,7 @@ class TestSchemaValidator:
                         schema[ModelSchema.TARGET_TYPE_KEY] = key.type
                         schema[key.name] = key.value
 
-        model_schema = self.create_partial_model_schema(is_single, num_models=1)
+        model_schema = create_partial_model_schema(is_single, num_models=1)
         comb_keys = combinations(mutual_exclusive_keys, 2)
         for comb in comb_keys:
             _set_single_model_keys(comb, model_schema)
@@ -223,8 +202,8 @@ class TestSchemaValidator:
             ModelSchema.TARGET_TYPE_KEY,
             ModelSchema.TARGET_NAME_KEY,
             ModelSchema.VERSION_KEY,
-            ModelSchema.SETTINGS_KEY,
-            f"{ModelSchema.SETTINGS_KEY}.{ModelSchema.NAME_KEY}",
+            ModelSchema.SETTINGS_SECTION_KEY,
+            f"{ModelSchema.SETTINGS_SECTION_KEY}.{ModelSchema.NAME_KEY}",
             f"{ModelSchema.VERSION_KEY}.{ModelSchema.MODEL_ENV_KEY}",
         ],
     )
@@ -307,16 +286,17 @@ class TestModelSchemaGetValue:
 
     def test_first_level_key(self, mock_full_binary_model_schema):
         input_metadata = mock_full_binary_model_schema
-        returned_value = ModelSchema.get_value(input_metadata, ModelSchema.SETTINGS_KEY)
-        assert returned_value == input_metadata[ModelSchema.SETTINGS_KEY]
+        returned_value = ModelSchema.get_value(input_metadata, ModelSchema.SETTINGS_SECTION_KEY)
+        assert returned_value == input_metadata[ModelSchema.SETTINGS_SECTION_KEY]
 
     def test_second_level_key(self, mock_full_binary_model_schema):
         input_metadata = mock_full_binary_model_schema
         returned_value = ModelSchema.get_value(
-            input_metadata, ModelSchema.SETTINGS_KEY, ModelSchema.DESCRIPTION_KEY
+            input_metadata, ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.DESCRIPTION_KEY
         )
         assert (
-            returned_value == input_metadata[ModelSchema.SETTINGS_KEY][ModelSchema.DESCRIPTION_KEY]
+            returned_value
+            == input_metadata[ModelSchema.SETTINGS_SECTION_KEY][ModelSchema.DESCRIPTION_KEY]
         )
 
     def test_non_existing_key_at_first_level(self, mock_full_binary_model_schema):
@@ -327,7 +307,7 @@ class TestModelSchemaGetValue:
     def test_non_existing_key_at_second_level(self, mock_full_binary_model_schema):
         input_metadata = mock_full_binary_model_schema
         returned_value = ModelSchema.get_value(
-            input_metadata, ModelSchema.SETTINGS_KEY, "non-existing-key"
+            input_metadata, ModelSchema.SETTINGS_SECTION_KEY, "non-existing-key"
         )
         assert returned_value is None
 
@@ -337,3 +317,37 @@ class TestModelSchemaGetValue:
             input_metadata, ModelSchema.TARGET_TYPE_KEY, ModelSchema.MODEL_ID_KEY
         )
         assert returned_value is None
+
+
+class TestDeploymentSchemaValidator:
+    def test_is_single_deployment_schema(self):
+        single_deployment_schema = create_partial_deployment_schema(is_single=True)
+        assert DeploymentSchema.is_single_deployment_schema(single_deployment_schema)
+        assert not DeploymentSchema.is_multi_deployments_schema(single_deployment_schema)
+        assert not ModelSchema.is_single_model_schema(single_deployment_schema)
+        assert not ModelSchema.is_multi_models_schema(single_deployment_schema)
+
+    def test_is_multi_models_schema(self):
+        multi_deployments_schema = create_partial_deployment_schema(
+            is_single=False, num_deployments=2
+        )
+        assert DeploymentSchema.is_multi_deployments_schema(multi_deployments_schema)
+        assert not DeploymentSchema.is_single_deployment_schema(multi_deployments_schema)
+        assert not ModelSchema.is_multi_models_schema(multi_deployments_schema)
+        assert not ModelSchema.is_single_model_schema(multi_deployments_schema)
+
+    @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
+    def test_invalid_mutual_exclusive_keys(self, is_single):
+        for key in (DeploymentSchema.TRAINING_DATASET_KEY, DeploymentSchema.HOLDOUT_DATASET_KEY):
+            deployment_metadata = create_partial_deployment_schema(is_single)
+            edit_metadata = deployment_metadata if is_single else deployment_metadata[0]
+            edit_metadata[DeploymentSchema.SETTINGS_SECTION_KEY][key] = str(ObjectId())
+            edit_metadata[DeploymentSchema.SETTINGS_SECTION_KEY][
+                DeploymentSchema.DATASET_WITH_PARTITIONING_COLUMN_KEY
+            ] = str(ObjectId())
+
+            with pytest.raises(InvalidModelSchema):
+                if is_single:
+                    DeploymentSchema.validate_and_transform_single(deployment_metadata)
+                else:
+                    DeploymentSchema.validate_and_transform_multi(deployment_metadata)

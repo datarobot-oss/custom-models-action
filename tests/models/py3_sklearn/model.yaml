@@ -7,7 +7,10 @@ settings:
   name: My Awsome GitHub Model
 
 version:
-  model_environment: 5e8c889607389fe0f466c72d  # Make sure this is the environment ID in your system
+  # Make sure this is the environment ID in your system.
+  # It is the '[DataRobot] Python 3 Scikit-Learn Drop-In' environment
+  model_environment: 5e8c889607389fe0f466c72d
 
 test:
-  test_data: 62b2d5f90587cedfefd2a4a1  # Will be replaced during a functional test
+  # Make sure it exists in DataRobot catalogue. Will be replaced during the functional tests.
+  test_data: 62c2f991e098a27b4255fb3c
