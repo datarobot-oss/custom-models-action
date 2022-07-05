@@ -22,7 +22,7 @@ def repo_root_path():
         yield Path(repo_tree)
 
 
-def _write_to_file(file_path, content):
+def write_to_file(file_path, content):
     with open(file_path, "w") as f:
         f.write(content)
 
@@ -92,10 +92,10 @@ def common_filepath(common_path):
 @pytest.fixture
 def common_path_with_code(repo_root_path, common_path, common_filepath):
     os.makedirs(common_path)
-    _write_to_file(common_filepath, "# common.py")
-    _write_to_file(common_path / "util.py", "# Util.py")
+    write_to_file(common_filepath, "# common.py")
+    write_to_file(common_path / "util.py", "# Util.py")
     os.makedirs(common_path / "string")
-    _write_to_file(common_path / "string" / "conv.py", "# conv.py")
+    write_to_file(common_path / "string" / "conv.py", "# conv.py")
     return common_path
 
 
@@ -109,7 +109,7 @@ def common_package(common_dir):
 def excluded_src_path(repo_root_path):
     excluded_path = repo_root_path / "excluded_path"
     os.makedirs(excluded_path)
-    _write_to_file(excluded_path / "some_file.py", "# some_file.py")
+    write_to_file(excluded_path / "some_file.py", "# some_file.py")
     return excluded_path
 
 
@@ -126,17 +126,17 @@ def single_model_factory(repo_root_path, common_path_with_code, excluded_src_pat
         model_path = repo_root_path / name
         os.makedirs(model_path)
         if include_main_prog:
-            _write_to_file(model_path / "custom.py", "# custom.py")
-        _write_to_file(model_path / "README.md", "# README")
-        _write_to_file(model_path / "non-datarobot-yaml.yaml", '{"models": []}')
+            write_to_file(model_path / "custom.py", "# custom.py")
+        write_to_file(model_path / "README.md", "# README")
+        write_to_file(model_path / "non-datarobot-yaml.yaml", '{"models": []}')
         os.makedirs(model_path / "score")
-        _write_to_file(model_path / "score" / "score.py", "# score.py")
+        write_to_file(model_path / "score" / "score.py", "# score.py")
 
         single_model_metadata = {
             ModelSchema.MODEL_ID_KEY: git_model_id if git_model_id else str(uuid.uuid4()),
             ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
             ModelSchema.TARGET_NAME_KEY: "Grade 2014",
-            ModelSchema.SETTINGS_SECTION_KEY: {ModelSchema.NAME_KEY: "My Awesome Model"},
+            ModelSchema.SETTINGS_SECTION_KEY: {ModelSchema.NAME_KEY: name},
             ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: str(ObjectId())},
         }
         if with_include_glob:
@@ -150,7 +150,7 @@ def single_model_factory(repo_root_path, common_path_with_code, excluded_src_pat
             single_model_metadata["version"]["exclude_glob_pattern"] = ["./README.md"]
 
         if write_metadata:
-            _write_to_file(model_path / "model.yaml", yaml.dump(single_model_metadata))
+            write_to_file(model_path / "model.yaml", yaml.dump(single_model_metadata))
 
         return single_model_metadata
 
@@ -166,9 +166,10 @@ def models_factory(repo_root_path, common_path_with_code, single_model_factory):
         with_exclude_glob=True,
         include_main_prog=True,
     ):
+        models_metadata = []
         multi_models_yaml_content = {ModelSchema.MULTI_MODELS_KEY: []} if is_multi else None
         for counter in range(num_models):
-            model_name = f"model_{counter}"
+            model_name = f"model_multi_{counter}" if is_multi else f"model_{counter}"
             model_metadata = single_model_factory(
                 model_name,
                 write_metadata=not is_multi,
@@ -176,6 +177,7 @@ def models_factory(repo_root_path, common_path_with_code, single_model_factory):
                 with_exclude_glob=with_exclude_glob,
                 include_main_prog=include_main_prog,
             )
+            models_metadata.append(model_metadata)
             if is_multi:
                 multi_models_yaml_content[ModelSchema.MULTI_MODELS_KEY].append(
                     {
@@ -185,9 +187,9 @@ def models_factory(repo_root_path, common_path_with_code, single_model_factory):
                 )
         if is_multi:
             multi_models_content = yaml.dump(multi_models_yaml_content)
-            _write_to_file(repo_root_path / "models.yaml", multi_models_content)
+            write_to_file(repo_root_path / "models.yaml", multi_models_content)
 
-        return repo_root_path
+        return models_metadata
 
     return _inner
 

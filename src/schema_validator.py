@@ -475,7 +475,7 @@ class DeploymentSchema(SharedSchema):
             DEPLOYMENT_ID_KEY: And(str, len),
             SharedSchema.MODEL_ID_KEY: And(str, len),
             # If not provided, the 'latest' is assumed
-            Optional(MODEL_SHA_KEY): And(
+            Optional(MODEL_SHA_KEY, default=LATEST_SHA_VALUE): And(
                 str, lambda sha: len(sha) == 40 or sha == DeploymentSchema.LATEST_SHA_VALUE
             ),
             # fromCustomModel + fromModelPackage
@@ -547,21 +547,26 @@ class DeploymentSchema(SharedSchema):
 
         return (
             isinstance(metadata, list)
+            and metadata
             and isinstance(metadata[0], dict)
             and DeploymentSchema.DEPLOYMENT_ID_KEY in metadata[0]
         )
 
     @classmethod
     def validate_and_transform_single(cls, deployment_metadata):
-        cls._validate_and_transform_single(cls.DEPLOYMENT_SCHEMA, deployment_metadata)
+        transformed = cls._validate_and_transform_single(cls.DEPLOYMENT_SCHEMA, deployment_metadata)
         logger.debug(
-            f"Deployment configuration is valid (id: {deployment_metadata[cls.DEPLOYMENT_ID_KEY]})."
+            f"Deployment configuration is valid (id: {transformed[cls.DEPLOYMENT_ID_KEY]})."
         )
+        return transformed
 
     @classmethod
     def validate_and_transform_multi(cls, multi_deployments_metadata):
-        cls._validate_and_transform_multi(cls.MULTI_DEPLOYMENTS_SCHEMA, multi_deployments_metadata)
+        transformed = cls._validate_and_transform_multi(
+            cls.MULTI_DEPLOYMENTS_SCHEMA, multi_deployments_metadata
+        )
         logger.debug("Multi deployments configuration is valid.")
+        return transformed
 
     @classmethod
     def _next_single_transformed(cls, multi_transformed):
@@ -569,17 +574,15 @@ class DeploymentSchema(SharedSchema):
             yield deployment_entry
 
     @classmethod
-    def _validate_mutual_exclusive_keys(cls, model_metadata):
+    def _validate_mutual_exclusive_keys(cls, deployment_metadata):
+        settings_section = cls.get_value(deployment_metadata, DeploymentSchema.SETTINGS_SECTION_KEY)
+        if not settings_section:
+            return
+
         for dataset_for_unstructured in [cls.TRAINING_DATASET_KEY, cls.HOLDOUT_DATASET_KEY]:
             mutual_exclusive_keys = {
                 dataset_for_unstructured,
                 cls.DATASET_WITH_PARTITIONING_COLUMN_KEY,
             }
-            if (
-                len(
-                    mutual_exclusive_keys
-                    & model_metadata[DeploymentSchema.SETTINGS_SECTION_KEY].keys()
-                )
-                > 1
-            ):
+            if len(mutual_exclusive_keys & settings_section.keys()) > 1:
                 raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")

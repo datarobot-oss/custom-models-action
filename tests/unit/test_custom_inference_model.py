@@ -30,7 +30,7 @@ class TestCustomInferenceModel:
     @pytest.mark.usefixtures("no_models")
     def test_scan_and_load_no_models(self, options):
         custom_inference_model = CustomInferenceModel(options)
-        custom_inference_model._scan_and_load_datarobot_models_metadata()
+        custom_inference_model._scan_and_load_models_metadata()
         assert len(custom_inference_model._models_info) == 0
 
     @pytest.mark.parametrize("num_models", [1, 2, 3])
@@ -40,7 +40,7 @@ class TestCustomInferenceModel:
         for counter in range(1, num_models + 1):
             single_model_factory(f"model-{counter}", write_metadata=True)
         custom_inference_model = CustomInferenceModel(options)
-        custom_inference_model._scan_and_load_datarobot_models_metadata()
+        custom_inference_model._scan_and_load_models_metadata()
         assert len(custom_inference_model._models_info) == num_models
 
     def test_scan_and_load_models_with_same_git_model_id_failure(
@@ -51,7 +51,7 @@ class TestCustomInferenceModel:
         single_model_factory(f"model-2", write_metadata=True, git_model_id=git_model_id)
         custom_inference_model = CustomInferenceModel(options)
         with pytest.raises(ModelMetadataAlreadyExists):
-            custom_inference_model._scan_and_load_datarobot_models_metadata()
+            custom_inference_model._scan_and_load_models_metadata()
 
     @pytest.mark.parametrize("num_models", [0, 1, 3])
     def test_scan_and_load_models_from_one_multi_models_yaml_file(
@@ -59,7 +59,7 @@ class TestCustomInferenceModel:
     ):
         models_factory(num_models, is_multi=True)
         custom_inference_model = CustomInferenceModel(options)
-        custom_inference_model._scan_and_load_datarobot_models_metadata()
+        custom_inference_model._scan_and_load_models_metadata()
         assert len(custom_inference_model._models_info) == num_models
 
     @pytest.mark.parametrize("num_single_models", [0, 1, 3])
@@ -77,7 +77,7 @@ class TestCustomInferenceModel:
             single_model_factory(f"model-{counter}")
 
         custom_inference_model = CustomInferenceModel(options)
-        custom_inference_model._scan_and_load_datarobot_models_metadata()
+        custom_inference_model._scan_and_load_models_metadata()
         assert len(custom_inference_model._models_info) == (num_multi_models + num_single_models)
 
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
@@ -95,7 +95,7 @@ class TestCustomInferenceModel:
         num_models = 3
         init_repo_with_models_factory(num_models, is_multi=is_multi)
         custom_inference_model = CustomInferenceModel(options)
-        custom_inference_model._scan_and_load_datarobot_models_metadata()
+        custom_inference_model._scan_and_load_models_metadata()
         custom_inference_model._collect_datarobot_model_files()
 
         # Change 1 - one common module

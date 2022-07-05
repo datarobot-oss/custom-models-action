@@ -101,7 +101,15 @@ class ModelInfo:
 class CustomInferenceModelBase(ABC):
     def __init__(self, options):
         self._options = options
+        os.environ["GIT_PYTHON_TRACE"] = "full"
         self._repo = GitTool(self.options.root_dir)
+        self._models_info = []
+        self._datarobot_models = {}
+        self._dr_client = DrClient(
+            self.options.webserver,
+            self.options.api_token,
+            verify_cert=not self.options.skip_cert_verification,
+        )
         logger.info(f"GITHUB_EVENT_NAME: {self.event_name}")
         logger.info(f"GITHUB_SHA: {self.github_sha}")
         logger.info(f"GITHUB_REPOSITORY: {self.github_repository}")
@@ -130,33 +138,6 @@ class CustomInferenceModelBase(ABC):
     def github_repository(self):
         return os.environ.get("GITHUB_REPOSITORY")
 
-    @abstractmethod
-    def run(self):
-        """
-        Executes the GitHub action logic to manage custom inference models
-        """
-        pass
-
-
-class CustomInferenceModel(CustomInferenceModelBase):
-    class RelativeTo(Enum):
-        ROOT = 1
-        MODEL = 2
-
-    def __init__(self, options):
-        super().__init__(options)
-        os.environ["GIT_PYTHON_TRACE"] = "full"
-        self._models_info = []
-        self._datarobot_models = {}
-        self._dr_client = DrClient(
-            self.options.webserver,
-            self.options.api_token,
-            verify_cert=not self.options.skip_cert_verification,
-        )
-        self._total_affected_models = 0
-        self._total_created_models = 0
-        self._total_deleted_models = 0
-
     @property
     def models_info(self):
         return self._models_info
@@ -168,33 +149,13 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def run(self):
         """
         Executes the GitHub action logic to manage custom inference models
-
-        This method implements the following logic:
-        1. Scan and load DataRobot model metadata (yaml files)
-        1. Go over all the models and per model collect the files/folders belong to the model
-        2. Per changed file/folder in the commit, find all affected models
-        3. Per affected model, create a new version in DataRobot and run tests.
         """
 
-        try:
-            if not self._prerequisites():
-                return
+        if not self._prerequisites():
+            return
 
-            logger.info(f"Options: {self.options}")
-
-            self._scan_and_load_datarobot_models_metadata()
-            self._collect_datarobot_model_files()
-            self._fetch_models_from_datarobot()
-            self._lookup_affected_models_by_the_current_action()
-            self._apply_datarobot_actions_for_affected_models()
-        finally:
-            print(
-                f"""
-                ::set-output name=total-affected-models::{self._total_affected_models}
-                ::set-output name=total-created-models::{self._total_created_models}
-                ::set-output name=total-deleted-models::{self._total_deleted_models}
-                """
-            )
+        self._scan_and_load_models_metadata()
+        self._run()
 
     def _prerequisites(self):
         supported_events = ["push", "pull_request"]
@@ -231,28 +192,40 @@ class CustomInferenceModel(CustomInferenceModelBase):
             return False
         return True
 
-    def _scan_and_load_datarobot_models_metadata(self):
+    def _scan_and_load_models_metadata(self):
         logger.info("Scanning and loading DataRobot model files ...")
+        for yaml_path, yaml_content in self._next_yaml_content_in_repo():
+            if ModelSchema.is_multi_models_schema(yaml_content):
+                transformed = ModelSchema.validate_and_transform_multi(yaml_content)
+                for model_entry in transformed[ModelSchema.MULTI_MODELS_KEY]:
+                    model_path = self._to_absolute(
+                        model_entry[ModelSchema.MODEL_ENTRY_PATH_KEY],
+                        Path(yaml_path).parent,
+                    )
+                    model_metadata = model_entry[ModelSchema.MODEL_ENTRY_META_KEY]
+                    model_info = ModelInfo(yaml_path, model_path, model_metadata)
+                    self._add_new_model_info(model_info)
+            elif ModelSchema.is_single_model_schema(yaml_content):
+                transformed = ModelSchema.validate_and_transform_single(yaml_content)
+                yaml_path = Path(yaml_path)
+                model_info = ModelInfo(yaml_path, yaml_path.parent, transformed)
+                self._add_new_model_info(model_info)
+
+    def _next_yaml_content_in_repo(self):
         yaml_files = glob(f"{self.options.root_dir}/**/*.yaml", recursive=True)
         yaml_files.extend(glob(f"{self.options.root_dir}/**/*.yml", recursive=True))
         for yaml_path in yaml_files:
             with open(yaml_path) as f:
-                yaml_content = yaml.safe_load(f)
-                if ModelSchema.is_multi_models_schema(yaml_content):
-                    transformed = ModelSchema.validate_and_transform_multi(yaml_content)
-                    for model_entry in transformed[ModelSchema.MULTI_MODELS_KEY]:
-                        model_path = self._to_absolute(
-                            model_entry[ModelSchema.MODEL_ENTRY_PATH_KEY],
-                            Path(yaml_path).parent,
-                        )
-                        model_metadata = model_entry[ModelSchema.MODEL_ENTRY_META_KEY]
-                        model_info = ModelInfo(yaml_path, model_path, model_metadata)
-                        self._add_new_model_info(model_info)
-                elif ModelSchema.is_single_model_schema(yaml_content):
-                    transformed = ModelSchema.validate_and_transform_single(yaml_content)
-                    yaml_path = Path(yaml_path)
-                    model_info = ModelInfo(yaml_path, yaml_path.parent, transformed)
-                    self._add_new_model_info(model_info)
+                yield yaml_path, yaml.safe_load(f)
+
+    def _to_absolute(self, path, parent):
+        match = re.match(r"^(/|\$ROOT/)", path)
+        if match:
+            path = path.replace(match[0], "", 1)
+            path = f"{self.options.root_dir}/{path}"
+        else:
+            path = f"{parent}/{path}"
+        return path
 
     def _add_new_model_info(self, model_info):
         try:
@@ -273,14 +246,63 @@ class CustomInferenceModel(CustomInferenceModelBase):
         )
         self._models_info.append(model_info)
 
-    def _to_absolute(self, path, parent):
-        match = re.match(r"^(/|\$ROOT/)", path)
-        if match:
-            path = path.replace(match[0], "", 1)
-            path = f"{self.options.root_dir}/{path}"
-        else:
-            path = f"{parent}/{path}"
-        return path
+    def _fetch_models_from_datarobot(self):
+        logger.info("Fetching models from DataRobot ...")
+        custom_inference_models = self._dr_client.fetch_custom_models()
+        for custom_model in custom_inference_models:
+            git_model_id = custom_model.get("gitModelId")
+            if git_model_id:
+                model_versions = self._dr_client.fetch_custom_model_versions(
+                    custom_model["id"], json={"limit": 1}
+                )
+                latest_version = model_versions[0] if model_versions else None
+                if not latest_version:
+                    logger.warning(
+                        "Model exists without a version! git_model_id: "
+                        f"{git_model_id}, custom_model_id: {custom_model['id']}"
+                    )
+                self.datarobot_models[git_model_id] = DataRobotModel(custom_model, latest_version)
+
+    @abstractmethod
+    def _run(self):
+        pass
+
+
+class CustomInferenceModel(CustomInferenceModelBase):
+    class RelativeTo(Enum):
+        ROOT = 1
+        MODEL = 2
+
+    def __init__(self, options):
+        super().__init__(options)
+        self._total_affected_models = 0
+        self._total_created_models = 0
+        self._total_deleted_models = 0
+
+    def _run(self):
+        """
+        Executes the GitHub action logic to manage custom inference models
+
+        This method implements the following logic:
+        1. Scan and load DataRobot model metadata (yaml files)
+        1. Go over all the models and per model collect the files/folders belong to the model
+        2. Per changed file/folder in the commit, find all affected models
+        3. Per affected model, create a new version in DataRobot and run tests.
+        """
+
+        try:
+            self._collect_datarobot_model_files()
+            self._fetch_models_from_datarobot()
+            self._lookup_affected_models_by_the_current_action()
+            self._apply_datarobot_actions_for_affected_models()
+        finally:
+            print(
+                f"""
+                ::set-output name=total-affected-models::{self._total_affected_models}
+                ::set-output name=total-created-models::{self._total_created_models}
+                ::set-output name=total-deleted-models::{self._total_deleted_models}
+                """
+            )
 
     def _collect_datarobot_model_files(self):
         logger.info("Collecting DataRobot model files ...")
@@ -380,23 +402,6 @@ class CustomInferenceModel(CustomInferenceModelBase):
             return True
         except ValueError:
             return False
-
-    def _fetch_models_from_datarobot(self):
-        logger.info("Fetching models from DataRobot ...")
-        custom_inference_models = self._dr_client.fetch_custom_models()
-        for custom_model in custom_inference_models:
-            git_model_id = custom_model.get("gitModelId")
-            if git_model_id:
-                model_versions = self._dr_client.fetch_custom_model_versions(
-                    custom_model["id"], json={"limit": 1}
-                )
-                latest_version = model_versions[0] if model_versions else None
-                if not latest_version:
-                    logger.warning(
-                        "Model exists without a version! git_model_id: "
-                        f"{git_model_id}, custom_model_id: {custom_model['id']}"
-                    )
-                self.datarobot_models[git_model_id] = DataRobotModel(custom_model, latest_version)
 
     def _lookup_affected_models_by_the_current_action(self):
         logger.info("Lookup affected models by the current commit ...")

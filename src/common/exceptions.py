@@ -55,3 +55,7 @@ class IllegalModelDeletion(GenericException):
 
 class ModelMetadataAlreadyExists(GenericException):
     pass
+
+
+class DeploymentMetadataAlreadyExists(GenericException):
+    pass
