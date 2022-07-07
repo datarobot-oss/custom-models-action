@@ -27,6 +27,11 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
     def __init__(self, options):
         super().__init__(options)
         self._deployments_info = []
+        self._datarobot_deployments = {}
+
+    @property
+    def datarobot_deployments(self):
+        return self._datarobot_deployments
 
     def _run(self):
         """
@@ -35,6 +40,7 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
 
         self._scan_and_load_deployments_metadata()
         self._fetch_models_from_datarobot()
+        self._fetch_deployments_from_datarobot()
 
     def _scan_and_load_deployments_metadata(self):
         logger.info("Scanning and loading DataRobot deployment files ...")
@@ -70,3 +76,11 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             f"Deployment metadata yaml path: {deployment_info.yaml_filepath}."
         )
         self._deployments_info.append(deployment_info)
+
+    def _fetch_deployments_from_datarobot(self):
+        logger.info("Fetching deployments from DataRobot ...")
+        custom_inference_deployments = self._dr_client.fetch_deployments()
+        for deployment in custom_inference_deployments:
+            git_deployment_id = deployment.get("gitDeploymentId")
+            if git_deployment_id:
+                self.datarobot_deployments[git_deployment_id] = deployment

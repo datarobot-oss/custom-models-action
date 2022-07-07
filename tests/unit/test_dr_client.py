@@ -26,7 +26,7 @@ def mock_paginated_responses(
     total_num_entities, num_entities_in_page, url_factory, entity_response_factory_fn
 ):
     def _generate_for_single_page(page_index, num_entities, has_next):
-        models_in_page = [
+        entities_in_page = [
             entity_response_factory_fn(f"id-{page_index}-{index}") for index in range(num_entities)
         ]
         responses.add(
@@ -36,19 +36,24 @@ def mock_paginated_responses(
                 "totalCount": total_num_entities,
                 "count": num_entities,
                 "next": url_factory(page_index + 1) if has_next else None,
-                "data": models_in_page,
+                "data": entities_in_page,
             },
             status=200,
         )
-        return models_in_page
+        return entities_in_page
 
     total_entities = {}
     quotient, remainder = divmod(total_num_entities, num_entities_in_page)
-    for page in range(quotient):
-        has_next = remainder > 0 or page < quotient - 1
-        total_entities[page] = _generate_for_single_page(page, num_entities_in_page, has_next)
-    if remainder:
-        total_entities[quotient] = _generate_for_single_page(quotient, remainder, has_next=False)
+    if quotient == 0 and remainder == 0:
+        total_entities[0] = _generate_for_single_page(0, 0, has_next=False)
+    else:
+        for page in range(quotient):
+            has_next = remainder > 0 or page < quotient - 1
+            total_entities[page] = _generate_for_single_page(page, num_entities_in_page, has_next)
+        if remainder:
+            total_entities[quotient] = _generate_for_single_page(
+                quotient, remainder, has_next=False
+            )
     return total_entities
 
 
@@ -573,3 +578,59 @@ class TestCustomModelVersionRoutes:
                 info[ModelSchema.CHECK_ENABLED_KEY] = False
             parameters = DrClient._build_tests_parameters(mock_full_custom_model_checks)
             assert not parameters
+
+
+class TestDeploymentRoutes:
+    @pytest.fixture
+    def deployment_response_factory(self):
+        def _inner(deployment_id):
+            return {"id": deployment_id, "gitDeploymentId": f"git-id-{deployment_id}"}
+
+        return _inner
+
+    @pytest.fixture
+    def deployments_url_factory(self, paginated_url_factory):
+        def _inner(page=0):
+            return paginated_url_factory(DrClient.DEPLOYMENTS_ROUTE, page)
+
+        return _inner
+
+    @pytest.mark.parametrize(
+        "total_num_deployments, num_deployments_in_page",
+        [(0, 3), (2, 3), (2, 2), (4, 2), (4, 3)],
+        ids=[
+            "no-models",
+            "page-bigger-than-total-deployments",
+            "page-equal-total-deployments",
+            "page-lower-than-total-deployments-no-remainder",
+            "page-lower-than-total-deployments-with-remainder",
+        ],
+    )
+    @responses.activate
+    def test_fetch_deployments_success(
+        self,
+        webserver,
+        api_token,
+        total_num_deployments,
+        num_deployments_in_page,
+        deployments_url_factory,
+        deployment_response_factory,
+    ):
+        expected_deployments_in_all_pages = mock_paginated_responses(
+            total_num_deployments,
+            num_deployments_in_page,
+            deployments_url_factory,
+            deployment_response_factory,
+        )
+        dr_client = DrClient(
+            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
+        )
+        total_deployments_response = dr_client.fetch_deployments()
+        assert len(total_deployments_response) == total_num_deployments
+
+        total_expected_deployments = []
+        for deployments_per_page in expected_deployments_in_all_pages.values():
+            total_expected_deployments.extend(deployments_per_page)
+
+        for fetched_deployment in total_deployments_response:
+            assert fetched_deployment in total_expected_deployments
