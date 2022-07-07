@@ -23,6 +23,7 @@ class DrClient:
     DATASETS_ROUTE = "datasets/"
     DATASET_UPLOAD_ROUTE = DATASETS_ROUTE + "fromFile/"
     CUSTOM_MODEL_DEPLOYMENTS = "/customModelDeployments/"
+    DEPLOYMENTS_ROUTE = "deployments/"
 
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
@@ -485,3 +486,7 @@ class DrClient:
         return self._paginated_fetch(
             self.CUSTOM_MODEL_DEPLOYMENTS, json={"customModelIds": model_ids}
         )
+
+    def fetch_deployments(self):
+        logger.debug("Fetching deployments...")
+        return self._paginated_fetch(self.DEPLOYMENTS_ROUTE)
