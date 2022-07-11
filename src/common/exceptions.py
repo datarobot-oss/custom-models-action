@@ -37,6 +37,10 @@ class NoCommonAncestor(GenericException):
     pass
 
 
+class NoValidAncestor(GenericException):
+    pass
+
+
 class HttpRequesterException(GenericException):
     pass
 
@@ -58,4 +62,16 @@ class ModelMetadataAlreadyExists(GenericException):
 
 
 class DeploymentMetadataAlreadyExists(GenericException):
+    pass
+
+
+class AssociatedModelNotFound(GenericException):
+    pass
+
+
+class AssociatedModelVersionNotFound(GenericException):
+    pass
+
+
+class UnexpectedNumOfModelVersions(GenericException):
     pass

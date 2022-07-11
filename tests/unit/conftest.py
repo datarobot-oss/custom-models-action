@@ -256,7 +256,18 @@ def git_repo(repo_root_path):
 
 
 @pytest.fixture
-def init_repo_with_models_factory(git_repo, repo_root_path, models_factory):
+def init_repo_for_root_path_factory(repo_root_path, git_repo):
+    def _inner():
+        os.chdir(repo_root_path)
+        git_repo.git.add("--all")
+        git_repo.git.commit("-m", "'Initial commit'", "--no-verify")
+        return repo_root_path
+
+    return _inner
+
+
+@pytest.fixture
+def init_repo_with_models_factory(models_factory, init_repo_for_root_path_factory):
     def _inner(
         num_models=2,
         is_multi=False,
@@ -271,9 +282,7 @@ def init_repo_with_models_factory(git_repo, repo_root_path, models_factory):
             with_exclude_glob,
             include_main_prog,
         )
-        os.chdir(repo_root_path)
-        git_repo.git.add("--all")
-        git_repo.git.commit("-m", "'Initial commit'", "--no-verify")
+        init_repo_for_root_path_factory()
         return repo_root_path
 
     return _inner
