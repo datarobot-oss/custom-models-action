@@ -367,7 +367,7 @@ class TestCustomModelVersionRoutes:
     def custom_models_version_url_factory(self, custom_model_id, paginated_url_factory):
         def _inner(page=0):
             return paginated_url_factory(
-                f"{DrClient.CUSTOM_MODELS_VERSION_ROUTE}".format(model_id=custom_model_id), page
+                f"{DrClient.CUSTOM_MODELS_VERSIONS_ROUTE}".format(model_id=custom_model_id), page
             )
 
         return _inner
