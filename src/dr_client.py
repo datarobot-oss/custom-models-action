@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 class DrClient:
 
     CUSTOM_MODELS_ROUTE = "customModels/"
-    CUSTOM_MODELS_VERSION_ROUTE = "customModels/{model_id}/versions/"
+    CUSTOM_MODELS_VERSIONS_ROUTE = "customModels/{model_id}/versions/"
+    CUSTOM_MODELS_VERSION_ROUTE = "customModels/{model_id}/versions/{model_ver_id}/"
     CUSTOM_MODELS_TEST_ROUTE = "customModelTests/"
     DATASETS_ROUTE = "datasets/"
     DATASET_UPLOAD_ROUTE = DATASETS_ROUTE + "fromFile/"
@@ -166,8 +167,27 @@ class DrClient:
     def fetch_custom_model_versions(self, custom_model_id, **kwargs):
         logger.debug(f"Fetching custom model versions for model '{custom_model_id}' ...")
         return self._paginated_fetch(
-            self.CUSTOM_MODELS_VERSION_ROUTE.format(model_id=custom_model_id), **kwargs
+            self.CUSTOM_MODELS_VERSIONS_ROUTE.format(model_id=custom_model_id), **kwargs
         )
+
+    def fetch_custom_model_version(self, custom_model_id, custom_model_version_id):
+        logger.debug(
+            f"Fetching custom model version '{custom_model_version_id}' "
+            f"for model '{custom_model_id}' ..."
+        )
+        url = self.CUSTOM_MODELS_VERSION_ROUTE.format(
+            model_id=custom_model_id, model_ver_id=custom_model_version_id
+        )
+        response = self._http_requester.get(url)
+        if response != 200:
+            raise DataRobotClientError(
+                f"Failed to get custom model version {custom_model_version_id} "
+                f"of model {custom_model_id}. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        return response.json()
 
     def fetch_custom_model_latest_version_by_git_model_id(self, git_model_id):
         logger.debug(f"Fetching custom model versions for git model '{git_model_id}' ...")
@@ -211,7 +231,7 @@ class DrClient:
             mp = MultipartEncoder(fields=payload)
             headers = {"Content-Type": mp.content_type}
 
-            url = self.CUSTOM_MODELS_VERSION_ROUTE.format(model_id=custom_model_id)
+            url = self.CUSTOM_MODELS_VERSIONS_ROUTE.format(model_id=custom_model_id)
             if from_latest:
                 response = self._http_requester.patch(url, data=mp, headers=headers)
             else:

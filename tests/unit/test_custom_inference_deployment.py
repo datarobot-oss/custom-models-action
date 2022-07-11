@@ -7,6 +7,7 @@ from bson import ObjectId
 from mock import patch
 from mock import PropertyMock
 
+from common.data_types import DataRobotDeployment
 from common.data_types import DataRobotModel
 from common.exceptions import AssociatedModelNotFound
 from common.exceptions import AssociatedModelVersionNotFound
@@ -14,6 +15,7 @@ from common.exceptions import DeploymentMetadataAlreadyExists
 from common.exceptions import NoValidAncestor
 from custom_inference_deployment import CustomInferenceDeployment
 from custom_inference_model import CustomInferenceModelBase
+from dr_client import DrClient
 from schema_validator import DeploymentSchema, ModelSchema, SharedSchema
 from tests.unit.conftest import write_to_file
 
@@ -130,6 +132,109 @@ class TestCustomInferenceDeployment:
             num_multi_deployments + num_single_deployments
         )
 
+    @pytest.fixture
+    def mock_datarobot_deployments(self):
+        return [
+            {"git_datarobot_deployment_id": "id-1"},
+            {"git_datarobot_deployment_id": "id-2"},
+        ]
+
+    def test_deployments_fetching_with_no_associated_dr_model_failure(
+        self, options, mock_datarobot_deployments
+    ):
+        with self._mock_datarobot_deployments_with_associated_models(
+            mock_datarobot_deployments, with_dr_deployments=True, with_associated_dr_models=False
+        ):
+            custom_inference_deployment = CustomInferenceDeployment(options)
+            with pytest.raises(AssociatedModelNotFound):
+                custom_inference_deployment._fetch_deployments_from_datarobot()
+
+    @contextlib.contextmanager
+    def _mock_datarobot_deployments_with_associated_models(
+        self,
+        deployments_metadata,
+        main_branch_sha=None,
+        with_dr_deployments=True,
+        with_associated_dr_models=True,
+        with_latest_dr_model_version=True,
+    ):
+        datarobot_deployments = []
+        datarobot_models_by_model_id = {}
+        if with_dr_deployments:
+            for deployment_metadata in deployments_metadata:
+                datarobot_model_id = str(ObjectId())
+                datarobot_model_version_id = str(ObjectId())
+                if with_associated_dr_models:
+                    latest_version = (
+                        {
+                            "id": datarobot_model_version_id,
+                            "gitModelVersion": {"gitMainBranchSha": main_branch_sha},
+                        }
+                        if with_latest_dr_model_version
+                        else None
+                    )
+                    datarobot_models_by_model_id[datarobot_model_id] = DataRobotModel(
+                        model={"id": datarobot_model_id},
+                        latest_version=latest_version,
+                    )
+
+                # DataRobot Deployments
+                datarobot_deployments.append(
+                    {
+                        "gitDeploymentId": deployment_metadata["git_datarobot_deployment_id"],
+                        "model": {
+                            "customModelImage": {
+                                "customModelId": datarobot_model_id,
+                                "customModelVersionId": datarobot_model_version_id,
+                            }
+                        },
+                    }
+                )
+
+        with patch.object(
+            CustomInferenceModelBase,
+            "datarobot_model_by_id",
+            side_effect=lambda model_id: datarobot_models_by_model_id.get(model_id),
+        ), patch.object(DrClient, "fetch_deployments", return_value=datarobot_deployments):
+            yield
+
+    def test_deployments_fetching_with_no_dr_latest_model_version_failure(
+        self, options, mock_datarobot_deployments
+    ):
+        with self._mock_datarobot_deployments_with_associated_models(
+            mock_datarobot_deployments,
+            with_dr_deployments=True,
+            with_associated_dr_models=True,
+            with_latest_dr_model_version=False,
+        ):
+            custom_inference_deployment = CustomInferenceDeployment(options)
+            with pytest.raises(AssociatedModelVersionNotFound):
+                custom_inference_deployment._fetch_deployments_from_datarobot()
+
+    @contextlib.contextmanager
+    def _mock_repo_with_datarobot_models(
+        self,
+        deployments_factory,
+        git_repo,
+        init_repo_for_root_path_factory,
+        with_dr_deployments=True,
+        with_associated_dr_models=True,
+        with_latest_dr_model_version=True,
+        with_main_branch_sha=True,
+    ):
+        deployments_metadata, _ = deployments_factory()
+        init_repo_for_root_path_factory()
+
+        main_branch_sha = git_repo.head.commit.hexsha if with_main_branch_sha else None
+        with self._mock_datarobot_deployments_with_associated_models(
+            deployments_metadata,
+            main_branch_sha,
+            with_dr_deployments,
+            with_associated_dr_models,
+            with_latest_dr_model_version,
+        ):
+            yield
+
     def test_deployments_integrity_validation_no_pinned_sha_success(
         self,
         options,
@@ -143,54 +248,8 @@ class TestCustomInferenceDeployment:
         ):
             custom_inference_deployment = CustomInferenceDeployment(options)
             custom_inference_deployment._scan_and_load_deployments_metadata()
+            custom_inference_deployment._fetch_deployments_from_datarobot()
             custom_inference_deployment._validate_deployments_integrity()
-
-    @contextlib.contextmanager
-    def _mock_repo_with_datarobot_models(
-        self,
-        deployments_factory,
-        git_repo,
-        init_repo_for_root_path_factory,
-        with_dr_deployments=True,
-        with_associated_dr_models=True,
-        with_latest_dr_model_version=True,
-        with_main_branch_sha=True,
-    ):
-        deployments_metadata, models_metadata = deployments_factory()
-        init_repo_for_root_path_factory()
-
-        datarobot_deployments = {}
-        datarobot_models_by_model_id = {}
-        if with_dr_deployments:
-            for deployment_metadata, model_metadata in zip(deployments_metadata, models_metadata):
-
-                # DataRobot Deployments
-                git_deployment_id = deployment_metadata["git_datarobot_deployment_id"]
-                datarobot_model_id = str(ObjectId())
-                datarobot_deployments[git_deployment_id] = {
-                    "model": {"customModelImage": {"customModelId": datarobot_model_id}}
-                }
-
-                if with_associated_dr_models:
-                    # DataRobot Models by ID
-                    main_branch_sha = git_repo.head.commit.hexsha if with_main_branch_sha else None
-                    datarobot_models_by_model_id[datarobot_model_id] = DataRobotModel(
-                        model={"id": datarobot_model_id},
-                        latest_version={"gitModelVersion": {"gitMainBranchSha": main_branch_sha}}
-                        if with_latest_dr_model_version
-                        else None,
-                    )
-
-        with patch.object(
-            CustomInferenceModelBase,
-            "datarobot_model_by_id",
-            side_effect=lambda model_id: datarobot_models_by_model_id.get(model_id),
-        ), patch.object(
-            CustomInferenceDeployment,
-            "datarobot_deployments",
-            new_callable=PropertyMock(return_value=datarobot_deployments),
-        ):
-            yield
 
     def test_deployments_integrity_validation_no_dr_deployments(
         self,
@@ -208,45 +267,8 @@ class TestCustomInferenceDeployment:
         ):
             custom_inference_deployment = CustomInferenceDeployment(options)
             custom_inference_deployment._scan_and_load_deployments_metadata()
+            custom_inference_deployment._fetch_deployments_from_datarobot()
             custom_inference_deployment._validate_deployments_integrity()
-
-    def test_deployments_integrity_validation_no_associated_dr_model_failure(
-        self,
-        options,
-        repo_root_path,
-        deployments_factory,
-        git_repo,
-        init_repo_for_root_path_factory,
-    ):
-        with self._mock_repo_with_datarobot_models(
-            deployments_factory,
-            git_repo,
-            init_repo_for_root_path_factory,
-            with_associated_dr_models=False,
-        ):
-            custom_inference_deployment = CustomInferenceDeployment(options)
-            custom_inference_deployment._scan_and_load_deployments_metadata()
-            with pytest.raises(AssociatedModelNotFound):
-                custom_inference_deployment._validate_deployments_integrity()
-
-    def test_deployments_integrity_validation_no_dr_latest_model_version_failure(
-        self,
-        options,
-        repo_root_path,
-        deployments_factory,
-        git_repo,
-        init_repo_for_root_path_factory,
-    ):
-        with self._mock_repo_with_datarobot_models(
-            deployments_factory,
-            git_repo,
-            init_repo_for_root_path_factory,
-            with_latest_dr_model_version=False,
-        ):
-            custom_inference_deployment = CustomInferenceDeployment(options)
-            custom_inference_deployment._scan_and_load_deployments_metadata()
-            with pytest.raises(AssociatedModelVersionNotFound):
-                custom_inference_deployment._validate_deployments_integrity()
 
     def test_deployments_integrity_validation_no_main_branch_sha_failure(
         self,
@@ -264,5 +286,6 @@ class TestCustomInferenceDeployment:
         ):
             custom_inference_deployment = CustomInferenceDeployment(options)
             custom_inference_deployment._scan_and_load_deployments_metadata()
+            custom_inference_deployment._fetch_deployments_from_datarobot()
             with pytest.raises(NoValidAncestor):
                 custom_inference_deployment._validate_deployments_integrity()

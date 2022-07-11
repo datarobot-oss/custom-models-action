@@ -436,8 +436,6 @@ class ModelSchema(SharedSchema):
 class DeploymentSchema(SharedSchema):
     MULTI_DEPLOYMENTS_KEY = "datarobot_deployments"
     DEPLOYMENT_ID_KEY = "git_datarobot_deployment_id"
-    MODEL_SHA_KEY = "model_sha"
-    LATEST_SHA_VALUE = "latest"
 
     PREDICTION_ENVIRONMENT_KEY = "prediction_environment"  # Optional
     ADDITIONAL_METADATA_KEY = "additional_metadata"  # Optional
@@ -474,10 +472,6 @@ class DeploymentSchema(SharedSchema):
         {
             DEPLOYMENT_ID_KEY: And(str, len),
             SharedSchema.MODEL_ID_KEY: And(str, len),
-            # If not provided, the 'latest' is assumed
-            Optional(MODEL_SHA_KEY, default=LATEST_SHA_VALUE): And(
-                str, lambda sha: len(sha) == 40 or sha == DeploymentSchema.LATEST_SHA_VALUE
-            ),
             # fromCustomModel + fromModelPackage
             Optional(PREDICTION_ENVIRONMENT_KEY): And(str, lambda i: ObjectId.is_valid(i)),
             Optional(SharedSchema.SETTINGS_SECTION_KEY): {
