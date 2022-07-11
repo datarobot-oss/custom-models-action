@@ -81,6 +81,8 @@ class GitTool:
 
     def is_ancestor_of(self, ancestor_commit_sha, top_commit_sha):
         try:
+            if not (ancestor_commit_sha and top_commit_sha):
+                raise ValueError("Invalid None input arguments.")
             ancestor_commit = self.repo.commit(ancestor_commit_sha)
             top_commit = self.repo.commit(top_commit_sha)
             return self.repo.is_ancestor(ancestor_commit, top_commit)

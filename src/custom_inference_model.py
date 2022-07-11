@@ -105,6 +105,7 @@ class CustomInferenceModelBase(ABC):
         self._repo = GitTool(self.options.root_dir)
         self._models_info = []
         self._datarobot_models = {}
+        self._datarobot_models_by_id = {}
         self._dr_client = DrClient(
             self.options.webserver,
             self.options.api_token,
@@ -145,6 +146,9 @@ class CustomInferenceModelBase(ABC):
     @property
     def datarobot_models(self):
         return self._datarobot_models
+
+    def datarobot_model_by_id(self, model_id):
+        return self._datarobot_models_by_id.get(model_id)
 
     def run(self):
         """
@@ -252,16 +256,23 @@ class CustomInferenceModelBase(ABC):
         for custom_model in custom_inference_models:
             git_model_id = custom_model.get("gitModelId")
             if git_model_id:
+                datarobot_model_id = custom_model["id"]
                 model_versions = self._dr_client.fetch_custom_model_versions(
-                    custom_model["id"], json={"limit": 1}
+                    datarobot_model_id, json={"limit": 1}
                 )
                 latest_version = model_versions[0] if model_versions else None
                 if not latest_version:
                     logger.warning(
                         "Model exists without a version! git_model_id: "
-                        f"{git_model_id}, custom_model_id: {custom_model['id']}"
+                        f"{git_model_id}, custom_model_id: {datarobot_model_id}"
                     )
-                self.datarobot_models[git_model_id] = DataRobotModel(custom_model, latest_version)
+                datarobot_model = DataRobotModel(custom_model, latest_version)
+                self.datarobot_models[git_model_id] = datarobot_model
+                self._datarobot_models_by_id[datarobot_model_id] = datarobot_model
+
+    def _get_latest_provisioned_model_git_version(self, model_info):
+        latest_version = self.datarobot_models[model_info.git_model_id].latest_version
+        return latest_version["gitModelVersion"]
 
     @abstractmethod
     def _run(self):
@@ -493,10 +504,6 @@ class CustomInferenceModel(CustomInferenceModelBase):
                             if relative_path == item["filePath"]
                         ]
                     )
-
-    def _get_latest_provisioned_model_git_version(self, model_info):
-        latest_version = self.datarobot_models[model_info.git_model_id].latest_version
-        return latest_version["gitModelVersion"]
 
     def _apply_datarobot_actions_for_affected_models(self):
         logger.info("Apply DataRobot actions for affected models ...")
