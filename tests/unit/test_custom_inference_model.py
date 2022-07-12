@@ -101,7 +101,7 @@ class TestCustomInferenceModel:
         # Change 1 - one common module
         make_a_change_and_commit(git_repo, [str(common_filepath)], 1)
 
-        models_info = custom_inference_model.models_info
+        models_info = list(custom_inference_model.models_info.values())
         for model_index in range(num_models):
             model_main_program_filepath = models_info[model_index].main_program_filepath()
             make_a_change_and_commit(git_repo, [model_main_program_filepath], 2 + model_index)
@@ -120,7 +120,7 @@ class TestCustomInferenceModel:
             ):
                 custom_inference_model._lookup_affected_models_by_the_current_action()
 
-            models_info = custom_inference_model.models_info
+            models_info = list(custom_inference_model.models_info.values())
             assert (
                 len([m_info for m_info in models_info if m_info.is_affected_by_commit])
                 == num_models
@@ -170,7 +170,9 @@ class TestCustomInferenceModelDeletion:
         ) as models_info_property, patch.object(
             ModelInfo, "git_model_id", new_callable=PropertyMock
         ) as model_info_git_model_id:
-            models_info_property.return_value = ModelInfo("yaml-path", "model-path", None)
+            models_info_property.return_value = {
+                git_model_id: ModelInfo("yaml-path", "model-path", None)
+            }
             model_info_git_model_id.return_value = git_model_id
             yield
 
@@ -293,12 +295,12 @@ class TestGlobPatterns:
 
         assert len(custom_inference_model.models_info) == num_models
 
-        for index in range(num_models):
-            model_path = custom_inference_model.models_info[index].model_path
+        for _, model_info in custom_inference_model.models_info.items():
+            model_path = model_info.model_path
             readme_file_path = model_path / "README.md"
             assert readme_file_path.is_file()
 
-            model_file_paths = custom_inference_model.models_info[index].model_file_paths
+            model_file_paths = model_info.model_file_paths
             assert excluded_src_path not in model_file_paths
 
             if with_include_glob:

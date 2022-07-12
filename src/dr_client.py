@@ -10,6 +10,7 @@ from common.exceptions import IllegalModelDeletion
 from common.http_requester import HttpRequester
 from common.string_util import StringUtil
 from dr_api_attrs import DrApiAttrs
+from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 
 logger = logging.getLogger(__name__)
@@ -23,8 +24,12 @@ class DrClient:
     CUSTOM_MODELS_TEST_ROUTE = "customModelTests/"
     DATASETS_ROUTE = "datasets/"
     DATASET_UPLOAD_ROUTE = DATASETS_ROUTE + "fromFile/"
-    CUSTOM_MODEL_DEPLOYMENTS = "/customModelDeployments/"
+    CUSTOM_MODEL_DEPLOYMENTS_ROUTE = "customModelDeployments/"
+    MODEL_PACKAGES_CREATE_ROUTE = "modelPackages/fromCustomModelVersion/"
     DEPLOYMENTS_ROUTE = "deployments/"
+    DEPLOYMENTS_CREATE_ROUTE = "deployments/fromModelPackage/"
+    DEPLOYMENT_SETTINGS_ROUTE = "deployments/{deployment_id}/settings/"
+    PREDICTION_ENVIRONMENTS_ROUTE = "predictionEnvironments/?supportedModelFormats=customModel"
 
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
@@ -114,7 +119,7 @@ class DrClient:
             )
 
         custom_model_id = response.json()["id"]
-        logger.debug(f"Custom model created successfully (ID: {custom_model_id})")
+        logger.debug(f"Custom model created successfully (id: {custom_model_id})")
         return custom_model_id
 
     @staticmethod
@@ -250,7 +255,7 @@ class DrClient:
             )
 
         version_id = response.json()["id"]
-        logger.info(f"Custom model version created successfully (ID: {version_id})")
+        logger.info(f"Custom model version created successfully (id: {version_id})")
         return version_id
 
     @classmethod
@@ -366,7 +371,7 @@ class DrClient:
                         f"\nMessage: {result['message']}"
                     )
         logger.debug(
-            f"Custom model testing pass with success. Git model ID: {model_info.git_model_id}"
+            f"Custom model testing pass with success. Git model id: {model_info.git_model_id}"
         )
 
     def _post_custom_model_test_request(self, model_id, model_version_id, model_info):
@@ -492,21 +497,194 @@ class DrClient:
         location = response.headers["Location"]
         resource = self._wait_for_async_resolution(location)
         dataset_id = resource.split("/")[-2]
-        logger.debug(f"Dataset uploaded successfully (ID: {dataset_id})")
+        logger.debug(f"Dataset uploaded successfully (id: {dataset_id})")
         return dataset_id
 
     def delete_dataset(self, dataset_id):
         response = self._http_requester.delete(f"{self.DATASETS_ROUTE}{dataset_id}/")
         if response.status_code != 204:
-            raise DataRobotClientError(f"Failed deleting dataset ID '{dataset_id}'")
+            raise DataRobotClientError(f"Failed deleting dataset id '{dataset_id}'")
 
     def fetch_custom_model_deployments(self, model_ids):
         logger.debug(f"Fetching custom model deployments for model ids: '{model_ids}' ...")
 
         return self._paginated_fetch(
-            self.CUSTOM_MODEL_DEPLOYMENTS, json={"customModelIds": model_ids}
+            self.CUSTOM_MODEL_DEPLOYMENTS_ROUTE, json={"customModelIds": model_ids}
         )
 
     def fetch_deployments(self):
         logger.debug("Fetching deployments...")
         return self._paginated_fetch(self.DEPLOYMENTS_ROUTE)
+
+    def create_deployment(self, custom_model_version, deployment_info):
+        model_package = self._create_model_package_from_custom_model_version(
+            custom_model_version, deployment_info
+        )
+        deployment_id = self._create_deployment_from_model_package(model_package, deployment_info)
+        deployment = self._update_deployment_settings(deployment_id, deployment_info)
+        return deployment
+
+    def _create_model_package_from_custom_model_version(
+        self, custom_model_version, deployment_info
+    ):
+        payload = {"customModelVersionId": custom_model_version["id"]}
+        response = self._http_requester.post(self.MODEL_PACKAGES_CREATE_ROUTE, json=payload)
+        if response.status_code != 201:
+            raise DataRobotClientError(
+                "Failed creating model package from custom model version. "
+                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"custom model version id: {custom_model_version['id']}, "
+                f"Response status: {response.status_code}, "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        return response.json()
+
+    def _create_deployment_from_model_package(self, model_package, deployment_info):
+        label = DeploymentSchema.get_value(
+            deployment_info.metadata,
+            DeploymentSchema.SETTINGS_SECTION_KEY,
+            DeploymentSchema.LABEL_KEY,
+        )
+        if not label:
+            label = f"{model_package['target']['name']} Predictions [GitHub CI/CD]"
+
+        payload = {"modelPackageId": model_package["id"], "label": label}
+
+        prediction_environment_name = DeploymentSchema.get_value(
+            deployment_info.metadata, DeploymentSchema.PREDICTION_ENVIRONMENT_NAME_KEY
+        )
+        prediction_envs = self._fetch_prediction_environments(prediction_environment_name)
+        if not prediction_envs:
+            raise DataRobotClientError(
+                "Prediction environment is missing. "
+                "Make sure to setup at least one valid prediction environment. "
+                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"Model package id: {model_package['id']}."
+            )
+        payload["predictionEnvironmentId"] = prediction_envs[0]["id"]
+
+        importance = DeploymentSchema.get_value(
+            deployment_info.metadata,
+            DeploymentSchema.SETTINGS_SECTION_KEY,
+            DeploymentSchema.IMPORTANCE_KEY,
+        )
+        if importance:
+            payload["importance"] = importance
+
+        response = self._http_requester.post(self.DEPLOYMENTS_CREATE_ROUTE, json=payload)
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                "Failed creating a deployment from model package."
+                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"Model package id: {model_package['id']}, "
+                f"Response status: {response.status_code}, "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        return response.json()["id"]
+
+    def _update_deployment_settings(self, deployment_id, deployment_info):
+        payload = {}
+        association_id = DeploymentSchema.get_value(
+            deployment_info.metadata,
+            DeploymentSchema.SETTINGS_SECTION_KEY,
+            DeploymentSchema.ASSOCIATION_ID_KEY,
+        )
+        if association_id:
+            # NOTE: this is a simplified alternative, which supports a single association ID
+            payload["associationId"] = {
+                "requiredInPredictionRequests": True,
+                "columnNames": [association_id],
+            }
+
+        target_drift = DeploymentSchema.get_value(
+            deployment_info.metadata,
+            DeploymentSchema.SETTINGS_SECTION_KEY,
+            DeploymentSchema.ENABLE_TARGET_DRIFT_KEY,
+        )
+        if target_drift is not None:
+            payload["targetDrift"] = {"enabled": target_drift}
+
+        feature_drift = DeploymentSchema.get_value(
+            deployment_info.metadata,
+            DeploymentSchema.SETTINGS_SECTION_KEY,
+            DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY,
+        )
+        if feature_drift is not None:
+            payload["featureDrift"] = {"enabled": feature_drift}
+
+        segmented_analysis = DeploymentSchema.get_value(
+            deployment_info.metadata,
+            DeploymentSchema.SETTINGS_SECTION_KEY,
+            DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY,
+        )
+        if segmented_analysis is not None:
+            payload["segmentAnalysis"] = {"enabled": segmented_analysis}
+            attributes = DeploymentSchema.get_value(
+                deployment_info.metadata,
+                DeploymentSchema.SETTINGS_SECTION_KEY,
+                DeploymentSchema.SEGMENT_ANALYSIS_ATTRIBUTES_KEY,
+            )
+            if attributes:
+                payload["segmentAnalysis"]["attributes"] = attributes
+
+        predictions_data_collection = DeploymentSchema.get_value(
+            deployment_info.metadata,
+            DeploymentSchema.SETTINGS_SECTION_KEY,
+            DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY,
+        )
+        if predictions_data_collection is not None:
+            payload["predictionsDataCollection"] = {"enabled": predictions_data_collection}
+
+        challenger_models = DeploymentSchema.get_value(
+            deployment_info.metadata,
+            DeploymentSchema.SETTINGS_SECTION_KEY,
+            DeploymentSchema.CHALLENGER_MODELS,
+        )
+        if challenger_models is not None:
+            payload["challengerModels"] = challenger_models
+
+        response = self._http_requester.patch(
+            self.DEPLOYMENT_SETTINGS_ROUTE.format(deployment_id=deployment_id), json=payload
+        )
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                "Failed to update deployment settings."
+                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"Deployment id: {deployment_id}, "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        location = self._wait_for_async_resolution(response.headers["Location"])
+        response = self._http_requester.get(location, raw=True)
+        return response.json()
+
+    def delete_deployment_by_id(self, deployment_id):
+        sub_path = f"{self.DEPLOYMENTS_ROUTE}{deployment_id}/"
+        response = self._http_requester.delete(sub_path)
+        if response.status_code != 204:
+            raise DataRobotClientError(
+                f"Failed to delete deployment. Error: {response.text}.",
+                code=response.status_code,
+            )
+
+    def delete_deployment_by_user_id(self, git_deployment_id):
+        deployments = self.fetch_deployments()
+        try:
+            test_deployment = next(
+                d for d in deployments if d.get("gitDeploymentId") == git_deployment_id
+            )
+        except StopIteration:
+            raise IllegalModelDeletion(
+                f"Given deployment does not exist. git_deployment_id: {git_deployment_id}."
+            )
+        self.delete_deployment_by_id(test_deployment["id"])
+
+    def _fetch_prediction_environments(self, name=None):
+        url = self.PREDICTION_ENVIRONMENTS_ROUTE
+        if name:
+            url = url + f"&search={name}"
+
+        return self._paginated_fetch(url)

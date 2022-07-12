@@ -15,7 +15,10 @@ class HttpRequester(object):
         return self._base_url
 
     def _url(self, endpoint_sub_url):
-        return f"{self._base_url}{StringUtil.slash_suffix(endpoint_sub_url)}"
+        if "?" in endpoint_sub_url:
+            return f"{self._base_url}{endpoint_sub_url}"
+        else:
+            return f"{self._base_url}{StringUtil.slash_suffix(endpoint_sub_url)}"
 
     def get(self, endpoint_sub_url, raw=False, **kwargs):
         url = endpoint_sub_url if raw else self._url(endpoint_sub_url)
