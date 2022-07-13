@@ -77,9 +77,10 @@ def upload_dataset_for_testing(dr_client, model_metadata):
         dr_client.delete_dataset(dataset_id)
 
 
+# NOTE: it was rather better to use the pytest.mark.usefixture for 'build_repo_for_testing'
+# but, apparently it cannot be used with fixtures.
 @pytest.fixture
-@pytest.mark.usefixtures("build_repo_for_testing")
-def model_metadata_yaml_file(repo_root_path, git_repo):
+def model_metadata_yaml_file(build_repo_for_testing, repo_root_path, git_repo):
     model_yaml_file = next(repo_root_path.rglob("**/model.yaml"))
     with open(model_yaml_file) as f:
         yaml_content = yaml.safe_load(f)

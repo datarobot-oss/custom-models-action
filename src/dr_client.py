@@ -549,7 +549,11 @@ class DrClient:
         if not label:
             label = f"{model_package['target']['name']} Predictions [GitHub CI/CD]"
 
-        payload = {"modelPackageId": model_package["id"], "label": label}
+        payload = {
+            "gitDeploymentId": deployment_info.git_deployment_id,
+            "modelPackageId": model_package["id"],
+            "label": label,
+        }
 
         prediction_environment_name = DeploymentSchema.get_value(
             deployment_info.metadata, DeploymentSchema.PREDICTION_ENVIRONMENT_NAME_KEY

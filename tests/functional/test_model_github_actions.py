@@ -33,7 +33,7 @@ def cleanup(dr_client, model_metadata):
 
 
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible")
-@pytest.mark.usefixtures("build_repo_for_testing", "cleanup", "upload_dataset_for_testing")
+@pytest.mark.usefixtures("build_repo_for_testing", "upload_dataset_for_testing")
 class TestModelGitHubActions:
     class Change(Enum):
         INCREASE_MEMORY = 1
@@ -41,6 +41,7 @@ class TestModelGitHubActions:
         REMOVE_FILE = 3
         DELETE_MODEL = 4
 
+    @pytest.mark.usefixtures("cleanup")
     def test_e2e_pull_request_event_with_multiple_changes(
         self,
         dr_client,
@@ -157,6 +158,7 @@ class TestModelGitHubActions:
 
         return new_memory
 
+    @pytest.mark.usefixtures("cleanup")
     def test_e2e_pull_request_event_with_model_deletion(
         self,
         dr_client,
@@ -247,6 +249,7 @@ class TestModelGitHubActions:
                 m.get("gitModelId") != model_metadata[ModelSchema.MODEL_ID_KEY] for m in models
             )
 
+    @pytest.mark.usefixtures("cleanup")
     def test_e2e_push_event_with_multiple_changes(
         self, repo_root_path, git_repo, model_metadata_yaml_file, main_branch_name
     ):
