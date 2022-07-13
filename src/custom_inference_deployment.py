@@ -59,8 +59,8 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         self._fetch_models_from_datarobot()
         self._fetch_deployments_from_datarobot()
         self._validate_deployments_integrity()
-        # if self.event_name == "push":
-        #     self._create_or_change_deployments()
+        if self.event_name == "push":
+            self._create_or_change_deployments()
         #     self._deplete_deployments()
 
     def _scan_and_load_deployments_metadata(self):
@@ -84,7 +84,7 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             )
 
         logger.info(
-            f"Adding new deployment metadata. Git model ID: {deployment_info.git_deployment_id}. "
+            f"Adding new deployment metadata. Git model id: {deployment_info.git_deployment_id}. "
             f"Deployment metadata yaml path: {deployment_info.yaml_filepath}."
         )
         self._deployments_info[deployment_info.git_deployment_id] = deployment_info
@@ -106,12 +106,12 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         if not associated_datarobot_model:
             raise AssociatedModelNotFound(
                 "Deployment is broken due to a missing associated datarobot model.\n"
-                f"Git deployment ID: {git_deployment_id}, model ID: {model_id}."
+                f"Git deployment id: {git_deployment_id}, model id: {model_id}."
             )
         if not associated_datarobot_model.latest_version:
             raise AssociatedModelVersionNotFound(
                 "Deployment is broken due to a missing latest datarobot model version. "
-                f"Git deployment ID: {git_deployment_id}, model ID: {model_id}."
+                f"Git deployment id: {git_deployment_id}, model id: {model_id}."
             )
 
         datarobot_model_version_id = datarobot_deployment["model"]["customModelImage"][
@@ -130,18 +130,62 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         logger.info("Validating deployments integrity ...")
         for git_deployment_id, deployment_info in self.deployments_info.items():
             datarobot_deployment = self.datarobot_deployments.get(git_deployment_id)
-            if not datarobot_deployment:
-                # Will be created in the next stage
-                continue
+            if datarobot_deployment:
+                model_version = datarobot_deployment.model_version
+            else:
+                # 1. Verify existing and valid local custom model that is associated with the
+                #    deployment.
+                model_info = self.models_info.get(deployment_info.git_model_id)
+                if not model_info:
+                    raise AssociatedModelNotFound(
+                        "Data integrity in local repository is broken. "
+                        "There's no associated git model definition for given deployment. "
+                        f"Git deployment id: {git_deployment_id}, "
+                        f"git model id: {deployment_info.git_model_id}."
+                    )
 
-            # Validate that the associated model's version SHA is an ancestor in the current tree
-            git_main_branch_sha = datarobot_deployment.model_version["gitModelVersion"][
-                "gitMainBranchSha"
-            ]
+                # 2. Validate that the associated model was already created in DataRobot
+                custom_model = self.datarobot_models.get(deployment_info.git_model_id)
+                if not custom_model:
+                    raise AssociatedModelNotFound(
+                        "Unexpected missing DataRobot model. "
+                        f"Git deployment id: {git_deployment_id}, "
+                        f"git model id: {deployment_info.git_model_id}."
+                    )
+
+                # 3. Validate at least one version
+                if not custom_model.latest_version:
+                    raise AssociatedModelVersionNotFound(
+                        "Unexpected missing DataRobot model version. A custom model with at least "
+                        "a single version must be created upfront. "
+                        f"Git deployment id: {git_deployment_id}, "
+                        f"git model id: {deployment_info.git_model_id}, "
+                        f"DataRobot model id: {custom_model.model['id']}."
+                    )
+                model_version = custom_model.latest_version
+
+            # 4. Validate that the associated model's version SHA is an ancestor in the current tree
+            git_main_branch_sha = model_version["gitModelVersion"]["mainBranchCommitSha"]
             if not self._repo.is_ancestor_of(git_main_branch_sha, "HEAD"):
                 raise NoValidAncestor(
                     "The associated model's version git SHA is not an ancestor in the current "
                     "branch. "
-                    f"Git deployment ID: {git_deployment_id}, "
+                    f"Git deployment id: {git_deployment_id}, "
                     f"Pinned sha: {git_main_branch_sha}."
                 )
+
+    def _create_or_change_deployments(self):
+        for git_deployment_id, deployment_info in self.deployments_info.items():
+            datarobot_deployment = self.datarobot_deployments.get(git_deployment_id)
+            if not datarobot_deployment:
+                logger.info("Creating a deployment ...")
+                self._create_deployment(deployment_info)
+            else:
+                logger.info("[TODO] Updating a deployment ...")
+                # 1. Check if a model version needs to be replaced
+                # 2. Check if settings needs to be updated
+
+    def _create_deployment(self, deployment_info):
+        custom_model = self.datarobot_models.get(deployment_info.git_model_id)
+        deployment = self._dr_client.create_deployment(custom_model.latest_version, deployment_info)
+        logger.info(f"A new deployment was created, id: {deployment['id']}")

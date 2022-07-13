@@ -1,99 +1,15 @@
 from enum import Enum
-from pathlib import Path
-from tempfile import TemporaryDirectory
-import contextlib
-import logging
 import os
-import shutil
 
-from bson import ObjectId
-from git import Repo
 import pytest
 import yaml
 
 from common.convertors import MemoryConvertor
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
-from dr_client import DrClient
-from main import main
 from schema_validator import ModelSchema
-
-
-def webserver_accessible():
-    webserver = os.environ.get("DATAROBOT_WEBSERVER")
-    api_token = os.environ.get("DATAROBOT_API_TOKEN")
-    if webserver and api_token:
-        return DrClient(webserver, api_token, verify_cert=False).is_accessible()
-    return False
-
-
-@contextlib.contextmanager
-def env_set(env_key, env_value):
-    does_exist = env_key in os.environ
-    if does_exist:
-        old_value = os.environ[env_key]
-    os.environ[env_key] = env_value
-    yield
-    if does_exist:
-        os.environ[env_key] = old_value
-
-
-@pytest.fixture
-def repo_root_path():
-    with TemporaryDirectory() as repo_tree:
-        path = Path(repo_tree)
-        yield path
-
-
-@pytest.fixture
-def git_repo(repo_root_path):
-    repo = Repo.init(repo_root_path)
-    repo.config_writer().set_value("user", "name", "functional-test-user").release()
-    repo.config_writer().set_value("user", "email", "functional-test@company.com").release()
-    logging.basicConfig()
-    logging.root.setLevel(logging.INFO)
-    type(repo.git).GIT_PYTHON_TRACE = "full"
-    return repo
-
-
-@pytest.fixture
-def build_repo_for_testing(repo_root_path, git_repo):
-    # 1. Copy models from source tree
-    models_src_root_dir = Path(__file__).parent / ".." / "models"
-    shutil.copytree(models_src_root_dir, repo_root_path / models_src_root_dir.name)
-
-    # 2. Add files to repo
-    os.chdir(repo_root_path)
-    git_repo.git.add("--all")
-    git_repo.git.commit("-m", "Initial commit", "--no-verify")
-
-
-@pytest.fixture
-@pytest.mark.usefixtures("build_repo_for_testing")
-def model_metadata_yaml_file(repo_root_path, git_repo):
-    model_yaml_file = next(repo_root_path.rglob("**/model.yaml"))
-    with open(model_yaml_file) as f:
-        yaml_content = yaml.safe_load(f)
-        yaml_content[ModelSchema.MODEL_ID_KEY] = f"my-awesome-model-{str(ObjectId())}"
-
-    with open(model_yaml_file, "w") as f:
-        yaml.safe_dump(yaml_content, f)
-
-    git_repo.git.add(model_yaml_file)
-    git_repo.git.commit("--amend", "--no-edit")
-
-    return model_yaml_file
-
-
-@pytest.fixture
-def model_metadata(model_metadata_yaml_file):
-    with open(model_metadata_yaml_file) as f:
-        return yaml.safe_load(f)
-
-
-@pytest.fixture
-def main_branch_name():
-    return "master"
+from tests.functional.conftest import run_github_action
+from tests.functional.conftest import webserver_accessible
 
 
 @pytest.fixture
@@ -107,13 +23,6 @@ def merge_branch_name():
 
 
 @pytest.fixture
-def dr_client():
-    webserver = os.environ.get("DATAROBOT_WEBSERVER")
-    api_token = os.environ.get("DATAROBOT_API_TOKEN")
-    return DrClient(webserver, api_token, verify_cert=False)
-
-
-@pytest.fixture
 def cleanup(dr_client, model_metadata):
     yield
 
@@ -123,22 +32,9 @@ def cleanup(dr_client, model_metadata):
         pass
 
 
-@pytest.fixture
-def upload_dataset_for_testing(dr_client, model_metadata):
-    if ModelSchema.TEST_KEY in model_metadata:
-        test_dataset_filepath = (
-            Path(__file__).parent / ".." / "datasets" / "juniors_3_year_stats_regression_small.csv"
-        )
-        dataset_id = dr_client.upload_dataset(test_dataset_filepath)
-        model_metadata[ModelSchema.TEST_KEY][ModelSchema.TEST_DATA_KEY] = dataset_id
-
-        yield dataset_id
-        dr_client.delete_dataset(dataset_id)
-
-
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible")
 @pytest.mark.usefixtures("build_repo_for_testing", "cleanup", "upload_dataset_for_testing")
-class TestCustomInferenceModel:
+class TestModelGitHubActions:
     class Change(Enum):
         INCREASE_MEMORY = 1
         ADD_FILE = 2
@@ -200,8 +96,13 @@ class TestCustomInferenceModel:
             git_repo.git.merge(feature_branch, "--no-ff")
 
             # 7. Run GitHub pull request action
-            self._run_pull_request_action(
-                repo_root_path, git_repo, main_branch_name, merge_branch_name
+            run_github_action(
+                repo_root_path,
+                git_repo,
+                main_branch_name,
+                merge_branch_name,
+                "pull_request",
+                is_deploy=False,
             )
 
             # 8. Validation
@@ -228,7 +129,9 @@ class TestCustomInferenceModel:
         git_repo.git.add("--all")
         git_repo.git.commit("-m", "Changes from merged feature branch")
         head_commit_sha = git_repo.head.commit.hexsha
-        self._run_push_action(repo_root_path, git_repo, main_branch_name, head_commit_sha)
+        run_github_action(
+            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
+        )
 
         # 12. Validation
         cm_version = dr_client.fetch_custom_model_latest_version_by_git_model_id(
@@ -253,46 +156,6 @@ class TestCustomInferenceModel:
             yaml.safe_dump(yaml_content, f)
 
         return new_memory
-
-    @staticmethod
-    def _run_pull_request_action(repo_root_path, git_repo, main_branch_name, merge_branch_name):
-        with env_set("GITHUB_EVENT_NAME", "pull_request"), env_set(
-            "GITHUB_SHA", git_repo.commit(merge_branch_name).hexsha
-        ), env_set("GITHUB_BASE_REF", main_branch_name):
-            main(
-                [
-                    "--webserver",
-                    os.environ.get("DATAROBOT_WEBSERVER"),
-                    "--skip-cert-verification",
-                    "--api-token",
-                    os.environ.get("DATAROBOT_API_TOKEN"),
-                    "--branch",
-                    main_branch_name,
-                    "--root-dir",
-                    str(repo_root_path),
-                    "--allow-model-deletion",
-                ]
-            )
-
-    @staticmethod
-    def _run_push_action(repo_root_path, git_repo, main_branch_name, main_branch_head_sha):
-        with env_set("GITHUB_EVENT_NAME", "push"), env_set(
-            "GITHUB_SHA", git_repo.commit(main_branch_head_sha).hexsha
-        ), env_set("GITHUB_BASE_REF", main_branch_name):
-            main(
-                [
-                    "--webserver",
-                    os.environ.get("DATAROBOT_WEBSERVER"),
-                    "--skip-cert-verification",
-                    "--api-token",
-                    os.environ.get("DATAROBOT_API_TOKEN"),
-                    "--branch",
-                    main_branch_name,
-                    "--root-dir",
-                    str(repo_root_path),
-                    "--allow-model-deletion",
-                ]
-            )
 
     def test_e2e_pull_request_event_with_model_deletion(
         self,
@@ -339,8 +202,13 @@ class TestCustomInferenceModel:
             git_repo.git.merge(feature_branch, "--no-ff")
 
             # 7. Run GitHub pull request action
-            self._run_pull_request_action(
-                repo_root_path, git_repo, main_branch_name, merge_branch_name
+            run_github_action(
+                repo_root_path,
+                git_repo,
+                main_branch_name,
+                merge_branch_name,
+                "pull_request",
+                is_deploy=False,
             )
 
             # 8. Validation
@@ -367,7 +235,9 @@ class TestCustomInferenceModel:
         git_repo.git.add("--all")
         git_repo.git.commit("-m", "Changes from merged feature branch")
         head_commit_sha = git_repo.head.commit.hexsha
-        self._run_push_action(repo_root_path, git_repo, main_branch_name, head_commit_sha)
+        run_github_action(
+            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
+        )
 
         # 12. Validation. The model is actually deleted only upon merging.
         assert change == self.Change.DELETE_MODEL
@@ -389,7 +259,9 @@ class TestCustomInferenceModel:
 
             # 3. Run GitHub pull request action
             head_commit_sha = git_repo.head.commit.hexsha
-            self._run_push_action(repo_root_path, git_repo, main_branch_name, head_commit_sha)
+            run_github_action(
+                repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
+            )
 
     def test_is_accessible(self):
         assert webserver_accessible()

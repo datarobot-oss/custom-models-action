@@ -103,7 +103,7 @@ class CustomInferenceModelBase(ABC):
         self._options = options
         os.environ["GIT_PYTHON_TRACE"] = "full"
         self._repo = GitTool(self.options.root_dir)
-        self._models_info = []
+        self._models_info = {}
         self._datarobot_models = {}
         self._datarobot_models_by_id = {}
         self._dr_client = DrClient(
@@ -187,13 +187,15 @@ class CustomInferenceModelBase(ABC):
             )
             return False
 
-        num_commits = self._repo.num_commits()
-        if num_commits < 2:
-            logger.warning(
-                "Skip custom inference model action. The minimum number of commits should be 2. "
-                f"Current number is {num_commits}"
-            )
-            return False
+        if self.is_pull_request:
+            # For pull request we assume a merge branch, which contains at least 2 commits
+            num_commits = self._repo.num_commits()
+            if num_commits < 2:
+                logger.warning(
+                    "Skip custom inference model action. The minimum number of commits "
+                    f"should be 2. Current number is {num_commits}."
+                )
+                return False
         return True
 
     def _scan_and_load_models_metadata(self):
@@ -232,23 +234,17 @@ class CustomInferenceModelBase(ABC):
         return path
 
     def _add_new_model_info(self, model_info):
-        try:
-            already_exists = next(
-                m for m in self._models_info if model_info.git_model_id == m.git_model_id
-            )
+        if model_info.git_model_id in self.models_info:
             raise ModelMetadataAlreadyExists(
                 f"Model {model_info.git_model_id} already exists. "
                 f"New model yaml path: {model_info.yaml_filepath}. "
-                f"Existing model yaml path: {already_exists.yaml_filepath}."
             )
-        except StopIteration:
-            pass
 
         logger.info(
             f"Adding new model metadata. Git model ID: {model_info.git_model_id}. "
             f"Model metadata yaml path: {model_info.yaml_filepath}."
         )
-        self._models_info.append(model_info)
+        self.models_info[model_info.git_model_id] = model_info
 
     def _fetch_models_from_datarobot(self):
         logger.info("Fetching models from DataRobot ...")
@@ -317,7 +313,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
     def _collect_datarobot_model_files(self):
         logger.info("Collecting DataRobot model files ...")
-        for model_info in self.models_info:
+        for _, model_info in self.models_info.items():
             include_glob_patterns = model_info.metadata[ModelSchema.VERSION_KEY][
                 ModelSchema.INCLUDE_GLOB_KEY
             ]
@@ -417,7 +413,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def _lookup_affected_models_by_the_current_action(self):
         logger.info("Lookup affected models by the current commit ...")
 
-        for model_info in self.models_info:
+        for _, model_info in self.models_info.items():
             model_info.changed_or_new_files = []
             model_info.deleted_file_ids = []
             model_info.should_upload_all_files = self._should_upload_all_files(model_info)
@@ -464,7 +460,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
         if logger.isEnabledFor(logging.DEBUG):
             self._repo.print_pretty_log()
 
-        for model_info in self.models_info:
+        for _, model_info in self.models_info.items():
             if model_info.should_upload_all_files:
                 continue
             from_commit_sha = self._get_latest_provisioned_model_git_version(model_info)[
@@ -511,7 +507,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
         self._handle_deleted_models()
 
     def _handle_model_changes_or_creation(self):
-        for model_info in self._models_info:
+        for git_model_id, model_info in self.models_info.items():
             if model_info.is_affected_by_commit:
                 self._total_affected_models += 1
                 logger.info(f"Model '{model_info.model_path}' is affected by commit.")
@@ -525,7 +521,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
                 logger.info(
                     "Custom inference model version was successfully created. "
-                    f"git_model_id: {model_info.git_model_id}, model_id: {custom_model_id}, "
+                    f"git_model_id: {git_model_id}, model_id: {custom_model_id}, "
                     f"version_id: {version_id}"
                 )
 
@@ -607,7 +603,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
         missing_locally_id_to_git_id = {}
         for git_model_id, datarobot_model in self.datarobot_models.items():
-            if all(git_model_id != model_info.git_model_id for model_info in self._models_info):
+            if git_model_id not in self.models_info:
                 missing_locally_id_to_git_id[datarobot_model.model["id"]] = git_model_id
 
         if missing_locally_id_to_git_id:

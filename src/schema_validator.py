@@ -437,7 +437,7 @@ class DeploymentSchema(SharedSchema):
     MULTI_DEPLOYMENTS_KEY = "datarobot_deployments"
     DEPLOYMENT_ID_KEY = "git_datarobot_deployment_id"
 
-    PREDICTION_ENVIRONMENT_KEY = "prediction_environment"  # Optional
+    PREDICTION_ENVIRONMENT_NAME_KEY = "prediction_environment_name"  # Optional
     ADDITIONAL_METADATA_KEY = "additional_metadata"  # Optional
 
     # Deployment settings are optional, POST + PATCH
@@ -455,6 +455,7 @@ class DeploymentSchema(SharedSchema):
     ENABLE_FEATURE_DRIFT_KEY = "enable_feature_drift"  # Settings, Optional
     ENABLE_PREDICTIONS_COLLECTION_KEY = "enable_predictions_collection"  # Settings, Optional
     ENABLE_ACTUALS = "enable_actuals"
+    CHALLENGER_MODELS = "challenger_models"
 
     ENABLE_SEGMENT_ANALYSIS_KEY = "segment_analysis"  # Settings, Optional
     SEGMENT_ANALYSIS_ATTRIBUTES_KEY = (
@@ -473,7 +474,7 @@ class DeploymentSchema(SharedSchema):
             DEPLOYMENT_ID_KEY: And(str, len),
             SharedSchema.MODEL_ID_KEY: And(str, len),
             # fromCustomModel + fromModelPackage
-            Optional(PREDICTION_ENVIRONMENT_KEY): And(str, lambda i: ObjectId.is_valid(i)),
+            Optional(PREDICTION_ENVIRONMENT_NAME_KEY): And(str, len),
             Optional(SharedSchema.SETTINGS_SECTION_KEY): {
                 Optional(LABEL_KEY): And(str, len),  # fromModelPackage
                 Optional(ADDITIONAL_METADATA_KEY): {
@@ -491,6 +492,7 @@ class DeploymentSchema(SharedSchema):
                 Optional(ENABLE_FEATURE_DRIFT_KEY): bool,  # Update settings
                 Optional(ENABLE_PREDICTIONS_COLLECTION_KEY): bool,  # Update settings
                 Optional(ENABLE_ACTUALS): bool,  # Update settings
+                Optional(CHALLENGER_MODELS): bool,  # Update settings
                 Optional(ENABLE_SEGMENT_ANALYSIS_KEY): bool,  # Update settings
                 Optional(SEGMENT_ANALYSIS_ATTRIBUTES_KEY): And(  # Update settings
                     list, lambda l: all(len(a) > 0 for a in l)
