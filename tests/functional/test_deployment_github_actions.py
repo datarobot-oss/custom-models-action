@@ -50,23 +50,36 @@ def cleanup(dr_client, model_metadata, deployment_metadata):
         pass
 
 
-@pytest.mark.usefixtures("build_repo_for_testing", "cleanup", "upload_dataset_for_testing")
+@pytest.mark.parametrize("event_name", ["push", "pull_request"])
+@pytest.mark.usefixtures("build_repo_for_testing", "upload_dataset_for_testing")
 class TestDeploymentGitHubActions:
+    @pytest.mark.usefixtures("cleanup")
     def test_e2e_deployment_create(
         self,
+        dr_client,
         repo_root_path,
         git_repo,
         model_metadata_yaml_file,
+        deployment_metadata,
         deployment_metadata_yaml_file,
         main_branch_name,
+        event_name,
     ):
-        # 1. Create model
+        # 1. Create model just as a preparation
         head_commit_sha = git_repo.head.commit.hexsha
         run_github_action(
             repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
         )
 
-        # 2. Create deployment
+        # 2. Run a deployment github action
         run_github_action(
-            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=True
+            repo_root_path, git_repo, main_branch_name, head_commit_sha, event_name, is_deploy=True
         )
+        deployments = dr_client.fetch_deployments()
+        local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        if event_name == "push":
+            assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
+        elif event_name == "pull_request":
+            assert all(d.get("gitDeploymentId") != local_git_deployment_id for d in deployments)
+        else:
+            assert False, f"Unsupported GitHub event name: {event_name}"
