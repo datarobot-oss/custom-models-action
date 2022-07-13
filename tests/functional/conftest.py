@@ -10,6 +10,7 @@ import yaml
 from bson import ObjectId
 from git import Repo
 
+from common.convertors import MemoryConvertor
 from dr_client import DrClient
 from main import main
 from schema_validator import ModelSchema
@@ -111,6 +112,23 @@ def dr_client():
     webserver = os.environ.get("DATAROBOT_WEBSERVER")
     api_token = os.environ.get("DATAROBOT_API_TOKEN")
     return DrClient(webserver, api_token, verify_cert=False)
+
+
+def increase_model_memory_by_1mb(model_yaml_file):
+    with open(model_yaml_file) as f:
+        yaml_content = yaml.safe_load(f)
+        memory = ModelSchema.get_value(
+            yaml_content, ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY
+        )
+        memory = memory if memory else "256Mi"
+        num_part, unit = MemoryConvertor._extract_unit_fields(memory)
+        new_memory = f"{num_part+1}{unit}"
+        yaml_content[ModelSchema.VERSION_KEY][ModelSchema.MEMORY_KEY] = new_memory
+
+    with open(model_yaml_file, "w") as f:
+        yaml.safe_dump(yaml_content, f)
+
+    return new_memory
 
 
 def run_github_action(

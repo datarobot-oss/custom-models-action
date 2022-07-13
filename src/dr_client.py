@@ -30,6 +30,8 @@ class DrClient:
     DEPLOYMENTS_CREATE_ROUTE = "deployments/fromModelPackage/"
     DEPLOYMENT_SETTINGS_ROUTE = "deployments/{deployment_id}/settings/"
     PREDICTION_ENVIRONMENTS_ROUTE = "predictionEnvironments/?supportedModelFormats=customModel"
+    MODEL_REPLACEMENT_ROUTE = "deployments/{deployment_id}/model/"
+    MODEL_REPLACEMENT_VALIDATION_ROUTE = MODEL_REPLACEMENT_ROUTE + "validation/"
 
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
@@ -184,7 +186,7 @@ class DrClient:
             model_id=custom_model_id, model_ver_id=custom_model_version_id
         )
         response = self._http_requester.get(url)
-        if response != 200:
+        if response.status_code != 200:
             raise DataRobotClientError(
                 f"Failed to get custom model version {custom_model_version_id} "
                 f"of model {custom_model_id}. "
@@ -518,22 +520,19 @@ class DrClient:
 
     def create_deployment(self, custom_model_version, deployment_info):
         model_package = self._create_model_package_from_custom_model_version(
-            custom_model_version, deployment_info
+            custom_model_version["id"]
         )
         deployment_id = self._create_deployment_from_model_package(model_package, deployment_info)
         deployment = self._update_deployment_settings(deployment_id, deployment_info)
         return deployment
 
-    def _create_model_package_from_custom_model_version(
-        self, custom_model_version, deployment_info
-    ):
-        payload = {"customModelVersionId": custom_model_version["id"]}
+    def _create_model_package_from_custom_model_version(self, custom_model_version_id):
+        payload = {"customModelVersionId": custom_model_version_id}
         response = self._http_requester.post(self.MODEL_PACKAGES_CREATE_ROUTE, json=payload)
         if response.status_code != 201:
             raise DataRobotClientError(
                 "Failed creating model package from custom model version. "
-                f"Git deployment id: {deployment_info.git_deployment_id}, "
-                f"custom model version id: {custom_model_version['id']}, "
+                f"custom model version id: {custom_model_version_id}, "
                 f"Response status: {response.status_code}, "
                 f"Response body: {response.text}",
                 code=response.status_code,
@@ -692,3 +691,48 @@ class DrClient:
             url = url + f"&search={name}"
 
         return self._paginated_fetch(url)
+
+    def replace_model_deployment(self, custom_model_version, datarobot_deployment):
+        model_package = self._create_model_package_from_custom_model_version(
+            custom_model_version["id"]
+        )
+        self._validate_model_replacement(model_package["id"], datarobot_deployment.deployment["id"])
+        return self._replace_deployment_model(
+            model_package["id"], datarobot_deployment.deployment["id"]
+        )
+
+    def _validate_model_replacement(self, model_package_id, deployment_id):
+        payload = {"modelPackageId": model_package_id}
+        url = self.MODEL_REPLACEMENT_VALIDATION_ROUTE.format(deployment_id=deployment_id)
+        response = self._http_requester.post(url, json=payload)
+        if response.status_code != 200:
+            raise DataRobotClientError(
+                "A deployment's model validation was failed. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+            )
+
+        validation_response = response.json()
+        validation_status = validation_response["status"]
+        validation_message = validation_response["message"]
+        if validation_status == "failing":
+            raise DataRobotClientError(validation_message)
+        elif validation_status == "warning":
+            logger.warning(validation_message)
+        else:
+            logger.info(validation_message)
+
+    def _replace_deployment_model(self, model_package_id, deployment_id):
+        payload = {"modelPackageId": model_package_id, "reason": "DATA_DRIFT"}
+        url = self.MODEL_REPLACEMENT_ROUTE.format(deployment_id=deployment_id)
+        response = self._http_requester.patch(url, json=payload)
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                "Failed to replace a model in a deployment."
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+            )
+        location = self._wait_for_async_resolution(response.headers["Location"])
+        response = self._http_requester.get(location, raw=True)
+        deployment = response.json()
+        return deployment

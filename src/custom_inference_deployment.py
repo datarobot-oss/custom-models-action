@@ -178,14 +178,44 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         for git_deployment_id, deployment_info in self.deployments_info.items():
             datarobot_deployment = self.datarobot_deployments.get(git_deployment_id)
             if not datarobot_deployment:
-                logger.info("Creating a deployment ...")
                 self._create_deployment(deployment_info)
             else:
-                logger.info("[TODO] Updating a deployment ...")
-                # 1. Check if a model version needs to be replaced
-                # 2. Check if settings needs to be updated
+                datarobot_model = self.datarobot_models.get(deployment_info.git_model_id)
+                if self._there_is_a_new_model_version(datarobot_model, datarobot_deployment):
+                    self._replace_model_version_in_deployment(
+                        datarobot_model.latest_version, datarobot_deployment
+                    )
+                else:
+                    # TODO: check if settings needs to be updated
+                    pass
 
     def _create_deployment(self, deployment_info):
+        logger.info(
+            f"Creating a deployment ... git_deployment_id: {deployment_info.git_deployment_id}"
+        )
         custom_model = self.datarobot_models.get(deployment_info.git_model_id)
         deployment = self._dr_client.create_deployment(custom_model.latest_version, deployment_info)
-        logger.info(f"A new deployment was created, id: {deployment['id']}")
+        logger.info(
+            f"A new deployment was created, "
+            f"git_id: {deployment_info.git_deployment_id}, id: {deployment['id']}"
+        )
+
+    @staticmethod
+    def _there_is_a_new_model_version(datarobot_model, datarobot_deployment):
+        return datarobot_deployment.model_version["id"] != datarobot_model.latest_version["id"]
+
+    def _replace_model_version_in_deployment(self, model_latest_version, datarobot_deployment):
+        git_deployment_id = datarobot_deployment.deployment["gitDeploymentId"]
+        logger.info(
+            f"Replacing a model version in a deployment ... "
+            f"git_deployment_id: {git_deployment_id}, "
+            f"latest_version: {model_latest_version['id']}."
+        )
+        deployment = self._dr_client.replace_model_deployment(
+            model_latest_version, datarobot_deployment
+        )
+        logger.info(
+            f"The latest model version was successfully replaced in a deployment. "
+            f"git_deployment_id: {git_deployment_id}."
+            f"deployment_id: {deployment['id']}."
+        )
