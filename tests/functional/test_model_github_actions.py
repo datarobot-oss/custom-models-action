@@ -8,6 +8,7 @@ from common.convertors import MemoryConvertor
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
 from schema_validator import ModelSchema
+from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import run_github_action
 from tests.functional.conftest import webserver_accessible
 
@@ -32,7 +33,7 @@ def cleanup(dr_client, model_metadata):
         pass
 
 
-@pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible")
+@pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
 @pytest.mark.usefixtures("build_repo_for_testing", "upload_dataset_for_testing")
 class TestModelGitHubActions:
     class Change(Enum):
@@ -73,7 +74,7 @@ class TestModelGitHubActions:
 
             # 4. Make a change and commit it
             if change == self.Change.INCREASE_MEMORY:
-                new_memory = self._increase_model_memory_by_1mb(model_metadata_yaml_file)
+                new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
                 git_repo.git.add(model_metadata_yaml_file)
                 git_repo.git.commit("-m", f"Increase memory to {new_memory}")
             elif change == self.Change.ADD_FILE:
@@ -141,23 +142,6 @@ class TestModelGitHubActions:
         # Assuming 'INCREASE_MEMORY` change took place
         assert cm_version["maximumMemory"] == MemoryConvertor.to_bytes(new_memory)
 
-    @staticmethod
-    def _increase_model_memory_by_1mb(model_yaml_file):
-        with open(model_yaml_file) as f:
-            yaml_content = yaml.safe_load(f)
-            memory = ModelSchema.get_value(
-                yaml_content, ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY
-            )
-            memory = memory if memory else "256Mi"
-            num_part, unit = MemoryConvertor._extract_unit_fields(memory)
-            new_memory = f"{num_part+1}{unit}"
-            yaml_content[ModelSchema.VERSION_KEY][ModelSchema.MEMORY_KEY] = new_memory
-
-        with open(model_yaml_file, "w") as f:
-            yaml.safe_dump(yaml_content, f)
-
-        return new_memory
-
     @pytest.mark.usefixtures("cleanup")
     def test_e2e_pull_request_event_with_model_deletion(
         self,
@@ -187,7 +171,7 @@ class TestModelGitHubActions:
 
             # 4. Make a change and commit it
             if change == self.Change.INCREASE_MEMORY:
-                new_memory = self._increase_model_memory_by_1mb(model_metadata_yaml_file)
+                new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
                 git_repo.git.add(model_metadata_yaml_file)
                 git_repo.git.commit("-m", f"Increase memory to {new_memory}")
             elif change == self.Change.DELETE_MODEL:
@@ -256,7 +240,7 @@ class TestModelGitHubActions:
         # 1. Make three changes, one at a time on the main branch
         for _ in range(3):
             # 2. Make a change and commit it
-            new_memory = self._increase_model_memory_by_1mb(model_metadata_yaml_file)
+            new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
             git_repo.git.add(model_metadata_yaml_file)
             git_repo.git.commit("-m", f"Increase memory to {new_memory}")
 
