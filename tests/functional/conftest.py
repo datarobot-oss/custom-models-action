@@ -132,7 +132,13 @@ def increase_model_memory_by_1mb(model_yaml_file):
 
 
 def run_github_action(
-    repo_root_path, git_repo, main_branch_name, main_branch_head_sha, event_name, is_deploy
+    repo_root_path,
+    git_repo,
+    main_branch_name,
+    main_branch_head_sha,
+    event_name,
+    is_deploy,
+    allow_deployment_deletion=True,
 ):
     with github_env_set("GITHUB_EVENT_NAME", event_name), github_env_set(
         "GITHUB_SHA", git_repo.commit(main_branch_head_sha).hexsha
@@ -151,5 +157,8 @@ def run_github_action(
         ]
         if is_deploy:
             args.append("--deploy")
+
+        if allow_deployment_deletion:
+            args.append("--allow-deployment-deletion")
 
         main(args)

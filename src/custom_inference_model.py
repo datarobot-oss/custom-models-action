@@ -128,6 +128,10 @@ class CustomInferenceModelBase(ABC):
         return self.event_name == "pull_request"
 
     @property
+    def is_push(self):
+        return self.event_name == "push"
+
+    @property
     def ancestor_attribute_ref(self):
         return "pullRequestCommitSha" if self.is_pull_request else "mainBranchCommitSha"
 
@@ -630,10 +634,11 @@ class CustomInferenceModel(CustomInferenceModelBase):
             #  deleted.
             msg = ""
             for deployment in deployments:
+                model_id = deployment["customModel"]["id"]
                 msg += (
                     f"Deployment: {deployment['id']}, "
-                    f"model_id: {deployment['customModel']['id']}, "
-                    f"git_model_id: {missing_locally_id_to_git_id[deployment['customModel']['id']]}"
+                    f"model_id: {model_id}, "
+                    f"git_model_id: {missing_locally_id_to_git_id[model_id]}"
                     "\n"
                 )
             raise IllegalModelDeletion(

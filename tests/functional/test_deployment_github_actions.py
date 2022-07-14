@@ -1,3 +1,5 @@
+import os
+
 import pytest
 import yaml
 from bson import ObjectId
@@ -116,8 +118,8 @@ class TestDeploymentGitHubActions:
 
         # 3. Make a local change to the model and commit
         new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
-        git_repo.git.add(model_metadata_yaml_file)
-        git_repo.git.commit("-m", f"Increase memory to {new_memory}")
+        os.chdir(repo_root_path)
+        git_repo.git.commit("-a", "-m", f"Increase memory to {new_memory}")
 
         # 4. Run GitHub action to create a new model version in DataRobot
         head_commit_sha = git_repo.head.commit.hexsha
@@ -152,3 +154,75 @@ class TestDeploymentGitHubActions:
             assert latest_deployment_model_version_id != latest_model_version["id"]
         else:
             assert False, f"Unsupported GitHub event name: {event_name}"
+
+    @pytest.mark.usefixtures("cleanup")
+    def test_e2e_deployment_delete(
+        self,
+        dr_client,
+        repo_root_path,
+        git_repo,
+        model_metadata_yaml_file,
+        deployment_metadata,
+        deployment_metadata_yaml_file,
+        main_branch_name,
+    ):
+        # 1. Create a model just as a basic requirement (use GitHub action)
+        head_commit_sha = git_repo.head.commit.hexsha
+        run_github_action(
+            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
+        )
+
+        # 2. Run a deployment GitHub action to create a deployment
+        run_github_action(
+            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=True
+        )
+        deployments = dr_client.fetch_deployments()
+        local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
+
+        # 3. Delete a deployment local definition yaml file
+        os.remove(deployment_metadata_yaml_file)
+        os.chdir(repo_root_path)
+        git_repo.git.commit("-a", "-m", f"Delete the deployment definition file")
+
+        # 4. Run a deployment GitHub action but disallow deployment deletion
+        run_github_action(
+            repo_root_path,
+            git_repo,
+            main_branch_name,
+            head_commit_sha,
+            "push",
+            is_deploy=True,
+            allow_deployment_deletion=False,
+        )
+        deployments = dr_client.fetch_deployments()
+        local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
+
+        # 5. Run a deployment GitHub action for pull request with allowed deployment deletion
+        run_github_action(
+            repo_root_path,
+            git_repo,
+            main_branch_name,
+            head_commit_sha,
+            "pull_request",
+            is_deploy=True,
+            allow_deployment_deletion=True,
+        )
+        deployments = dr_client.fetch_deployments()
+        local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
+
+        # 6. Run a deployment GitHub action for push with allowed deployment deletion
+        run_github_action(
+            repo_root_path,
+            git_repo,
+            main_branch_name,
+            head_commit_sha,
+            "push",
+            is_deploy=True,
+            allow_deployment_deletion=True,
+        )
+        deployments = dr_client.fetch_deployments()
+        local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        assert all(d.get("gitDeploymentId") != local_git_deployment_id for d in deployments)
