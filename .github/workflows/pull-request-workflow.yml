@@ -117,11 +117,7 @@ jobs:
           fetch-depth: 0
 
       - name: Print out git log
-        run: git log -n 5
-
-      - name: Print changed files
-        run: |
-          echo $(git diff --name-only ${{ github.base_ref }})
+        run: git log -n 5 --name-only
 
       - name: DataRobot Custom Inference Model
         id: custom-inference-model
@@ -154,11 +150,7 @@ jobs:
           fetch-depth: 0
 
       - name: Print out git log
-        run: git log -n 5
-
-      - name: Print changed files
-        run: |
-          echo $(git diff --name-only ${{ github.base_ref }})
+        run: git log -n 5 --name-only
 
       - name: DataRobot Custom Inference Model Deployment
         id: custom-inference-model-deployment
