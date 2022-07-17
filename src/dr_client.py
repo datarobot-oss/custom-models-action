@@ -637,16 +637,16 @@ class DrClient:
             DeploymentSchema.SETTINGS_SECTION_KEY,
             DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY,
         )
-        if predictions_data_collection is not None:
-            payload["predictionsDataCollection"] = {"enabled": predictions_data_collection}
+        enabled = True if predictions_data_collection is None else predictions_data_collection
+        payload["predictionsDataCollection"] = {"enabled": enabled}
 
-        challenger_models = DeploymentSchema.get_value(
+        enable_challenger = DeploymentSchema.get_value(
             deployment_info.metadata,
             DeploymentSchema.SETTINGS_SECTION_KEY,
-            DeploymentSchema.CHALLENGER_MODELS,
+            DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY,
         )
-        if challenger_models is not None:
-            payload["challengerModels"] = challenger_models
+        enabled = True if enable_challenger is None else enable_challenger
+        payload["challengerModels"] = {"enabled": enabled}
 
         response = self._http_requester.patch(
             self.DEPLOYMENT_SETTINGS_ROUTE.format(deployment_id=deployment_id), json=payload
