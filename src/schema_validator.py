@@ -454,8 +454,8 @@ class DeploymentSchema(SharedSchema):
     ENABLE_TARGET_DRIFT_KEY = "enable_target_drift"  # Settings, Optional
     ENABLE_FEATURE_DRIFT_KEY = "enable_feature_drift"  # Settings, Optional
     ENABLE_PREDICTIONS_COLLECTION_KEY = "enable_predictions_collection"  # Settings, Optional
-    ENABLE_ACTUALS = "enable_actuals"
-    CHALLENGER_MODELS = "challenger_models"
+    ENABLE_ACTUALS_KEY = "enable_actuals"
+    ENABLE_CHALLENGER_MODELS_KEY = "enable_challenger_models"
 
     ENABLE_SEGMENT_ANALYSIS_KEY = "segment_analysis"  # Settings, Optional
     SEGMENT_ANALYSIS_ATTRIBUTES_KEY = (
@@ -491,8 +491,8 @@ class DeploymentSchema(SharedSchema):
                 Optional(ENABLE_TARGET_DRIFT_KEY): bool,  # Update settings
                 Optional(ENABLE_FEATURE_DRIFT_KEY): bool,  # Update settings
                 Optional(ENABLE_PREDICTIONS_COLLECTION_KEY): bool,  # Update settings
-                Optional(ENABLE_ACTUALS): bool,  # Update settings
-                Optional(CHALLENGER_MODELS): bool,  # Update settings
+                Optional(ENABLE_ACTUALS_KEY): bool,  # Update settings
+                Optional(ENABLE_CHALLENGER_MODELS_KEY): bool,  # Update settings
                 Optional(ENABLE_SEGMENT_ANALYSIS_KEY): bool,  # Update settings
                 Optional(SEGMENT_ANALYSIS_ATTRIBUTES_KEY): And(  # Update settings
                     list, lambda l: all(len(a) > 0 for a in l)
