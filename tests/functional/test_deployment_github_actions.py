@@ -102,13 +102,51 @@ class TestDeploymentGitHubActions:
         main_branch_name,
         event_name,
     ):
+        # Disable challengers
+        self._enable_challenger(deployment_metadata, deployment_metadata_yaml_file, False)
+
+        (
+            _,
+            latest_deployment_model_version_id,
+            latest_model_version,
+        ) = self._deploy_a_model_than_run_github_action_to_replace_or_challenge(
+            dr_client,
+            git_repo,
+            repo_root_path,
+            main_branch_name,
+            deployment_metadata,
+            model_metadata_yaml_file,
+            event_name,
+        )
+
+        if event_name == "push":
+            assert latest_deployment_model_version_id
+            assert latest_deployment_model_version_id == latest_model_version["id"]
+        elif event_name == "pull_request":
+            assert latest_deployment_model_version_id
+            assert latest_model_version["id"]
+            assert latest_deployment_model_version_id != latest_model_version["id"]
+        else:
+            assert False, f"Unsupported GitHub event name: {event_name}"
+
+    @staticmethod
+    def _deploy_a_model_than_run_github_action_to_replace_or_challenge(
+        dr_client,
+        git_repo,
+        repo_root_path,
+        main_branch_name,
+        deployment_metadata,
+        model_metadata_yaml_file,
+        event_name,
+    ):
+
         # 1. Create a model just as a basic requirement (use GitHub action)
         head_commit_sha = git_repo.head.commit.hexsha
         run_github_action(
             repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
         )
 
-        # 2. Deploy the model
+        # 2. Create a deployment
         run_github_action(
             repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=True
         )
@@ -144,16 +182,15 @@ class TestDeploymentGitHubActions:
         latest_model_version = dr_client.fetch_custom_model_latest_version_by_git_model_id(
             local_git_model_id
         )
+        return the_deployment, latest_deployment_model_version_id, latest_model_version
 
-        if event_name == "push":
-            assert latest_deployment_model_version_id
-            assert latest_deployment_model_version_id == latest_model_version["id"]
-        elif event_name == "pull_request":
-            assert latest_deployment_model_version_id
-            assert latest_model_version["id"]
-            assert latest_deployment_model_version_id != latest_model_version["id"]
-        else:
-            assert False, f"Unsupported GitHub event name: {event_name}"
+    @staticmethod
+    def _enable_challenger(deployment_metadata, deployment_metadata_yaml_file, enabled=True):
+        settings = deployment_metadata.get(DeploymentSchema.SETTINGS_SECTION_KEY, {})
+        settings[DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY] = enabled
+        deployment_metadata[DeploymentSchema.SETTINGS_SECTION_KEY] = settings
+        with open(deployment_metadata_yaml_file, "w") as f:
+            yaml.safe_dump(deployment_metadata, f)
 
     @pytest.mark.usefixtures("cleanup")
     def test_e2e_deployment_delete(
@@ -226,3 +263,46 @@ class TestDeploymentGitHubActions:
         deployments = dr_client.fetch_deployments()
         local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         assert all(d.get("gitDeploymentId") != local_git_deployment_id for d in deployments)
+
+    @pytest.mark.parametrize("event_name", ["push", "pull_request"])
+    @pytest.mark.usefixtures("cleanup")
+    def test_e2e_deployment_model_challengers(
+        self,
+        dr_client,
+        repo_root_path,
+        git_repo,
+        model_metadata_yaml_file,
+        deployment_metadata,
+        deployment_metadata_yaml_file,
+        main_branch_name,
+        event_name,
+    ):
+        # Enable challengers (although it is the default)
+        self._enable_challenger(deployment_metadata, deployment_metadata_yaml_file, True)
+
+        (
+            the_deployment,
+            latest_deployment_model_version_id,
+            latest_model_version,
+        ) = self._deploy_a_model_than_run_github_action_to_replace_or_challenge(
+            dr_client,
+            git_repo,
+            repo_root_path,
+            main_branch_name,
+            deployment_metadata,
+            model_metadata_yaml_file,
+            event_name,
+        )
+
+        assert latest_deployment_model_version_id
+        assert latest_model_version["id"]
+        assert latest_deployment_model_version_id != latest_model_version["id"]
+
+        challengers = dr_client.fetch_challengers(the_deployment["id"])
+        if event_name == "push":
+            assert len(challengers) == 2, challengers
+            assert challengers[-1]["model"]["id"] == latest_model_version["id"]
+        elif event_name == "pull_request":
+            assert len(challengers) == 1, challengers
+        else:
+            assert False, f"Unsupported GitHub event name: {event_name}"

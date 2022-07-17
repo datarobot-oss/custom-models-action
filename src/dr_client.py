@@ -30,8 +30,9 @@ class DrClient:
     DEPLOYMENTS_CREATE_ROUTE = "deployments/fromModelPackage/"
     DEPLOYMENT_SETTINGS_ROUTE = "deployments/{deployment_id}/settings/"
     PREDICTION_ENVIRONMENTS_ROUTE = "predictionEnvironments/?supportedModelFormats=customModel"
-    MODEL_REPLACEMENT_ROUTE = "deployments/{deployment_id}/model/"
-    MODEL_REPLACEMENT_VALIDATION_ROUTE = MODEL_REPLACEMENT_ROUTE + "validation/"
+    DEPLOYMENT_MODEL_ROUTE = "deployments/{deployment_id}/model/"
+    DEPLOYMENT_MODEL_VALIDATION_ROUTE = DEPLOYMENT_MODEL_ROUTE + "validation/"
+    DEPLOYMENT_MODEL_CHALLENGER_ROUTE = "deployments/{deployment_id}/challengers/"
 
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
@@ -552,20 +553,10 @@ class DrClient:
             "gitDeploymentId": deployment_info.git_deployment_id,
             "modelPackageId": model_package["id"],
             "label": label,
+            "predictionEnvironmentId": self._get_prediction_environment_id(
+                model_package, deployment_info
+            ),
         }
-
-        prediction_environment_name = DeploymentSchema.get_value(
-            deployment_info.metadata, DeploymentSchema.PREDICTION_ENVIRONMENT_NAME_KEY
-        )
-        prediction_envs = self._fetch_prediction_environments(prediction_environment_name)
-        if not prediction_envs:
-            raise DataRobotClientError(
-                "Prediction environment is missing. "
-                "Make sure to setup at least one valid prediction environment. "
-                f"Git deployment id: {deployment_info.git_deployment_id}, "
-                f"Model package id: {model_package['id']}."
-            )
-        payload["predictionEnvironmentId"] = prediction_envs[0]["id"]
 
         importance = DeploymentSchema.get_value(
             deployment_info.metadata,
@@ -586,6 +577,20 @@ class DrClient:
                 code=response.status_code,
             )
         return response.json()["id"]
+
+    def _get_prediction_environment_id(self, model_package, deployment_info):
+        prediction_environment_name = DeploymentSchema.get_value(
+            deployment_info.metadata, DeploymentSchema.PREDICTION_ENVIRONMENT_NAME_KEY
+        )
+        prediction_envs = self._fetch_prediction_environments(prediction_environment_name)
+        if not prediction_envs:
+            raise DataRobotClientError(
+                "Prediction environment is missing. "
+                "Make sure to setup at least one valid prediction environment. "
+                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"Model package id: {model_package['id']}."
+            )
+        return prediction_envs[0]["id"]
 
     def _update_deployment_settings(self, deployment_id, deployment_info):
         payload = {}
@@ -640,13 +645,7 @@ class DrClient:
         enabled = True if predictions_data_collection is None else predictions_data_collection
         payload["predictionsDataCollection"] = {"enabled": enabled}
 
-        enable_challenger = DeploymentSchema.get_value(
-            deployment_info.metadata,
-            DeploymentSchema.SETTINGS_SECTION_KEY,
-            DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY,
-        )
-        enabled = True if enable_challenger is None else enable_challenger
-        payload["challengerModels"] = {"enabled": enabled}
+        payload["challengerModels"] = {"enabled": deployment_info.is_challenger_enabled}
 
         response = self._http_requester.patch(
             self.DEPLOYMENT_SETTINGS_ROUTE.format(deployment_id=deployment_id), json=payload
@@ -696,14 +695,16 @@ class DrClient:
         model_package = self._create_model_package_from_custom_model_version(
             custom_model_version["id"]
         )
-        self._validate_model_replacement(model_package["id"], datarobot_deployment.deployment["id"])
+        self._validate_model_compatibility(
+            model_package["id"], datarobot_deployment.deployment["id"]
+        )
         return self._replace_deployment_model(
             model_package["id"], datarobot_deployment.deployment["id"]
         )
 
-    def _validate_model_replacement(self, model_package_id, deployment_id):
+    def _validate_model_compatibility(self, model_package_id, deployment_id):
         payload = {"modelPackageId": model_package_id}
-        url = self.MODEL_REPLACEMENT_VALIDATION_ROUTE.format(deployment_id=deployment_id)
+        url = self.DEPLOYMENT_MODEL_VALIDATION_ROUTE.format(deployment_id=deployment_id)
         response = self._http_requester.post(url, json=payload)
         if response.status_code != 200:
             raise DataRobotClientError(
@@ -724,7 +725,7 @@ class DrClient:
 
     def _replace_deployment_model(self, model_package_id, deployment_id):
         payload = {"modelPackageId": model_package_id, "reason": "DATA_DRIFT"}
-        url = self.MODEL_REPLACEMENT_ROUTE.format(deployment_id=deployment_id)
+        url = self.DEPLOYMENT_MODEL_ROUTE.format(deployment_id=deployment_id)
         response = self._http_requester.patch(url, json=payload)
         if response.status_code != 202:
             raise DataRobotClientError(
@@ -736,3 +737,44 @@ class DrClient:
         response = self._http_requester.get(location, raw=True)
         deployment = response.json()
         return deployment
+
+    def create_challenger(self, custom_model_version, datarobot_deployment, deployment_info):
+        model_package = self._create_model_package_from_custom_model_version(
+            custom_model_version["id"]
+        )
+        deployment_id = datarobot_deployment.deployment["id"]
+        self._validate_model_compatibility(model_package["id"], deployment_id)
+        return self._create_challenger(model_package, deployment_id, deployment_info)
+
+    def _create_challenger(self, model_package, deployment_id, deployment_info):
+        payload = {
+            "modelPackageId": model_package["id"],
+            "name": model_package["name"],
+            "predictionEnvironmentId": self._get_prediction_environment_id(
+                model_package, deployment_info
+            ),
+        }
+
+        url = self.DEPLOYMENT_MODEL_CHALLENGER_ROUTE.format(deployment_id=deployment_id)
+        response = self._http_requester.post(url, json=payload)
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                "Failed to submit a challenger."
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+            )
+        location = self._wait_for_async_resolution(response.headers["Location"])
+        response = self._http_requester.get(location, raw=True)
+        return response.json()
+
+    def fetch_challengers(self, deployment_id):
+        url = self.DEPLOYMENT_MODEL_CHALLENGER_ROUTE.format(deployment_id=deployment_id)
+        response = self._http_requester.get(url)
+        if response.status_code != 200:
+            raise DataRobotClientError(
+                "Failed to fetch deployment challengers. "
+                f"deployment_id: {deployment_id}, "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+            )
+        return response.json()["data"]

@@ -35,6 +35,15 @@ class DeploymentInfo:
     def yaml_filepath(self):
         return self._yaml_path
 
+    @property
+    def is_challenger_enabled(self):
+        challenger_enabled = DeploymentSchema.get_value(
+            self.metadata,
+            DeploymentSchema.SETTINGS_SECTION_KEY,
+            DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY,
+        )
+        return True if challenger_enabled is None else challenger_enabled
+
 
 class CustomInferenceDeployment(CustomInferenceModelBase):
     def __init__(self, options):
@@ -189,9 +198,14 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             else:
                 datarobot_model = self.datarobot_models.get(deployment_info.git_model_id)
                 if self._there_is_a_new_model_version(datarobot_model, datarobot_deployment):
-                    self._replace_model_version_in_deployment(
-                        datarobot_model.latest_version, datarobot_deployment
-                    )
+                    if deployment_info.is_challenger_enabled:
+                        self._create_challenger_in_deployment(
+                            datarobot_model.latest_version, datarobot_deployment, deployment_info
+                        )
+                    else:
+                        self._replace_model_version_in_deployment(
+                            datarobot_model.latest_version, datarobot_deployment
+                        )
                 else:
                     # TODO: check if settings needs to be updated. Don't forget to update affected.
                     pass
@@ -228,6 +242,24 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             f"The latest model version was successfully replaced in a deployment. "
             f"git_deployment_id: {git_deployment_id}."
             f"deployment_id: {deployment['id']}."
+        )
+
+    def _create_challenger_in_deployment(
+        self, model_latest_version, datarobot_deployment, deployment_info
+    ):
+        git_deployment_id = datarobot_deployment.deployment["gitDeploymentId"]
+        logger.info(
+            f"Submitting a model challenger ... "
+            f"git_deployment_id: {git_deployment_id}, "
+            f"latest_version: {model_latest_version['id']}."
+        )
+        challenger = self._dr_client.create_challenger(
+            model_latest_version, datarobot_deployment, deployment_info
+        )
+        logger.info(
+            f"A challenger was successfully created and it is waiting for approval. "
+            f"git_deployment_id: {git_deployment_id}."
+            f"challenger_id: {challenger['id']}."
         )
 
     def _handle_deleted_deployments(self):
