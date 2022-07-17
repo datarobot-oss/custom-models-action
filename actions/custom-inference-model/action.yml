@@ -32,7 +32,7 @@ outputs:
     description: 'How many models were deleted.'
     value: ${{ steps.custom-inference-model.outputs.total-deleted-models }}
   message: # id of output
-    description: 'The output message from GitHub action'
+    description: 'The output message from the GitHub action.'
     value: ${{ steps.custom-inference-model.outputs.message }}
 runs:
   using: 'composite'

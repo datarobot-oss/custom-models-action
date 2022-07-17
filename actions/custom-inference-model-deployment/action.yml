@@ -8,33 +8,54 @@ inputs:
   webserver: # id of input
     description: 'DataRobot frontend web server'
     required: true
+  skip-cert-verification: # id of input
+    description: 'Whether a request to an HTTPS URL will be made without a certificate verification'
+    required: false
   release-branch:  # id of input
     description: 'The release branch for PRs to take an actions on'
     required: true
+  allow-deployment-deletion:
+    description: |
+      Whether to detect local deleted deployment definitions and consequently delete them 
+      in DataRobot.
+    required: false
+    default: 'false'
 outputs:
-  deployment-created: # id of output
-    description: 'Whether a new custom inference model deployment was created'
-    value: ${{ steps.custom-inference-model-deployment.outputs.deployment-created }}
-  deploymed-deleted: # id of output
-    description: 'Whether an existing custom inference model deployment was deleted'
-    value: ${{ steps.custom-inference-model.outputs.deployment-deleted }}
-  returned-code: # id of output
-    description: 'The exist code from the GitHub action'
-    value: ${{ steps.custom-inference-model.outputs.returned-code }}
+  total-affected-deployments: # id of output
+    description: 'How many deployments were affected.'
+    value: ${{ steps.custom-inference-model-deployment.outputs.total-affected-deployments }}
+  total-created-deployments: # id of output
+    description: 'How many new deployments were created.'
+    value: ${{ steps.custom-inference-model-deployment.outputs.total-created-deployments }}
+  total-deleted-deployments: # id of output
+    description: 'How many deployments were deleted.'
+    value: ${{ steps.custom-inference-model-deployment.outputs.total-deleted-deployments }}
   message: # id of output
-    description: 'The output message from GitHub action'
-    value: ${{ steps.custom-inference-model.outputs.message }}
+    description: 'The output message from the GitHub action.'
+    value: ${{ steps.custom-inference-model-deployment.outputs.message }}
 runs:
   using: 'composite'
   steps:
-    - run: pip install -r ../../src/requirements.txt
+    - run: pip install -r ${GITHUB_ACTION_PATH}/../../src/requirements.txt
       shell: bash
     - id: custom-inference-model-deployment
       run: |
-        python ../../src/main.py \
+        if ${{ inputs.skip-cert-verification }} == true; then
+        verify_cert_arg="--skip-cert-verification"
+        else
+        verify_cert_arg=""
+        fi
+        if ${{ inputs.allow-deployment-deletion }} == true; then
+        allow_deployment_deletion_arg="--allow-deployment-deletion"
+        else
+        allow_deployment_deletion_arg=""
+        fi
+        python ${GITHUB_ACTION_PATH}/../../src/main.py \
           --deploy \
-          --webserver ${{ inputs.webserver }} \
           --api-token ${{ inputs.api-token }} \
+          --webserver ${{ inputs.webserver }} \
+          ${verify_cert_arg} \
           --branch ${{ inputs.release-branch }} \
-          --root-dir ${{ github.workspace }}
+          --root-dir "${{ github.workspace }}" \
+          ${allow_deployment_deletion_arg}
       shell: bash

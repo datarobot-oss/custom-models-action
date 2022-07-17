@@ -50,6 +50,9 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
     def datarobot_deployments(self):
         return self._datarobot_deployments
 
+    def _label(self):
+        return "deployments"
+
     def _run(self):
         """
         Executes the GitHub action logic to manage custom inference deployments
@@ -190,7 +193,7 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                         datarobot_model.latest_version, datarobot_deployment
                     )
                 else:
-                    # TODO: check if settings needs to be updated
+                    # TODO: check if settings needs to be updated. Don't forget to update affected.
                     pass
 
     def _create_deployment(self, deployment_info):
@@ -203,6 +206,8 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             f"A new deployment was created, "
             f"git_id: {deployment_info.git_deployment_id}, id: {deployment['id']}"
         )
+        self._total_created += 1
+        self._total_affected += 1
 
     @staticmethod
     def _there_is_a_new_model_version(datarobot_model, datarobot_deployment):
@@ -218,6 +223,7 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         deployment = self._dr_client.replace_model_deployment(
             model_latest_version, datarobot_deployment
         )
+        self._total_affected += 1
         logger.info(
             f"The latest model version was successfully replaced in a deployment. "
             f"git_deployment_id: {git_deployment_id}."
@@ -240,6 +246,8 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                 # TODO: skip deletion of 'dirty' deployments. Only show a warning.
                 try:
                     self._dr_client.delete_deployment_by_id(deployment_id)
+                    self._total_deleted += 1
+                    self._total_affected += 1
                     logger.info(
                         "A deployment was deleted with success. "
                         f"git_deployment_id: {git_deployment_id}, deployment_id: {deployment_id}."
