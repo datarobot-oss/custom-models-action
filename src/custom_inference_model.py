@@ -281,9 +281,15 @@ class CustomInferenceModelBase(ABC):
                 self.datarobot_models[git_model_id] = datarobot_model
                 self._datarobot_models_by_id[datarobot_model_id] = datarobot_model
 
-    def _get_latest_provisioned_model_git_version(self, model_info):
+    def _get_latest_model_version_git_commit_ancestor(self, model_info):
         latest_version = self.datarobot_models[model_info.git_model_id].latest_version
-        return latest_version["gitModelVersion"]
+        git_model_version = latest_version.get("gitModelVersion")
+        if not git_model_version:
+            # Either the model has never provisioned of the user created a version with a non
+            # GitHub action client.
+            return False
+
+        return git_model_version[self.ancestor_attribute_ref]
 
     @abstractmethod
     def _label(self):
@@ -463,12 +469,8 @@ class CustomInferenceModel(CustomInferenceModelBase):
         return False
 
     def _valid_ancestor(self, model_info):
-        ancestor_sha = self._get_latest_provisioned_model_git_version(model_info)[
-            self.ancestor_attribute_ref
-        ]
+        ancestor_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
         if not ancestor_sha:
-            # Either the model has never provisioned of the user created a version with a non
-            # GitHub action client.
             return False
 
         # Users may have few local commits between remote pushes
@@ -482,9 +484,12 @@ class CustomInferenceModel(CustomInferenceModelBase):
         for _, model_info in self.models_info.items():
             if model_info.should_upload_all_files:
                 continue
-            from_commit_sha = self._get_latest_provisioned_model_git_version(model_info)[
-                self.ancestor_attribute_ref
-            ]
+            from_commit_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
+            if not from_commit_sha:
+                raise UnexpectedResult(
+                    f"Unexpected None ancestor commit sha, "
+                    f"model_git_id: {model_info.git_model_id}"
+                )
             changed_files, deleted_files = self._repo.find_changed_files(
                 self.github_sha, from_commit_sha
             )
