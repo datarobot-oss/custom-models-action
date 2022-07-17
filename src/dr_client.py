@@ -637,8 +637,8 @@ class DrClient:
             DeploymentSchema.SETTINGS_SECTION_KEY,
             DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY,
         )
-        if predictions_data_collection is not None:
-            payload["predictionsDataCollection"] = {"enabled": predictions_data_collection}
+        enabled = True if predictions_data_collection is None else predictions_data_collection
+        payload["predictionsDataCollection"] = {"enabled": enabled}
 
         enable_challenger = DeploymentSchema.get_value(
             deployment_info.metadata,
