@@ -111,6 +111,9 @@ class CustomInferenceModelBase(ABC):
             self.options.api_token,
             verify_cert=not self.options.skip_cert_verification,
         )
+        self._total_affected = 0
+        self._total_created = 0
+        self._total_deleted = 0
         logger.info(f"GITHUB_EVENT_NAME: {self.event_name}")
         logger.info(f"GITHUB_SHA: {self.github_sha}")
         logger.info(f"GITHUB_REPOSITORY: {self.github_repository}")
@@ -158,12 +161,20 @@ class CustomInferenceModelBase(ABC):
         """
         Executes the GitHub action logic to manage custom inference models
         """
+        try:
+            if not self._prerequisites():
+                return
 
-        if not self._prerequisites():
-            return
-
-        self._scan_and_load_models_metadata()
-        self._run()
+            self._scan_and_load_models_metadata()
+            self._run()
+        finally:
+            print(
+                f"""
+                ::set-output name=total-affected-{self._label()}::{self._total_affected}
+                ::set-output name=total-created-{self._label()}::{self._total_created}
+                ::set-output name=total-deleted-{self._label()}::{self._total_deleted}
+                """
+            )
 
     def _prerequisites(self):
         supported_events = ["push", "pull_request"]
@@ -275,6 +286,10 @@ class CustomInferenceModelBase(ABC):
         return latest_version["gitModelVersion"]
 
     @abstractmethod
+    def _label(self):
+        pass
+
+    @abstractmethod
     def _run(self):
         pass
 
@@ -286,9 +301,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
     def __init__(self, options):
         super().__init__(options)
-        self._total_affected_models = 0
-        self._total_created_models = 0
-        self._total_deleted_models = 0
+
+    def _label(self):
+        return "models"
 
     def _run(self):
         """
@@ -309,9 +324,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
         finally:
             print(
                 f"""
-                ::set-output name=total-affected-models::{self._total_affected_models}
-                ::set-output name=total-created-models::{self._total_created_models}
-                ::set-output name=total-deleted-models::{self._total_deleted_models}
+                ::set-output name=total-affected-models::{self._total_affected}
+                ::set-output name=total-created-models::{self._total_created}
+                ::set-output name=total-deleted-models::{self._total_deleted}
                 """
             )
 
@@ -513,16 +528,16 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def _handle_model_changes_or_creation(self):
         for git_model_id, model_info in self.models_info.items():
             if model_info.is_affected_by_commit:
-                self._total_affected_models += 1
                 logger.info(f"Model '{model_info.model_path}' is affected by commit.")
 
                 custom_model_id, already_existed = self._get_or_create_custom_model(model_info)
                 if not already_existed:
-                    self._total_created_models += 1
+                    self._total_created += 1
                 version_id = self._create_custom_model_version(custom_model_id, model_info)
                 if model_info.should_run_test:
                     self._test_custom_model_version(custom_model_id, version_id, model_info)
 
+                self._total_affected += 1
                 logger.info(
                     "Custom inference model version was successfully created. "
                     f"git_model_id: {git_model_id}, model_id: {custom_model_id}, "
@@ -657,7 +672,8 @@ class CustomInferenceModel(CustomInferenceModelBase):
                 continue
             try:
                 self._dr_client.delete_custom_model_by_model_id(model_id)
-                self._total_deleted_models += 1
+                self._total_deleted += 1
+                self._total_affected += 1
                 logger.info(
                     f"Model was deleted with success. git_model_id: {git_model_id}, "
                     f"model_id: {model_id}"
