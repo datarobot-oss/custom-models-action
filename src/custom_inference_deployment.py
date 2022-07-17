@@ -4,6 +4,7 @@ from pathlib import Path
 from common.data_types import DataRobotDeployment
 from common.exceptions import AssociatedModelNotFound
 from common.exceptions import AssociatedModelVersionNotFound
+from common.exceptions import DataRobotClientError
 from common.exceptions import DeploymentMetadataAlreadyExists
 from common.exceptions import NoValidAncestor
 from custom_inference_model import CustomInferenceModelBase
@@ -38,7 +39,6 @@ class DeploymentInfo:
 class CustomInferenceDeployment(CustomInferenceModelBase):
     def __init__(self, options):
         super().__init__(options)
-        self._model_id_to_model = {}
         self._deployments_info = {}
         self._datarobot_deployments = {}
 
@@ -60,8 +60,7 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         self._fetch_deployments_from_datarobot()
         self._validate_deployments_integrity()
         if self.event_name == "push":
-            self._create_or_change_deployments()
-        #     self._deplete_deployments()
+            self._apply_datarobot_deployment_actions()
 
     def _scan_and_load_deployments_metadata(self):
         logger.info("Scanning and loading DataRobot deployment files ...")
@@ -174,7 +173,12 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                     f"Pinned sha: {git_main_branch_sha}."
                 )
 
-    def _create_or_change_deployments(self):
+    def _apply_datarobot_deployment_actions(self):
+        logger.info("Applying DataRobot deployment actions ...")
+        self._handle_deployment_changes_or_creation()
+        self._handle_deleted_deployments()
+
+    def _handle_deployment_changes_or_creation(self):
         for git_deployment_id, deployment_info in self.deployments_info.items():
             datarobot_deployment = self.datarobot_deployments.get(git_deployment_id)
             if not datarobot_deployment:
@@ -219,3 +223,26 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             f"git_deployment_id: {git_deployment_id}."
             f"deployment_id: {deployment['id']}."
         )
+
+    def _handle_deleted_deployments(self):
+        if not self.is_push:
+            logger.debug("Skip handling deployment deletion. It takes place only on push event.")
+            return
+
+        if not self.options.allow_deployment_deletion:
+            logger.info("Skip handling deployment deletion because it is not enabled.")
+            return
+
+        logger.info("Deleting deployments (if any) ...")
+        for git_deployment_id, datarobot_deployment in self.datarobot_deployments.items():
+            if git_deployment_id not in self.deployments_info:
+                deployment_id = datarobot_deployment.deployment["id"]
+                # TODO: skip deletion of 'dirty' deployments. Only show a warning.
+                try:
+                    self._dr_client.delete_deployment_by_id(deployment_id)
+                    logger.info(
+                        "A deployment was deleted with success. "
+                        f"git_deployment_id: {git_deployment_id}, deployment_id: {deployment_id}."
+                    )
+                except DataRobotClientError as ex:
+                    logger.error(str(ex))

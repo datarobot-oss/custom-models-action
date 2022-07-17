@@ -35,6 +35,12 @@ def argparse_options(args=None):
         help="Whether to detect local deleted model definitions and consequently delete them in "
         "DataRobot.",
     )
+    parser.add_argument(
+        "--allow-deployment-deletion",
+        action="store_true",
+        help="Whether to detect local deleted deployment definitions and consequently "
+        "delete them in DataRobot.",
+    )
 
     options = parser.parse_args(args)
     logger.debug(f"Command line args: {options}")
