@@ -117,17 +117,11 @@ jobs:
           fetch-depth: 0
 
       - name: Print out git log
-        run: git log -n 10
+        run: git log -n 5
 
-      - name: get changed files
-        id: getfile
+      - name: Print changed files
         run: |
-          echo "::set-output name=files::$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} | xargs)"
-
-      - name: echo output
-        run: |
-          echo ${{ steps.getfile.outputs.files }}
-          echo $(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} | xargs)
+          echo $(git diff --name-only ${{ github.base_ref }})
 
       - name: DataRobot Custom Inference Model
         id: custom-inference-model
@@ -160,12 +154,11 @@ jobs:
           fetch-depth: 0
 
       - name: Print out git log
-        run: git log -n 10
+        run: git log -n 5
 
       - name: Print changed files
-        id: getfile
         run: |
-          printf "Changed files:\n$(git diff-tree --no-commit-id --name-only -r ${{ github.sha }})"
+          echo $(git diff --name-only ${{ github.base_ref }})
 
       - name: DataRobot Custom Inference Model Deployment
         id: custom-inference-model-deployment
