@@ -112,11 +112,8 @@ class TestCustomInferenceModel:
                 os.environ, {"GITHUB_SHA": head_git_sha}
             ), patch.object(
                 CustomInferenceModel,
-                "_get_latest_provisioned_model_git_version",
-                return_value={
-                    "mainBranchCommitSha": last_provision_git_sha,
-                    "pullRequestCommitSha": None,
-                },
+                "_get_latest_model_version_git_commit_ancestor",
+                return_value=last_provision_git_sha,
             ):
                 custom_inference_model._lookup_affected_models_by_the_current_action()
 
@@ -133,11 +130,8 @@ class TestCustomInferenceModel:
                 os.environ, {"GITHUB_SHA": head_git_sha}
             ), patch.object(
                 CustomInferenceModel,
-                "_get_latest_provisioned_model_git_version",
-                return_value={
-                    "mainBranchCommitSha": last_provision_git_sha,
-                    "pullRequestCommitSha": None,
-                },
+                "_get_latest_model_version_git_commit_ancestor",
+                return_value=last_provision_git_sha,
             ):
                 custom_inference_model._lookup_affected_models_by_the_current_action()
 
