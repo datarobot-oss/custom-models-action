@@ -127,48 +127,47 @@ class DrClient:
 
     @staticmethod
     def _setup_payload_for_custom_model_creation(model_info):
-        metadata = model_info.metadata
-        target_type = ModelSchema.get_value(metadata, ModelSchema.TARGET_TYPE_KEY)
+        target_type = model_info.get_value(ModelSchema.TARGET_TYPE_KEY)
 
         payload = {
             "customModelType": "inference",  # Currently, there's support only for inference models
             "targetType": target_type,
-            "targetName": metadata[ModelSchema.TARGET_NAME_KEY],
+            "targetName": model_info.get_value(ModelSchema.TARGET_NAME_KEY),
             "isUnstructuredModelKind": model_info.is_unstructured,
-            "gitModelId": metadata[ModelSchema.MODEL_ID_KEY],
+            "gitModelId": model_info.get_value(ModelSchema.MODEL_ID_KEY),
         }
 
-        name = ModelSchema.get_value(
-            metadata, ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.NAME_KEY
-        )
+        name = model_info.get_value(ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.NAME_KEY)
         if name:
             payload["name"] = name
 
-        description = ModelSchema.get_value(
-            metadata, ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.DESCRIPTION_KEY
+        description = model_info.get_value(
+            ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.DESCRIPTION_KEY
         )
         if description:
             payload["description"] = description
 
-        lang = ModelSchema.get_value(metadata, ModelSchema.LANGUAGE_KEY)
+        lang = model_info.get_value(ModelSchema.LANGUAGE_KEY)
         if lang:
             payload["language"] = lang
 
         if model_info.is_regression:
-            regression_threshold = ModelSchema.get_value(
-                metadata, ModelSchema.PREDICTION_THRESHOLD_KEY
-            )
+            regression_threshold = model_info.get_value(ModelSchema.PREDICTION_THRESHOLD_KEY)
             if regression_threshold is not None:
                 payload["predictionThreshold"] = regression_threshold
         elif model_info.is_binary:
             payload.update(
                 {
-                    "positiveClassLabel": metadata[ModelSchema.POSITIVE_CLASS_LABEL_KEY],
-                    "negativeClassLabel": metadata[ModelSchema.NEGATIVE_CLASS_LABEL_KEY],
+                    "positiveClassLabel": model_info.get_value(
+                        ModelSchema.POSITIVE_CLASS_LABEL_KEY
+                    ),
+                    "negativeClassLabel": model_info.get_value(
+                        ModelSchema.NEGATIVE_CLASS_LABEL_KEY
+                    ),
                 }
             )
         elif model_info.is_multiclass:
-            payload["classLabels"] = metadata[ModelSchema.CLASS_LABELS_KEY]
+            payload["classLabels"] = model_info.get_value(ModelSchema.CLASS_LABELS_KEY)
 
         return payload
 
@@ -224,9 +223,7 @@ class DrClient:
     ):
         file_objs = []
         try:
-            base_env_id = ModelSchema.get_value(
-                model_info.metadata, ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_KEY
-            )
+            base_env_id = model_info.get_value(ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_KEY)
             payload, file_objs = self._setup_payload_for_custom_model_version_creation(
                 model_info,
                 commit_url,
@@ -272,7 +269,6 @@ class DrClient:
         file_ids_to_delete=None,
         base_env_id=None,
     ):
-        metadata = model_info.metadata
         payload = [
             ("isMajorUpdate", str(True)),
             (
@@ -292,13 +288,11 @@ class DrClient:
         if base_env_id:
             payload.append(("baseEnvironmentId", base_env_id))
 
-        memory = ModelSchema.get_value(metadata, ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY)
+        memory = model_info.get_value(ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY)
         if memory:
             payload.append(("maximumMemory", str(memory)))
 
-        replicas = ModelSchema.get_value(
-            metadata, ModelSchema.VERSION_KEY, ModelSchema.REPLICAS_KEY
-        )
+        replicas = model_info.get_value(ModelSchema.VERSION_KEY, ModelSchema.REPLICAS_KEY)
         if replicas:
             payload.append(("replicas", str(replicas)))
 
@@ -381,14 +375,12 @@ class DrClient:
         payload = {
             "customModelId": model_id,
             "customModelVersionId": model_version_id,
-            "environmentId": ModelSchema.get_value(
-                model_info.metadata, ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_KEY
+            "environmentId": model_info.get_value(
+                ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_KEY
             ),
         }
 
-        loaded_checks = ModelSchema.get_value(
-            model_info.metadata, ModelSchema.TEST_KEY, ModelSchema.CHECKS_KEY
-        )
+        loaded_checks = model_info.get_value(ModelSchema.TEST_KEY, ModelSchema.CHECKS_KEY)
         configuration = self._build_tests_configuration(loaded_checks)
         if configuration:
             payload["configuration"] = configuration
@@ -397,15 +389,11 @@ class DrClient:
         if parameters:
             payload["parameters"] = parameters
 
-        test_dataset_id = ModelSchema.get_value(
-            model_info.metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_DATA_KEY
-        )
+        test_dataset_id = model_info.get_value(ModelSchema.TEST_KEY, ModelSchema.TEST_DATA_KEY)
         if test_dataset_id:  # It may be empty only for unstructured models
             payload["datasetId"] = test_dataset_id
 
-        memory = ModelSchema.get_value(
-            model_info.metadata, ModelSchema.TEST_KEY, ModelSchema.MEMORY_KEY
-        )
+        memory = model_info.get_value(ModelSchema.TEST_KEY, ModelSchema.MEMORY_KEY)
         if memory:
             payload["maximumMemory"] = memory
 
@@ -541,10 +529,8 @@ class DrClient:
         return response.json()
 
     def _create_deployment_from_model_package(self, model_package, deployment_info):
-        label = DeploymentSchema.get_value(
-            deployment_info.metadata,
-            DeploymentSchema.SETTINGS_SECTION_KEY,
-            DeploymentSchema.LABEL_KEY,
+        label = deployment_info.get_value(
+            DeploymentSchema.SETTINGS_SECTION_KEY, DeploymentSchema.LABEL_KEY
         )
         if not label:
             label = f"{model_package['target']['name']} Predictions [GitHub CI/CD]"
@@ -558,10 +544,8 @@ class DrClient:
             ),
         }
 
-        importance = DeploymentSchema.get_value(
-            deployment_info.metadata,
-            DeploymentSchema.SETTINGS_SECTION_KEY,
-            DeploymentSchema.IMPORTANCE_KEY,
+        importance = deployment_info.get_value(
+            DeploymentSchema.SETTINGS_SECTION_KEY, DeploymentSchema.IMPORTANCE_KEY
         )
         if importance:
             payload["importance"] = importance
@@ -579,8 +563,8 @@ class DrClient:
         return response.json()["id"]
 
     def _get_prediction_environment_id(self, model_package, deployment_info):
-        prediction_environment_name = DeploymentSchema.get_value(
-            deployment_info.metadata, DeploymentSchema.PREDICTION_ENVIRONMENT_NAME_KEY
+        prediction_environment_name = deployment_info.get_value(
+            DeploymentSchema.PREDICTION_ENVIRONMENT_NAME_KEY
         )
         prediction_envs = self._fetch_prediction_environments(prediction_environment_name)
         if not prediction_envs:
@@ -594,10 +578,8 @@ class DrClient:
 
     def _update_deployment_settings(self, deployment_id, deployment_info):
         payload = {}
-        association_id = DeploymentSchema.get_value(
-            deployment_info.metadata,
-            DeploymentSchema.SETTINGS_SECTION_KEY,
-            DeploymentSchema.ASSOCIATION_ID_KEY,
+        association_id = deployment_info.get_value(
+            DeploymentSchema.SETTINGS_SECTION_KEY, DeploymentSchema.ASSOCIATION_ID_KEY
         )
         if association_id:
             # NOTE: this is a simplified alternative, which supports a single association ID
@@ -606,39 +588,31 @@ class DrClient:
                 "columnNames": [association_id],
             }
 
-        target_drift = DeploymentSchema.get_value(
-            deployment_info.metadata,
-            DeploymentSchema.SETTINGS_SECTION_KEY,
-            DeploymentSchema.ENABLE_TARGET_DRIFT_KEY,
+        target_drift = deployment_info.get_value(
+            DeploymentSchema.SETTINGS_SECTION_KEY, DeploymentSchema.ENABLE_TARGET_DRIFT_KEY
         )
         if target_drift is not None:
             payload["targetDrift"] = {"enabled": target_drift}
 
-        feature_drift = DeploymentSchema.get_value(
-            deployment_info.metadata,
-            DeploymentSchema.SETTINGS_SECTION_KEY,
-            DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY,
+        feature_drift = deployment_info.get_value(
+            DeploymentSchema.SETTINGS_SECTION_KEY, DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY
         )
         if feature_drift is not None:
             payload["featureDrift"] = {"enabled": feature_drift}
 
-        segmented_analysis = DeploymentSchema.get_value(
-            deployment_info.metadata,
-            DeploymentSchema.SETTINGS_SECTION_KEY,
-            DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY,
+        segmented_analysis = deployment_info.get_value(
+            DeploymentSchema.SETTINGS_SECTION_KEY, DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY
         )
         if segmented_analysis is not None:
             payload["segmentAnalysis"] = {"enabled": segmented_analysis}
-            attributes = DeploymentSchema.get_value(
-                deployment_info.metadata,
+            attributes = deployment_info.get_value(
                 DeploymentSchema.SETTINGS_SECTION_KEY,
                 DeploymentSchema.SEGMENT_ANALYSIS_ATTRIBUTES_KEY,
             )
             if attributes:
                 payload["segmentAnalysis"]["attributes"] = attributes
 
-        predictions_data_collection = DeploymentSchema.get_value(
-            deployment_info.metadata,
+        predictions_data_collection = deployment_info.get_value(
             DeploymentSchema.SETTINGS_SECTION_KEY,
             DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY,
         )

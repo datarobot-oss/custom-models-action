@@ -37,12 +37,14 @@ class DeploymentInfo:
 
     @property
     def is_challenger_enabled(self):
-        challenger_enabled = DeploymentSchema.get_value(
-            self.metadata,
+        challenger_enabled = self.get_value(
             DeploymentSchema.SETTINGS_SECTION_KEY,
             DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY,
         )
         return True if challenger_enabled is None else challenger_enabled
+
+    def get_value(self, *args):
+        return DeploymentSchema.get_value(self.metadata, *args)
 
 
 class CustomInferenceDeployment(CustomInferenceModelBase):
@@ -206,9 +208,6 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                         self._replace_model_version_in_deployment(
                             datarobot_model.latest_version, datarobot_deployment
                         )
-                else:
-                    # TODO: check if settings needs to be updated. Don't forget to update affected.
-                    pass
 
     def _create_deployment(self, deployment_info):
         logger.info(

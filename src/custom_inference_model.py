@@ -93,9 +93,12 @@ class ModelInfo:
 
     @property
     def should_run_test(self):
-        return ModelSchema.TEST_KEY in self.metadata and not ModelSchema.get_value(
-            self.metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_SKIP_KEY
+        return ModelSchema.TEST_KEY in self.metadata and not self.get_value(
+            ModelSchema.TEST_KEY, ModelSchema.TEST_SKIP_KEY
         )
+
+    def get_value(self, *args):
+        return ModelSchema.get_value(self.metadata, *args)
 
 
 class CustomInferenceModelBase(ABC):
