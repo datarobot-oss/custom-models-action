@@ -9,6 +9,10 @@ class InvalidModelSchema(GenericException):
         super().__init__(msg.split("\n")[-1], code)
 
 
+class UnexpectedType(GenericException):
+    pass
+
+
 class UnexpectedResult(GenericException):
     pass
 

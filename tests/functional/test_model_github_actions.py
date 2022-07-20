@@ -34,7 +34,7 @@ def cleanup(dr_client, model_metadata):
 
 
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
-@pytest.mark.usefixtures("build_repo_for_testing", "upload_dataset_for_testing")
+@pytest.mark.usefixtures("build_repo_for_testing", "set_model_dataset_for_testing")
 class TestModelGitHubActions:
     class Change(Enum):
         INCREASE_MEMORY = 1

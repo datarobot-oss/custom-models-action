@@ -14,6 +14,7 @@ from common.convertors import MemoryConvertor
 from dr_client import DrClient
 from main import main
 from schema_validator import ModelSchema
+from schema_validator import SharedSchema
 
 
 def webserver_accessible():
@@ -66,16 +67,57 @@ def build_repo_for_testing(repo_root_path, git_repo):
 
 
 @pytest.fixture
-def upload_dataset_for_testing(dr_client, model_metadata):
+def set_model_dataset_for_testing(dr_client, model_metadata, model_metadata_yaml_file):
     if ModelSchema.TEST_KEY in model_metadata:
         test_dataset_filepath = (
             Path(__file__).parent / ".." / "datasets" / "juniors_3_year_stats_regression_small.csv"
         )
-        dataset_id = dr_client.upload_dataset(test_dataset_filepath)
-        model_metadata[ModelSchema.TEST_KEY][ModelSchema.TEST_DATA_KEY] = dataset_id
+        dataset_id = None
+        try:
+            dataset_id = dr_client.upload_dataset(test_dataset_filepath)
 
-        yield dataset_id
-        dr_client.delete_dataset(dataset_id)
+            with set_persistent_schema_variable(
+                model_metadata_yaml_file,
+                model_metadata,
+                dataset_id,
+                ModelSchema.TEST_KEY,
+                ModelSchema.TEST_DATA_KEY,
+            ):
+                yield dataset_id
+        finally:
+            if dataset_id:
+                dr_client.delete_dataset(dataset_id)
+
+
+@contextlib.contextmanager
+def set_persistent_schema_variable(yaml_filepath, metadata, new_value, *args):
+    try:
+        origin_value = SharedSchema.get_value(metadata, *args)
+        SharedSchema.set_value(metadata, *args, new_value)
+        with open(yaml_filepath, "w") as f:
+            yaml.safe_dump(metadata, f)
+
+        yield
+
+    finally:
+        args = args + (origin_value,)
+        SharedSchema.set_value(metadata, *args)
+        with open(yaml_filepath, "w") as f:
+            yaml.safe_dump(metadata, f)
+
+
+@pytest.fixture
+def skip_model_testing(model_metadata, model_metadata_yaml_file):
+    origin_test_section = model_metadata.get(ModelSchema.TEST_KEY)
+    model_metadata.pop(ModelSchema.TEST_KEY, None)
+    with open(model_metadata_yaml_file, "w") as f:
+        yaml.safe_dump(model_metadata, f)
+
+    yield
+
+    model_metadata[ModelSchema.TEST_KEY] = origin_test_section
+    with open(model_metadata_yaml_file, "w") as f:
+        yaml.safe_dump(model_metadata, f)
 
 
 # NOTE: it was rather better to use the pytest.mark.usefixture for 'build_repo_for_testing'

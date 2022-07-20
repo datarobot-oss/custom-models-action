@@ -1,4 +1,6 @@
+import contextlib
 import os
+from pathlib import Path
 
 import pytest
 import yaml
@@ -10,6 +12,7 @@ from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import run_github_action
+from tests.functional.conftest import set_persistent_schema_variable
 from tests.functional.conftest import webserver_accessible
 
 
@@ -55,31 +58,76 @@ def cleanup(dr_client, model_metadata, deployment_metadata):
 
 
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
-@pytest.mark.usefixtures("build_repo_for_testing", "upload_dataset_for_testing")
+@pytest.mark.usefixtures("build_repo_for_testing")
 class TestDeploymentGitHubActions:
+    @contextlib.contextmanager
+    def _upload_actuals_dataset(
+        self, event_name, dr_client, deployment_metadata, deployment_metadata_yaml_file
+    ):
+        if event_name == "push":
+            association_id = DeploymentSchema.get_value(
+                deployment_metadata,
+                DeploymentSchema.SETTINGS_SECTION_KEY,
+                DeploymentSchema.ASSOCIATION_ID_KEY,
+            )
+            if association_id:
+                actuals_filepath = (
+                    Path(__file__).parent
+                    / ".."
+                    / "datasets"
+                    / "juniors_3_year_stats_regression_small_actuals.csv"
+                )
+                dataset_id = None
+                try:
+                    dataset_id = dr_client.upload_dataset(actuals_filepath)
+                    with set_persistent_schema_variable(
+                        deployment_metadata_yaml_file,
+                        deployment_metadata,
+                        dataset_id,
+                        DeploymentSchema.SETTINGS_SECTION_KEY,
+                        DeploymentSchema.ACTUALS_DATASET_ID_KEY,
+                    ):
+                        yield dataset_id
+                finally:
+                    if dataset_id:
+                        dr_client.delete_dataset(dataset_id)
+        else:
+            yield None
+
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
-    @pytest.mark.usefixtures("cleanup")
+    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
     def test_e2e_deployment_create(
         self,
         dr_client,
         repo_root_path,
         git_repo,
+        model_metadata,
         model_metadata_yaml_file,
         deployment_metadata,
         deployment_metadata_yaml_file,
         main_branch_name,
         event_name,
     ):
-        # 1. Create a model just as a basic requirement (use GitHub action)
+        # 1. Create a model just as a preliminary requirement (use GitHub action)
         head_commit_sha = git_repo.head.commit.hexsha
         run_github_action(
             repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
         )
 
-        # 2. Run a deployment github action
-        run_github_action(
-            repo_root_path, git_repo, main_branch_name, head_commit_sha, event_name, is_deploy=True
-        )
+        # 2. Upload actuals dataset and set the deployment metadata with the dataset ID
+        with self._upload_actuals_dataset(
+            event_name, dr_client, deployment_metadata, deployment_metadata_yaml_file
+        ):
+            # 3. Run a deployment github action
+            run_github_action(
+                repo_root_path,
+                git_repo,
+                main_branch_name,
+                head_commit_sha,
+                event_name,
+                is_deploy=True,
+            )
+
         deployments = dr_client.fetch_deployments()
         local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         if event_name == "push":
@@ -90,7 +138,7 @@ class TestDeploymentGitHubActions:
             assert False, f"Unsupported GitHub event name: {event_name}"
 
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
-    @pytest.mark.usefixtures("cleanup")
+    @pytest.mark.usefixtures("cleanup", "set_model_dataset_for_testing")
     def test_e2e_deployment_model_replacement(
         self,
         dr_client,
@@ -192,7 +240,7 @@ class TestDeploymentGitHubActions:
         with open(deployment_metadata_yaml_file, "w") as f:
             yaml.safe_dump(deployment_metadata, f)
 
-    @pytest.mark.usefixtures("cleanup")
+    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
     def test_e2e_deployment_delete(
         self,
         dr_client,
@@ -265,7 +313,7 @@ class TestDeploymentGitHubActions:
         assert all(d.get("gitDeploymentId") != local_git_deployment_id for d in deployments)
 
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
-    @pytest.mark.usefixtures("cleanup")
+    @pytest.mark.usefixtures("cleanup", "set_model_dataset_for_testing")
     def test_e2e_deployment_model_challengers(
         self,
         dr_client,
