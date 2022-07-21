@@ -9,6 +9,7 @@ from schema import Or
 
 from common.convertors import MemoryConvertor
 from common.exceptions import InvalidModelSchema
+from common.exceptions import UnexpectedType
 
 logger = logging.getLogger()
 
@@ -101,8 +102,8 @@ class SharedSchema:
         """
         pass
 
-    @classmethod
-    def get_value(cls, metadata, *args):
+    @staticmethod
+    def get_value(metadata: dict, *args):
         """
         Extract a value from the metadata, for a given key hierarchy. The assumption is that parent
         keys are always dictionaries.
@@ -119,6 +120,12 @@ class SharedSchema:
             A value or None
         """
 
+        if not isinstance(metadata, dict):
+            raise UnexpectedType(
+                "Expecting first argument (metadata) to be a dict! "
+                f"type: {type(metadata)}, value: '{metadata}'"
+            )
+
         value = metadata
         for index, arg in enumerate(args):
             if not isinstance(value, dict):
@@ -127,6 +134,22 @@ class SharedSchema:
 
             value = value.get(arg)
         return value
+
+    @staticmethod
+    def set_value(metadata: dict, *args):
+        if not isinstance(metadata, dict):
+            raise UnexpectedType(
+                "Expecting first argument (metadata) to be a dict! "
+                f"type: {type(metadata)}, value: '{metadata}'"
+            )
+        section = metadata
+        if len(args) > 2:  # Nested dictionaries
+            for key in args[:-2]:
+                if key not in section:
+                    section[key] = {}
+                section = section[key]
+        section[args[-2]] = args[-1]
+        return metadata
 
 
 class ModelSchema(SharedSchema):
@@ -449,12 +472,13 @@ class DeploymentSchema(SharedSchema):
     IMPORTANCE_MODERATE_VALUE = ("MODERATE",)
     IMPORTANCE_LOW_VALUE = ("LOW",)
 
-    # PATCH Only
-    ASSOCIATION_ID_KEY = "association_id"  # Settings, Optional
     ENABLE_TARGET_DRIFT_KEY = "enable_target_drift"  # Settings, Optional
     ENABLE_FEATURE_DRIFT_KEY = "enable_feature_drift"  # Settings, Optional
     ENABLE_PREDICTIONS_COLLECTION_KEY = "enable_predictions_collection"  # Settings, Optional
-    ENABLE_ACTUALS_KEY = "enable_actuals"
+
+    ASSOCIATION_ID_KEY = "association_id"  # Settings, Optional
+    ACTUALS_DATASET_ID_KEY = "actuals_dataset_id"
+
     ENABLE_CHALLENGER_MODELS_KEY = "enable_challenger_models"
 
     ENABLE_SEGMENT_ANALYSIS_KEY = "segment_analysis"  # Settings, Optional
@@ -488,18 +512,16 @@ class DeploymentSchema(SharedSchema):
                     IMPORTANCE_LOW_VALUE,
                 ),
                 Optional(ASSOCIATION_ID_KEY): And(str, len),  # Update settings
+                Optional(ACTUALS_DATASET_ID_KEY): And(str, lambda i: ObjectId.is_valid(i)),
                 Optional(ENABLE_TARGET_DRIFT_KEY): bool,  # Update settings
                 Optional(ENABLE_FEATURE_DRIFT_KEY): bool,  # Update settings
                 Optional(ENABLE_PREDICTIONS_COLLECTION_KEY): bool,  # Update settings
-                Optional(ENABLE_ACTUALS_KEY): bool,  # Update settings
                 Optional(ENABLE_CHALLENGER_MODELS_KEY): bool,  # Update settings
                 Optional(ENABLE_SEGMENT_ANALYSIS_KEY): bool,  # Update settings
                 Optional(SEGMENT_ANALYSIS_ATTRIBUTES_KEY): And(  # Update settings
                     list, lambda l: all(len(a) > 0 for a in l)
                 ),
-                Optional(DATASET_WITH_PARTITIONING_COLUMN_KEY): And(
-                    str, lambda i: ObjectId.is_valid(i)
-                ),
+                Optional(DATASET_WITH_PARTITIONING_COLUMN_KEY): And(str, len),
                 Optional(TRAINING_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
                 Optional(HOLDOUT_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
             },

@@ -33,6 +33,7 @@ class DrClient:
     DEPLOYMENT_MODEL_ROUTE = "deployments/{deployment_id}/model/"
     DEPLOYMENT_MODEL_VALIDATION_ROUTE = DEPLOYMENT_MODEL_ROUTE + "validation/"
     DEPLOYMENT_MODEL_CHALLENGER_ROUTE = "deployments/{deployment_id}/challengers/"
+    DEPLOYMENT_ACTUALS_UPDATE_ROUTE = "deployments/{deployment_id}/actuals/fromDataset/"
 
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
@@ -636,6 +637,20 @@ class DrClient:
         location = self._wait_for_async_resolution(response.headers["Location"])
         response = self._http_requester.get(location, raw=True)
         return response.json()
+
+    def submit_deployment_actuals(
+        self, target_name, association_id, actuals_dataset_id, datarobot_deployment
+    ):
+        payload = {
+            "datasetId": actuals_dataset_id,
+            "actualValueColumn": target_name,
+            "associationIdColumn": association_id,
+        }
+        url = self.DEPLOYMENT_ACTUALS_UPDATE_ROUTE.format(deployment_id=datarobot_deployment["id"])
+        response = self._http_requester.post(url, json=payload)
+        location = self._wait_for_async_resolution(response.headers["Location"])
+        response = self._http_requester.get(location, raw=True)
+        return response.json()  # Accuracy
 
     def delete_deployment_by_id(self, deployment_id):
         sub_path = f"{self.DEPLOYMENTS_ROUTE}{deployment_id}/"

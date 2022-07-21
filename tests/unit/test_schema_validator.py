@@ -1,3 +1,4 @@
+import copy
 from collections import namedtuple
 
 import pytest
@@ -5,6 +6,8 @@ from bson import ObjectId
 
 from common.exceptions import InvalidModelSchema
 from itertools import combinations
+
+from common.exceptions import UnexpectedType
 from schema_validator import ModelSchema, DeploymentSchema
 from tests.unit.conftest import create_partial_deployment_schema
 from tests.unit.conftest import create_partial_model_schema
@@ -317,6 +320,42 @@ class TestModelSchemaGetValue:
             input_metadata, ModelSchema.TARGET_TYPE_KEY, ModelSchema.MODEL_ID_KEY
         )
         assert returned_value is None
+
+    def test_invalid_metadata_argument(self, mock_full_binary_model_schema):
+        with pytest.raises(UnexpectedType):
+            ModelSchema.get_value(ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.NAME_KEY)
+
+
+class TestModelSchemaSetValue:
+    @pytest.mark.parametrize("key_name", [ModelSchema.TARGET_NAME_KEY, "non-existing-key"])
+    def test_first_level_key(self, mock_full_binary_model_schema, key_name):
+        input_metadata = copy.deepcopy(mock_full_binary_model_schema)
+        name = str(ObjectId())
+        metadata = ModelSchema.set_value(input_metadata, key_name, name)
+        assert metadata[key_name] == name
+        assert input_metadata[key_name] == name
+
+    @pytest.mark.parametrize(
+        "section_name, key_name",
+        [
+            (ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.NAME_KEY),
+            ("non-existing-section", ModelSchema.NAME_KEY),
+            (ModelSchema.SETTINGS_SECTION_KEY, "non-existing-key"),
+            ("non-existing-section", "non-existing-key"),
+        ],
+        ids=[
+            "existing-section-existing-key",
+            "non-existing-section-existing-key",
+            "existing-section-non-existing-key",
+            "non-existing-section-non-existing-key",
+        ],
+    )
+    def test_second_level_key(self, mock_full_binary_model_schema, section_name, key_name):
+        input_metadata = copy.deepcopy(mock_full_binary_model_schema)
+        value = str(ObjectId())
+        metadata = ModelSchema.set_value(input_metadata, section_name, key_name, value)
+        assert metadata[section_name][key_name] == value
+        assert input_metadata[section_name][key_name] == value
 
 
 class TestDeploymentSchemaValidator:

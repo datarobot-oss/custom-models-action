@@ -9,6 +9,7 @@ from common.exceptions import DeploymentMetadataAlreadyExists
 from common.exceptions import NoValidAncestor
 from custom_inference_model import CustomInferenceModelBase
 from schema_validator import DeploymentSchema
+from schema_validator import ModelSchema
 from schema_validator import SharedSchema
 
 logger = logging.getLogger()
@@ -37,14 +38,14 @@ class DeploymentInfo:
 
     @property
     def is_challenger_enabled(self):
-        challenger_enabled = self.get_value(
-            DeploymentSchema.SETTINGS_SECTION_KEY,
-            DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY,
-        )
+        challenger_enabled = self.get_settings_value(DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY)
         return True if challenger_enabled is None else challenger_enabled
 
     def get_value(self, *args):
         return DeploymentSchema.get_value(self.metadata, *args)
+
+    def get_settings_value(self, key):
+        return self.get_value(DeploymentSchema.SETTINGS_SECTION_KEY, key)
 
 
 class CustomInferenceDeployment(CustomInferenceModelBase):
@@ -219,8 +220,23 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             f"A new deployment was created, "
             f"git_id: {deployment_info.git_deployment_id}, id: {deployment['id']}"
         )
+
+        self._handle_follow_up_deployment_settings(deployment_info, deployment)
+
         self._total_created += 1
         self._total_affected += 1
+
+    def _handle_follow_up_deployment_settings(self, deployment_info, deployment):
+        association_id = deployment_info.get_settings_value(DeploymentSchema.ASSOCIATION_ID_KEY)
+        actuals_dataset_id = deployment_info.get_settings_value(
+            DeploymentSchema.ACTUALS_DATASET_ID_KEY
+        )
+        if association_id and actuals_dataset_id:
+            model_info = self.models_info.get(deployment_info.git_model_id)
+            target_name = model_info.get_value(ModelSchema.TARGET_NAME_KEY)
+            self._dr_client.submit_deployment_actuals(
+                target_name, association_id, actuals_dataset_id, deployment
+            )
 
     @staticmethod
     def _there_is_a_new_model_version(datarobot_model, datarobot_deployment):
