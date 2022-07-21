@@ -1,0 +1,83 @@
+# This is a basic workflow to help you get started with Actions
+
+name: DataRobot Workflow CI/CD
+
+# Controls when the workflow will run
+on:
+  pull_request:
+    branches: [ demo ]
+  push:
+    branches: [ demo ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+env:
+  LOGLEVEL: debug
+  DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}
+  DATAROBOT_WEBSERVER: ${{ secrets.DATAROBOT_WEBSERVER }}
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+
+  # This workflow contains a single job called "build"
+  datarobot-custom-inference-model:
+    # Run this job on any action of a PR, but skip the job upon merge to master
+    if: ${{ github.event.pull_request.merged != true }}
+
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: DataRobot Custom Inference Model
+        id: custom-inference-model
+        uses: ./actions/custom-inference-model
+        with:
+          api-token: $DATAROBOT_API_TOKEN
+          webserver: $DATAROBOT_WEBSERVER
+          main-branch: demo
+          skip-cert-verification: true
+          allow-model-deletion: true
+
+      - name: DataRobot Custom Inference Model Results
+        run: |
+          echo "Total affected models: ${{ steps.custom-inference-model.outputs.total-affected-models }}"
+          echo "Total created models: ${{ steps.custom-inference-model.outputs.total-created-models }}"
+          echo "Total deleted models: ${{ steps.custom-inference-model.outputs.total-deleted-models }}"
+          echo "Message: ${{ steps.custom-inference-model.outputs.message }}"
+
+  datarobot-custom-inference-model-deployment:
+    needs: [datarobot-custom-inference-model]
+
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: DataRobot Custom Inference Model Deployment
+        id: custom-inference-model-deployment
+        uses: ./actions/custom-inference-model-deployment
+        with:
+          api-token: $DATAROBOT_API_TOKEN
+          webserver: $DATAROBOT_WEBSERVER
+          release-branch: demo
+          skip-cert-verification: true
+          allow-deployment-deletion: true
+
+      - name: DataRobot Custom Inference Model Deployment Results
+        run: |
+          echo "Total affected deployments: ${{ steps.custom-inference-model-deployment.outputs.total-affected-deployments }}"
+          echo "Total created deployments: ${{ steps.custom-inference-model-deployment.outputs.total-created-deployments }}"
+          echo "Total deleted deployments: ${{ steps.custom-inference-model-deployment.outputs.total-deleted-deployments }}"
+          echo "Message: ${{ steps.custom-inference-model-deployment.outputs.message }}"
