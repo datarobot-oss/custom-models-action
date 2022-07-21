@@ -116,7 +116,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Print out git log
+      - name: Git log
         run: git log -n 5 --name-only
 
       - name: DataRobot Custom Inference Model
@@ -149,7 +149,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Print out git log
+      - name: Git log
         run: git log -n 5 --name-only
 
       - name: DataRobot Custom Inference Model Deployment
