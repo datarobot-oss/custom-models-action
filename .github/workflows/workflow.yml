@@ -1,161 +1,42 @@
-# This is a basic workflow to help you get started with Actions
+name: DataRobot Workflow CI/CD
 
-name: Workflow CI/CD
-
-# Controls when the workflow will run
 on:
   pull_request:
-    branches: [ master ]
+    branches: [ demo ]
   push:
-    branches: [ master ]
+    branches: [ demo ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 env:
   LOGLEVEL: debug
-  DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}
-  DATAROBOT_WEBSERVER: ${{ secrets.DATAROBOT_WEBSERVER }}
-  INSPECT_CONTEXT: false
-  OUT_DIR: output-context/${{ github.event_name }}
+  # DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}
+  # DATAROBOT_WEBSERVER: ${{ secrets.DATAROBOT_WEBSERVER }}
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  validate-code-style:
-    # Run this job on any action of a PR, but skip the job upon merge to master
-    # if: github.event.pull_request.merged != true
-
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
-
-      - name: Install Reqruirements
-        run: pip install -r ${{ github.workspace }}/tests/requirements.txt
-
-      - name: Check source code format (pycodestyle + black)
-        run: make lint
-
-      # Print out context information
-      - name: Inspect context
-
-        if: ${{ env.INSPECT_CONTEXT == 'true' }}
-
-        run: |
-          mkdir -p $OUT_DIR
-          echo Save github context vital information
-          echo "github.event_name:                  ${{ github.event_name }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.pull_request.merged:   ${{ github.event.pull_request.merged }}" >> $OUT_DIR/github_context.txt
-          echo "" >> $OUT_DIR/github_context.txt
-          echo "github.sha:                         ${{ github.sha }}" >> $OUT_DIR/github_context.txt
-          echo "github.pull_request.head.sha:       ${{ github.pull_request.head.sha }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.after:                 ${{ github.event.after }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.before:                ${{ github.event.before }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.pull_request.head.sha: ${{ github.event.pull_request.head.sha }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.pull_request.base.sha: ${{ github.event.pull_request.base.sha }}" >> $OUT_DIR/github_context.txt
-          echo "" >> $OUT_DIR/github_context.txt
-
-          echo "github.ref:           ${{ github.ref }}" >> $OUT_DIR/github_context.txt
-          echo "github.ref_name:      ${{ github.ref_name }}" >> $OUT_DIR/github_context.txt
-          echo "github.head_ref:      ${{ github.head_ref }}" >> $OUT_DIR/github_context.txt
-          echo "github.base_ref:      ${{ github.base_ref }}" >> $OUT_DIR/github_context.txt
-          echo "" >> $OUT_DIR/github_context.txt
-
-          echo "github.repository:    ${{ github.repository }}" >> $OUT_DIR/github_context.txt
-          echo "github.workspace:    ${{ github.workspace }}" >> $OUT_DIR/github_context.txt
-
-          echo "The github context is:"
-          echo "${{ toJson(github) }}" >> $OUT_DIR/github_context.json
-          echo ""
-
-      - uses: actions/upload-artifact@v3
-        if: ${{ env.INSPECT_CONTEXT == 'true' }}
-        with:
-          name: Context info artifact
-          path: output-context
-
-  run-unit-tests:
-    # Run this job on any action of a PR, but skip the job upon merge to master
-    if: github.event.pull_request.merged != true
-
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
-
-      - name: Install Reqruirements
-        run: pip install -r ${{ github.workspace }}/tests/requirements.txt
-
-      - name: Run unit-tests
-        run: make test
-
-  run-functional-test:
-    needs: [run-unit-tests, validate-code-style]
-
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
-
-      - name: Install Reqruirements
-        run: pip install -r ${{ github.workspace }}/tests/requirements.txt
-
-      - name: Run a functional test
-        run: |
-          make test-functional \
-            FUNCTIONAL_TESTS='tests/functional/test_deployment_github_actions.py::TestDeploymentGitHubActions::test_e2e_deployment_create'
 
   datarobot-custom-inference-model:
-    # Skip this job! It is an intermediate step towards putting it in a separate repository.
-    # Run this job on any action of a PR, but skip the job upon merge to master
-    if: ${{ false && github.event.pull_request.merged != true }}
+    # Run this job on any action of a PR, but skip the job upon merge to master. When a PR
+    # is merged to the master the push even is also triggered.
+    if: ${{ github.event.pull_request.merged != true }}
 
-    needs: [validate-code-style, run-unit-tests]
-
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: GitHub Environment Variables
-        run: |
-          echo "GITHUB_EVENT_NAME: ${GITHUB_EVENT_NAME}"
-          echo "GITHUB_SHA: ${GITHUB_SHA}"
-          echo "GITHUB_HEAD_REF: ${GITHUB_HEAD_REF}"
-          echo "GITHUB_BASE_REF: ${GITHUB_BASE_REF}"
-          echo "GITHUB_REF: ${GITHUB_REF}"
-          echo "GITHUB_REF_NAME: ${GITHUB_REF_NAME}"
-          echo "GITHUB_REF_PROTECTED: ${GITHUB_REF_PROTECTED}"
-          echo "GITHUB_REF_TYPE: ${GITHUB_REF_TYPE}"
-          echo "GITHUB_RUN_ID: ${GITHUB_RUN_ID}"
-          echo "GITHUB_RUN_NUMBER: ${GITHUB_RUN_NUMBER}"
-
-      - name: Git log
-        run: git log --name-only
-
       - name: DataRobot Custom Inference Model
         id: datarobot-custom-inference-model
-        if: ${{ env.INSPECT_CONTEXT == 'false' }}
+        # When referring to this action from another repository the 'uses' value will be changed
+        # to this url: datarobot/custom-inference-model@v1.0.0
         uses: ./
         with:
-          api-token: $DATAROBOT_API_TOKEN
-          webserver: $DATAROBOT_WEBSERVER
-          branch: master
+          api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
+          webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
+          branch: demo
           allow-model-deletion: true
           allow-deployment-deletion: true
           skip-cert-verification: true
