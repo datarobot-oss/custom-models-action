@@ -5,17 +5,14 @@ name: Pull Request Workflow CI/CD
 # Controls when the workflow will run
 on:
   pull_request:
-    branches: [ master ]
+    branches: [ demo ]
   push:
-    branches: [ master ]
+    branches: [ demo ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 env:
-  CONTEXT_INFO_FILEPATH: context_info.json
-  OUT_DIR: output-context/${{ github.event_name }}
-  INSPECT_CONTEXT: false
   LOGLEVEL: debug
   DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}
   DATAROBOT_WEBSERVER: ${{ secrets.DATAROBOT_WEBSERVER }}
@@ -40,44 +37,6 @@ jobs:
 
       - name: Check source code format (pycodestyle + black)
         run: make lint
-
-      # Print out context information
-      - name: Inspect context
-
-        if: ${{ env.INSPECT_CONTEXT == 'true' }}
-
-        run: |
-          mkdir -p $OUT_DIR
-          echo Save github context vital information
-          echo "github.event_name:                  ${{ github.event_name }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.pull_request.merged:   ${{ github.event.pull_request.merged }}" >> $OUT_DIR/github_context.txt
-          echo "" >> $OUT_DIR/github_context.txt
-          echo "github.sha:                         ${{ github.sha }}" >> $OUT_DIR/github_context.txt
-          echo "github.pull_request.head.sha:       ${{ github.pull_request.head.sha }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.after:                 ${{ github.event.after }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.before:                ${{ github.event.before }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.pull_request.head.sha: ${{ github.event.pull_request.head.sha }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.pull_request.base.sha: ${{ github.event.pull_request.base.sha }}" >> $OUT_DIR/github_context.txt
-          echo "" >> $OUT_DIR/github_context.txt
-
-          echo "github.ref:           ${{ github.ref }}" >> $OUT_DIR/github_context.txt
-          echo "github.ref_name:      ${{ github.ref_name }}" >> $OUT_DIR/github_context.txt
-          echo "github.head_ref:      ${{ github.head_ref }}" >> $OUT_DIR/github_context.txt
-          echo "github.base_ref:      ${{ github.base_ref }}" >> $OUT_DIR/github_context.txt
-          echo "" >> $OUT_DIR/github_context.txt
-
-          echo "github.repository:    ${{ github.repository }}" >> $OUT_DIR/github_context.txt
-          echo "github.workspace:    ${{ github.workspace }}" >> $OUT_DIR/github_context.txt
-
-          echo "The github context is:"
-          echo "${{ toJson(github) }}" >> $OUT_DIR/github_context.json
-          echo ""
-
-      - uses: actions/upload-artifact@v3
-        if: ${{ env.INSPECT_CONTEXT == 'true' }}
-        with:
-          name: Context info artifact
-          path: output-context
 
   run-unit-tests:
     # Run this job on any action of a PR, but skip the job upon merge to master
@@ -121,12 +80,11 @@ jobs:
 
       - name: DataRobot Custom Inference Model
         id: custom-inference-model
-        if: ${{ env.INSPECT_CONTEXT == 'false' }}
         uses: ./actions/custom-inference-model
         with:
           api-token: $DATAROBOT_API_TOKEN
           webserver: $DATAROBOT_WEBSERVER
-          main-branch: master
+          main-branch: demo
           skip-cert-verification: true
 
       - name: DataRobot Custom Inference Model Results
@@ -154,18 +112,17 @@ jobs:
 
       - name: DataRobot Custom Inference Model Deployment
         id: custom-inference-model-deployment
-        if: ${{ env.INSPECT_CONTEXT == 'false' }}
         uses: ./actions/custom-inference-model-deployment
         with:
           api-token: $DATAROBOT_API_TOKEN
           webserver: $DATAROBOT_WEBSERVER
-          release-branch: master
+          release-branch: demo
           skip-cert-verification: true
           allow-deployment-deletion: true
 
       - name: DataRobot Custom Inference Model Deployment Results
         run: |
-          echo "Total affected models: ${{ steps.custom-inference-model-deployment.outputs.total-affected-deployments }}"
-          echo "Total created models: ${{ steps.custom-inference-model-deployment.outputs.total-created-deployments }}"
-          echo "Total deleted models: ${{ steps.custom-inference-model-deployment.outputs.total-deleted-deployments }}"
+          echo "Total affected deployments: ${{ steps.custom-inference-model-deployment.outputs.total-affected-deployments }}"
+          echo "Total created deployments: ${{ steps.custom-inference-model-deployment.outputs.total-created-deployments }}"
+          echo "Total deleted deployments: ${{ steps.custom-inference-model-deployment.outputs.total-deleted-deployments }}"
           echo "Message: ${{ steps.custom-inference-model-deployment.outputs.message }}"
