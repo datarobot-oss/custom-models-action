@@ -13,4 +13,4 @@ version:
 
 test:
   # Make sure it exists in DataRobot catalogue. Will be replaced during the functional tests.
-  test_data: 62c2f991e098a27b4255fb3c
+  test_data: 62d912712a0cc6af52d84eb7
