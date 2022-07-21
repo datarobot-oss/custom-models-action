@@ -1,116 +1,54 @@
-# This is a basic workflow to help you get started with Actions
-
-name: Workflow CI/CD
+name: DataRobot Workflow CI/CD
 
 # Controls when the workflow will run
 on:
   pull_request:
-    branches: [ master ]
+    branches: [ demo ]
   push:
-    branches: [ master ]
+    branches: [ demo ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 env:
   LOGLEVEL: debug
-  DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}  # Required by the functional tests
-  DATAROBOT_WEBSERVER: ${{ secrets.DATAROBOT_WEBSERVER }}  # Required by the functional tests
-  INSPECT_CONTEXT: false
-  OUT_DIR: output-context/${{ github.event_name }}
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  validate-code-style:
-    # Run this job on any action of a PR, but skip the job upon merge to master
-    # if: github.event.pull_request.merged != true
 
-    # The type of runner that the job will run on
+  datarobot-custom-inference-model:
+    # Run this job on any action of a PR, but skip the job upon merge to master. When a PR
+    # is merged to the master the push even is also triggered.
+    if: ${{ github.event.pull_request.merged != true }}
+
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
-
-      - name: Install Reqruirements
-        run: pip install -r ${{ github.workspace }}/tests/requirements.txt
-
-      - name: Check source code format (pycodestyle + black)
-        run: make lint
-
-      # Print out context information
-      - name: Inspect context
-
-        if: ${{ env.INSPECT_CONTEXT == 'true' }}
-
-        run: |
-          mkdir -p $OUT_DIR
-          echo Save github context vital information
-          echo "github.event_name:                  ${{ github.event_name }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.pull_request.merged:   ${{ github.event.pull_request.merged }}" >> $OUT_DIR/github_context.txt
-          echo "" >> $OUT_DIR/github_context.txt
-          echo "github.sha:                         ${{ github.sha }}" >> $OUT_DIR/github_context.txt
-          echo "github.pull_request.head.sha:       ${{ github.pull_request.head.sha }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.after:                 ${{ github.event.after }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.before:                ${{ github.event.before }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.pull_request.head.sha: ${{ github.event.pull_request.head.sha }}" >> $OUT_DIR/github_context.txt
-          echo "github.event.pull_request.base.sha: ${{ github.event.pull_request.base.sha }}" >> $OUT_DIR/github_context.txt
-          echo "" >> $OUT_DIR/github_context.txt
-
-          echo "github.ref:           ${{ github.ref }}" >> $OUT_DIR/github_context.txt
-          echo "github.ref_name:      ${{ github.ref_name }}" >> $OUT_DIR/github_context.txt
-          echo "github.head_ref:      ${{ github.head_ref }}" >> $OUT_DIR/github_context.txt
-          echo "github.base_ref:      ${{ github.base_ref }}" >> $OUT_DIR/github_context.txt
-          echo "" >> $OUT_DIR/github_context.txt
-
-          echo "github.repository:    ${{ github.repository }}" >> $OUT_DIR/github_context.txt
-          echo "github.workspace:    ${{ github.workspace }}" >> $OUT_DIR/github_context.txt
-
-          echo "The github context is:"
-          echo "${{ toJson(github) }}" >> $OUT_DIR/github_context.json
-          echo ""
-
-      - uses: actions/upload-artifact@v3
-        if: ${{ env.INSPECT_CONTEXT == 'true' }}
         with:
-          name: Context info artifact
-          path: output-context
+          fetch-depth: 0
 
-  run-unit-tests:
-    # Run this job on any action of a PR, but skip the job upon merge to master
-    if: github.event.pull_request.merged != true
+      - name: DataRobot Custom Inference Model
+        id: datarobot-custom-inference-model
+        # When referring to this action from another repository the 'uses' value will be changed
+        # to this url: datarobot/custom-inference-model@v1.0.0
+        uses: ./
+        with:
+          api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
+          webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
+          branch: demo
+          allow-model-deletion: true
+          allow-deployment-deletion: true
+          skip-cert-verification: true
 
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
-
-      - name: Install Reqruirements
-        run: pip install -r ${{ github.workspace }}/tests/requirements.txt
-
-      - name: Run unit-tests
-        run: make test
-
-  run-functional-test:
-    needs: [run-unit-tests, validate-code-style]
-
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
-
-      - name: Install Reqruirements
-        run: pip install -r ${{ github.workspace }}/tests/requirements.txt
-
-      - name: Run a functional test
+      - name: DataRobot Custom Inference Model Action Results
         run: |
-          make test-functional \
-            FUNCTIONAL_TESTS='tests/functional/test_deployment_github_actions.py::TestDeploymentGitHubActions::test_e2e_deployment_create'
+          echo "Total affected models: ${{ steps.datarobot-custom-inference-model.outputs.total-affected-models }}"
+          echo "Total created models: ${{ steps.datarobot-custom-inference-model.outputs.total-created-models }}"
+          echo "Total deleted models: ${{ steps.datarobot-custom-inference-model.outputs.total-deleted-models }}"
+          echo "Total created model versions: ${{ steps.datarobot-custom-inference-model.outputs.total-created-model-versions }}"
+
+          echo "Total affected deployments: ${{ steps.datarobot-custom-inference-model.outputs.total-affected-deployments }}"
+          echo "Total created deployments: ${{ steps.datarobot-custom-inference-model.outputs.total-created-deployments }}"
+          echo "Total deleted deployments: ${{ steps.datarobot-custom-inference-model.outputs.total-deleted-deployments }}"
+
+          echo "Message: ${{ steps.datarobot-custom-inference-model.outputs.message }}"
