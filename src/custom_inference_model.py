@@ -382,6 +382,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
     @staticmethod
     def _normalize_paths(paths):
+        # NOTE: we would like to leave relative paths without resolving them.
         # Handle this kind of paths: /a/./b/ ==> /a/b, /a//b ==> /a/b
         re_p1 = re.compile(r"/\./|//")
         # Handle this kind of path: ./a/b ==> a/b
@@ -420,13 +421,18 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def _get_relative_path(self, path, model_info):
         def _extract_path(p, root):
             relative_path = p.relative_to(root)
-            extracted_path = relative_path.parts[0] if relative_path.parts else relative_path
-            return extracted_path
+            relative_path = str(relative_path).replace("../", "")
+            return relative_path
 
+        logger.debug(f"Get relative path ... path: {path}, model_path: {model_info.model_path}")
         if self._is_relative_to(path, model_info.model_path):
-            return self.RelativeTo.MODEL, _extract_path(path, model_info.model_path)
+            _extracted_path = _extract_path(path, model_info.model_path)
+            logger.debug(f"Path is relative to model. Extracted path: {_extracted_path}")
+            return self.RelativeTo.MODEL, _extracted_path
         elif self._is_relative_to(path, self.options.root_dir):
-            return self.RelativeTo.ROOT, _extract_path(path, self.options.root_dir)
+            _extracted_path = _extract_path(path, self.options.root_dir)
+            logger.debug(f"Path is relative to root. Extracted path: {_extracted_path}")
+            return self.RelativeTo.ROOT, _extracted_path
         else:
             return None, None
 
@@ -572,6 +578,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
         logger.info(
             "Create custom inference model version. git_model_id: "
             f" {model_info.git_model_id}, from_latest: {model_info.should_upload_all_files}"
+        )
+        logger.debug(
+            f"Files to be uploaded: {changed_files_info}, git_model_id: {model_info.git_model_id}"
         )
 
         if self.is_pull_request:
