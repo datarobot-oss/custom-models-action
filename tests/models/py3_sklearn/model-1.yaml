@@ -11,7 +11,7 @@ version:
   # It is the '[DataRobot] Python 3 Scikit-Learn Drop-In' environment
   model_environment: 5e8c889607389fe0f466c72d
 
-  include_glob_pattern: [".", "../common"]
+  include_glob_pattern: ["./", "../common"]
   exclude_glob_pattern: ["README.md"]
 
   memory: 512Mi
