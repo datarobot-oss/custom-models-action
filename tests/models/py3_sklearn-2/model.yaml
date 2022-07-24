@@ -11,3 +11,6 @@ version:
   # It is the '[DataRobot] Python 3 Scikit-Learn Drop-In' environment
   model_environment: 5e8c889607389fe0f466c72d
 
+test:
+  # Make sure it exists in DataRobot catalogue.
+  test_data: 62d912712a0cc6af52d84eb7
