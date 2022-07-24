@@ -14,6 +14,6 @@ version:
   memory: 512Mi
 
 test:
-  # Make sure it exists in DataRobot catalogue. Will be replaced during the functional tests.
+  # Make sure it exists in DataRobot catalogue.
   test_data: 62d912712a0cc6af52d84eb7
 
