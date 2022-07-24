@@ -11,6 +11,6 @@ env
 echo
 
 CMD="drum server --verbose $@"
-echo "Executing command:  ${CMD}"
+echo "Executing command: ${CMD}"
 echo
 exec ${CMD}
