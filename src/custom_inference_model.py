@@ -573,6 +573,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
             "Create custom inference model version. git_model_id: "
             f" {model_info.git_model_id}, from_latest: {model_info.should_upload_all_files}"
         )
+        logger.debug(
+            f"Files to be uploaded: {changed_files_info}, git_model_id: {model_info.git_model_id}"
+        )
 
         if self.is_pull_request:
             if self._repo.num_remotes() == 0:
