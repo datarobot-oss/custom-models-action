@@ -86,6 +86,7 @@ jobs:
           webserver: $DATAROBOT_WEBSERVER
           main-branch: demo
           skip-cert-verification: true
+          allow-model-deletion: true
 
       - name: DataRobot Custom Inference Model Results
         run: |
