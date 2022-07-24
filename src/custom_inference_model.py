@@ -375,9 +375,13 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
     @classmethod
     def _set_filtered_model_paths(cls, model_info, included_paths, excluded_paths):
+        logger.debug(f"Included paths: {included_paths}")
         included_paths = cls._normalize_paths(included_paths)
+        logger.debug(f"Normalized included paths: {included_paths}")
         excluded_paths = cls._normalize_paths(excluded_paths)
+        logger.debug(f"Excluded paths: {excluded_paths}")
         final_model_paths = included_paths - excluded_paths
+        logger.debug(f"Final model paths: {final_model_paths}")
         model_info.set_paths(final_model_paths)
 
     @staticmethod
