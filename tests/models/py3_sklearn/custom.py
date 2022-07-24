@@ -6,7 +6,7 @@ Released under the terms of DataRobot Tool and Utility Agreement.
 """
 import pandas as pd
 
-import conversion
+from common import conversion
 
 
 def transform(data, model):
