@@ -310,6 +310,7 @@ class TestGlobPatterns:
     @pytest.mark.parametrize(
         "included_paths, excluded_paths, expected_num_model_files",
         [
+            ({"./custom.py", "./bbb.py", "score/bbb.md"}, {}, 3),
             ({"./custom.py", "./bbb.py", "score/bbb.md"}, {"bbb.py"}, 2),
             ({"./custom.py", ".//bbb.py", "score/bbb.md"}, {"bbb.py"}, 2),
             ({"./custom.py", "bbb.py", "score/bbb.py"}, {"bbb.py"}, 2),
@@ -318,7 +319,7 @@ class TestGlobPatterns:
             ({"./custom.py", "bbb.py", "score//bbb.py"}, {"score/bbb.py"}, 2),
             ({"./custom.py", ".//bbb.py", "score/./bbb.py"}, {"score/bbb.py"}, 2),
             ({"./custom.py", "score/../bbb.py"}, {"score/bbb.py"}, 2),
-            ({"./custom.py", "score/../bbb.py"}, {"bbb.py"}, 2),
+            ({"./custom.py", "score/../bbb.py"}, {"bbb.py"}, 1),
             ({"./custom.py", "//score/bbb.py"}, {"/score/bbb.py"}, 1),
             ({"./custom.py", "//score/./bbb.py"}, {"/score/bbb.py"}, 1),
         ],
@@ -346,8 +347,8 @@ class TestGlobPatterns:
                 ["/repo/common/util.py"],
                 True,
             ),
-            (["/repo/model/common/convert.py"], ["/repo/common/util.py"], True),
-            (["/repo/model/common/util/convert.py"], ["/repo/common/util.py"], True),
+            (["/repo/model/common/convert.py"], ["/repo/common/util.py"], False),
+            (["/repo/model/common/util/convert.py"], ["/repo/common/util.py"], False),
             (
                 ["/repo/model/custom.py", "/repo/model/score.py"],
                 ["/repo/common/util.py", "/repo/common/common.py"],
@@ -356,10 +357,10 @@ class TestGlobPatterns:
         ],
         ids=[
             "file-collision",
-            "package-collision1",
-            "package-collision2",
-            "package-collision3",
-            "no-collision",
+            "common-package-collision",
+            "common-package-no-collision1",
+            "common-package-no-collision2",
+            "shared-package-no-collision",
         ],
     )
     def test_local_and_shared_collisions(self, local_paths, shared_paths, collision_expected):

@@ -24,13 +24,17 @@ def merge_branch_name():
 
 
 @pytest.fixture
-def cleanup(dr_client, model_metadata):
+def cleanup(dr_client, repo_root_path):
     yield
 
-    try:
-        dr_client.delete_custom_model_by_git_model_id(model_metadata[ModelSchema.MODEL_ID_KEY])
-    except (IllegalModelDeletion, DataRobotClientError):
-        pass
+    for model_yaml_file in repo_root_path.rglob("**/model.yaml"):
+        with open(model_yaml_file) as f:
+            model_metadata = yaml.safe_load(f)
+
+        try:
+            dr_client.delete_custom_model_by_git_model_id(model_metadata[ModelSchema.MODEL_ID_KEY])
+        except (IllegalModelDeletion, DataRobotClientError):
+            pass
 
 
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
