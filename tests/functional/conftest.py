@@ -58,7 +58,42 @@ def git_repo(repo_root_path):
 def build_repo_for_testing(repo_root_path, git_repo):
     # 1. Copy models from source tree
     models_src_root_dir = Path(__file__).parent / ".." / "models"
-    shutil.copytree(models_src_root_dir, repo_root_path / models_src_root_dir.name)
+    dst_models_dir = repo_root_path / models_src_root_dir.name
+    shutil.copytree(models_src_root_dir, dst_models_dir)
+
+    # 2. Rename first model to indicate '1'
+    model_filepath_1 = next(dst_models_dir.glob("*"))
+    first_model_filepath = str(model_filepath_1) + "_1"
+    model_filepath_1 = model_filepath_1.rename(first_model_filepath)
+
+    # 3. Duplicate the first model to simulate more than one model
+    second_model_filepath = first_model_filepath.replace("_1", "_2")
+    shutil.copytree(first_model_filepath, second_model_filepath)
+
+    second_model_metadata_yaml_filepath = next(Path(second_model_filepath).rglob("**/model.yaml"))
+    with open(second_model_metadata_yaml_filepath, "r") as f:
+        second_model_metadata = yaml.safe_load(f)
+
+    # 4. Change second model ID
+    second_model_id = second_model_metadata[ModelSchema.MODEL_ID_KEY]
+    second_model_id = second_model_id.replace("1", "2")
+    ModelSchema.set_value(second_model_metadata, ModelSchema.MODEL_ID_KEY, second_model_id)
+
+    # 5. Change second model name
+    second_model_name = ModelSchema.get_value(
+        second_model_metadata, ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.NAME_KEY
+    )
+    second_model_name = second_model_name.replace("1", "2")
+    ModelSchema.set_value(
+        second_model_metadata,
+        ModelSchema.SETTINGS_SECTION_KEY,
+        ModelSchema.NAME_KEY,
+        second_model_name,
+    )
+
+    # 6. Save second model metadata
+    with open(second_model_metadata_yaml_filepath, "w") as f:
+        yaml.safe_dump(second_model_metadata, f)
 
     # 2. Add files to repo
     os.chdir(repo_root_path)
@@ -124,7 +159,7 @@ def skip_model_testing(model_metadata, model_metadata_yaml_file):
 # but, apparently it cannot be used with fixtures.
 @pytest.fixture
 def model_metadata_yaml_file(build_repo_for_testing, repo_root_path, git_repo):
-    model_yaml_file = next(repo_root_path.rglob("**/model.yaml"))
+    model_yaml_file = next(repo_root_path.rglob("*_1/model.yaml"))
     with open(model_yaml_file) as f:
         yaml_content = yaml.safe_load(f)
         yaml_content[ModelSchema.MODEL_ID_KEY] = f"my-awesome-model-{str(ObjectId())}"

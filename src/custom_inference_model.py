@@ -375,19 +375,30 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
     @classmethod
     def _set_filtered_model_paths(cls, model_info, included_paths, excluded_paths):
+        # NOTE: we would like to keep the relative paths in a model without resolving them.
         included_paths = cls._normalize_paths(included_paths)
-        excluded_paths = cls._normalize_paths(excluded_paths)
-        final_model_paths = included_paths - excluded_paths
+        if not excluded_paths:
+            final_model_paths = included_paths
+        else:
+            excluded_paths = cls._normalize_paths(excluded_paths)
+            included_normpaths = [os.path.normpath(p) for p in included_paths]
+            excluded_normpaths = [os.path.normpath(p) for p in excluded_paths]
+            final_model_paths = []
+            for index, included_normpath in enumerate(included_normpaths):
+                if included_normpath not in excluded_normpaths:
+                    final_model_paths.append(included_paths[index])
+
         model_info.set_paths(final_model_paths)
 
     @staticmethod
     def _normalize_paths(paths):
+        # NOTE: we would like to keep relative paths without resolving them.
         # Handle this kind of paths: /a/./b/ ==> /a/b, /a//b ==> /a/b
         re_p1 = re.compile(r"/\./|//")
         # Handle this kind of path: ./a/b ==> a/b
         re_p2 = re.compile(r"^\./")
         paths = [re_p1.sub("/", p) for p in paths]
-        return set([re_p2.sub("", p) for p in paths])
+        return [re_p2.sub("", p) for p in paths]
 
     def _validate_model_integrity(self, model_info):
         if not model_info.main_program_exists():
@@ -420,13 +431,18 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def _get_relative_path(self, path, model_info):
         def _extract_path(p, root):
             relative_path = p.relative_to(root)
-            extracted_path = relative_path.parts[0] if relative_path.parts else relative_path
-            return extracted_path
+            relative_path = str(relative_path).replace("../", "")
+            return relative_path
 
+        logger.debug(f"Get relative path ... path: {path}, model_path: {model_info.model_path}")
         if self._is_relative_to(path, model_info.model_path):
-            return self.RelativeTo.MODEL, _extract_path(path, model_info.model_path)
+            _extracted_path = _extract_path(path, model_info.model_path)
+            logger.debug(f"Path is relative to model. Extracted path: {_extracted_path}")
+            return self.RelativeTo.MODEL, _extracted_path
         elif self._is_relative_to(path, self.options.root_dir):
-            return self.RelativeTo.ROOT, _extract_path(path, self.options.root_dir)
+            _extracted_path = _extract_path(path, self.options.root_dir)
+            logger.debug(f"Path is relative to root. Extracted path: {_extracted_path}")
+            return self.RelativeTo.ROOT, _extracted_path
         else:
             return None, None
 
@@ -572,6 +588,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
         logger.info(
             "Create custom inference model version. git_model_id: "
             f" {model_info.git_model_id}, from_latest: {model_info.should_upload_all_files}"
+        )
+        logger.debug(
+            f"Files to be uploaded: {changed_files_info}, git_model_id: {model_info.git_model_id}"
         )
 
         if self.is_pull_request:
