@@ -6,7 +6,7 @@ Released under the terms of DataRobot Tool and Utility Agreement.
 """
 import pandas as pd
 
-import conversion
+from common import conversion
 
 
 def transform(data, model):
@@ -35,6 +35,6 @@ def transform(data, model):
 
     inches = 10
     centimeters = conversion.inch_to_cm(inches)
-    print(f"Inches: {inches}, Centimeters: {centimeters}", flush=True)
+    print(f"Inches: {inches}, Centimeters: {centimeters}")
 
     return data
