@@ -90,18 +90,17 @@ class GitTool:
             return False
 
     def print_pretty_log(self):
-        print(
-            self.repo.git.log(
-                "--color",
-                "--graph",
-                "--name-only",
-                "--pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) "
-                "%C(bold blue)<%an>%Creset'",
-                "--abbrev-commit",
-                "-n",
-                5,
-            )
+        git_logs = self.repo.git.log(
+            "--color",
+            "--graph",
+            "--name-only",
+            "--pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) "
+            "%C(bold blue)<%an>%Creset'",
+            "--abbrev-commit",
+            "-n",
+            "7",
         )
+        logger.debug(git_logs)
 
     def feature_branch_top_commit_sha_of_a_merge_commit(self, commit_sha):
         commit = self.repo.commit(commit_sha)

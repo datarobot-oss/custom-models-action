@@ -458,8 +458,6 @@ class CustomInferenceModel(CustomInferenceModelBase):
         logger.info("Lookup affected models by the current commit ...")
 
         for _, model_info in self.models_info.items():
-            model_info.changed_or_new_files = []
-            model_info.deleted_file_ids = []
             model_info.should_upload_all_files = self._should_upload_all_files(model_info)
 
         self._lookup_affected_models()
@@ -506,8 +504,12 @@ class CustomInferenceModel(CustomInferenceModelBase):
             self._repo.print_pretty_log()
 
         for _, model_info in self.models_info.items():
+            model_info.changed_or_new_files = []
+            model_info.deleted_file_ids = []
+
             if model_info.should_upload_all_files:
                 continue
+
             from_commit_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
             if not from_commit_sha:
                 raise UnexpectedResult(
@@ -517,6 +519,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
             changed_files, deleted_files = self._repo.find_changed_files(
                 self.github_sha, from_commit_sha
             )
+            logger.debug(f"Changed files: {changed_files}. Deleted files: {deleted_files}")
             self._handle_changed_or_new_files(model_info, changed_files)
             self._handle_deleted_files(model_info, deleted_files)
 
