@@ -493,7 +493,12 @@ class CustomInferenceModel(CustomInferenceModelBase):
             return False
 
         # Users may have few local commits between remote pushes
-        return self._repo.is_ancestor_of(ancestor_sha, self.github_sha)
+        is_ancestor = self._repo.is_ancestor_of(ancestor_sha, self.github_sha)
+        logger.debug(
+            f"Is the latest model version's git commit sha ({ancestor_sha}) "
+            f"ancestor of the current commit ({self.github_sha})? Answer: {is_ancestor}"
+        )
+        return is_ancestor
 
     def _lookup_affected_models(self):
         # In a PR a merge commit is always the last commit, which we need to ignore.
