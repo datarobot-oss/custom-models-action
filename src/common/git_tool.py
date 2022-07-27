@@ -1,4 +1,5 @@
 import logging
+import os
 
 from git import Repo
 from pathlib import Path
@@ -13,6 +14,7 @@ class GitTool:
     GITHUB_COMMIT_URL_PATTERN = "https://github.com/{user_and_project}/commit/{sha}"
 
     def __init__(self, git_repo_path):
+        os.environ["GIT_PYTHON_TRACE"] = "false"  # "full"
         self._repo = Repo.init(git_repo_path)
         self._repo_path = Path(git_repo_path)
 
@@ -90,16 +92,17 @@ class GitTool:
             return False
 
     def print_pretty_log(self):
-        print(
-            self.repo.git.log(
-                "--color",
-                "--graph",
-                "--name-only",
-                "--pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) "
-                "%C(bold blue)<%an>%Creset'",
-                "--abbrev-commit",
-            )
+        git_logs = self.repo.git.log(
+            "--color",
+            "--graph",
+            "--name-only",
+            "--pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) "
+            "%C(bold blue)<%an>%Creset'",
+            "--abbrev-commit",
+            "-n",
+            "7",
         )
+        logger.debug(git_logs)
 
     def feature_branch_top_commit_sha_of_a_merge_commit(self, commit_sha):
         commit = self.repo.commit(commit_sha)

@@ -6,16 +6,16 @@ from pathlib import Path
 import logging
 import os
 import re
+from typing import Dict
+
 import yaml
 
 from common.data_types import DataRobotModel
-from common.data_types import FileInfo
-from common.exceptions import (
-    ModelMainEntryPointNotFound,
-    DataRobotClientError,
-    IllegalModelDeletion,
-    ModelMetadataAlreadyExists,
-)
+from common.exceptions import DataRobotClientError
+from common.exceptions import IllegalModelDeletion
+from common.exceptions import ModelMainEntryPointNotFound
+from common.exceptions import ModelMetadataAlreadyExists
+from common.exceptions import PathOutsideTheRepository
 from common.exceptions import SharedAndLocalPathCollision
 from common.exceptions import UnexpectedResult
 from common.git_tool import GitTool
@@ -25,12 +25,76 @@ from schema_validator import ModelSchema
 logger = logging.getLogger()
 
 
+class ModelFilePath:
+    class RelativeTo(Enum):
+        MODEL = 1
+        ROOT = 2
+
+    def __init__(self, raw_file_path, model_root_dir, repo_root_dir):
+        self._raw_file_path = raw_file_path
+        self._filepath = Path(raw_file_path)
+        # It is important to have an indication about the path origin and the relation to
+        # the model, means whether the given path was originally under the model's root dir
+        # or it is supposed to be copied into it. This will help us to detect collisions
+        # between paths that exist under the model versus those that are supposed to be copied.
+        path_under_model, relative_to = self.get_path_under_model(
+            self._filepath, model_root_dir, repo_root_dir
+        )
+        self._under_model = path_under_model
+        self._relative_to = relative_to
+
+    @classmethod
+    def get_path_under_model(cls, filepath, model_root_dir, repo_root_dir):
+        try:
+            path_under_model = cls._get_path_under_model_for_given_root(filepath, model_root_dir)
+            relative_to = cls.RelativeTo.MODEL
+        except ValueError:
+            try:
+                path_under_model = cls._get_path_under_model_for_given_root(filepath, repo_root_dir)
+                relative_to = cls.RelativeTo.ROOT
+            except ValueError:
+                raise PathOutsideTheRepository(
+                    f"Model file path is outside the repository: {filepath}"
+                )
+        return path_under_model, relative_to
+
+    @staticmethod
+    def _get_path_under_model_for_given_root(filepath, root):
+        relative_path = filepath.relative_to(root)
+        return str(relative_path).replace("../", "")  # Will be copied under the model
+
+    def __str__(self):
+        return self.under_model
+
+    @property
+    def filepath(self):
+        return self._filepath
+
+    @property
+    def name(self):
+        return self.filepath.name
+
+    @property
+    def resolved(self):
+        return self.filepath.resolve()
+
+    @property
+    def under_model(self):
+        return self._under_model
+
+    @property
+    def relative_to(self):
+        return self._relative_to
+
+
 class ModelInfo:
+    _model_file_paths: Dict[Path, ModelFilePath]
+
     def __init__(self, yaml_filepath, model_path, metadata):
         self._yaml_filepath = Path(yaml_filepath)
         self._model_path = Path(model_path)
         self._metadata = metadata
-        self._model_file_paths = []
+        self._model_file_paths = {}
         self.should_upload_all_files = False
         self.changed_or_new_files = []
         self.deleted_file_ids = []
@@ -72,16 +136,28 @@ class ModelInfo:
         return ModelSchema.is_multiclass(self.metadata)
 
     def main_program_filepath(self):
-        for p in self.model_file_paths:
-            if p.name == "custom.py":
-                return p
-        return None
+        try:
+            return next(p for _, p in self.model_file_paths.items() if p.name == "custom.py")
+        except StopIteration:
+            return None
 
     def main_program_exists(self):
         return self.main_program_filepath() is not None
 
-    def set_paths(self, paths):
-        self._model_file_paths = [Path(p) for p in paths]
+    def set_model_paths(self, paths, repo_root_path):
+        self._model_file_paths = {}
+        for p in paths:
+            model_filepath = ModelFilePath(p, self.model_path, repo_root_path)
+            self._model_file_paths[model_filepath.resolved] = model_filepath
+
+    def paths_under_model_by_relative(self, relative_to):
+        return set(
+            [
+                p.under_model
+                for _, p in self.model_file_paths.items()
+                if p.relative_to == relative_to
+            ]
+        )
 
     @property
     def is_affected_by_commit(self):
@@ -102,9 +178,10 @@ class ModelInfo:
 
 
 class CustomInferenceModelBase(ABC):
+    _models_info: Dict[str, ModelInfo]
+
     def __init__(self, options):
         self._options = options
-        os.environ["GIT_PYTHON_TRACE"] = "full"
         self._repo = GitTool(self.options.root_dir)
         self._models_info = {}
         self._datarobot_models = {}
@@ -304,10 +381,6 @@ class CustomInferenceModelBase(ABC):
 
 
 class CustomInferenceModel(CustomInferenceModelBase):
-    class RelativeTo(Enum):
-        ROOT = 1
-        MODEL = 2
-
     def __init__(self, options):
         super().__init__(options)
 
@@ -369,29 +442,36 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
                 excluded_paths.update(glob(exclude_glob_pattern, recursive=True))
 
-            self._set_filtered_model_paths(model_info, included_paths, excluded_paths)
+            self._set_filtered_model_paths(
+                model_info, included_paths, excluded_paths, self.options.root_dir
+            )
             self._validate_model_integrity(model_info)
             logger.info(f"Model {model_info.model_path} detected and verified.")
 
     @classmethod
-    def _set_filtered_model_paths(cls, model_info, included_paths, excluded_paths):
-        # NOTE: we would like to keep the relative paths in a model without resolving them.
-        included_paths = cls._normalize_paths(included_paths)
-        if not excluded_paths:
-            final_model_paths = included_paths
-        else:
-            excluded_paths = cls._normalize_paths(excluded_paths)
-            included_normpaths = [os.path.normpath(p) for p in included_paths]
+    def _set_filtered_model_paths(cls, model_info, included_paths, excluded_paths, repo_root_dir):
+        final_model_paths = []
+        included_paths = cls._remove_undesired_sub_paths(included_paths)
+        if excluded_paths:
+            excluded_paths = cls._remove_undesired_sub_paths(excluded_paths)
             excluded_normpaths = [os.path.normpath(p) for p in excluded_paths]
-            final_model_paths = []
-            for index, included_normpath in enumerate(included_normpaths):
-                if included_normpath not in excluded_normpaths:
-                    final_model_paths.append(included_paths[index])
+        else:
+            excluded_normpaths = []
+        model_root_dir = str(model_info.model_path.absolute())
+        for included_path in included_paths:
+            included_normpath = os.path.normpath(included_path)
+            if included_normpath in excluded_normpaths:
+                continue
+            if included_normpath == model_root_dir:
+                continue
+            if os.path.isdir(included_normpath):
+                continue
+            final_model_paths.append(included_path)
 
-        model_info.set_paths(final_model_paths)
+        model_info.set_model_paths(final_model_paths, repo_root_dir)
 
     @staticmethod
-    def _normalize_paths(paths):
+    def _remove_undesired_sub_paths(paths):
         # NOTE: we would like to keep relative paths without resolving them.
         # Handle this kind of paths: /a/./b/ ==> /a/b, /a//b ==> /a/b
         re_p1 = re.compile(r"/\./|//")
@@ -410,56 +490,25 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
         self._validate_collision_between_local_and_shared(model_info)
 
-    def _validate_collision_between_local_and_shared(self, model_info):
-        model_file_paths = model_info.model_file_paths
-
-        relative_paths = {self.RelativeTo.MODEL: set([]), self.RelativeTo.ROOT: set([])}
-        for path in model_file_paths:
-            relative_to, relative_path = self._get_relative_path(path, model_info)
-            if not relative_to:
-                raise UnexpectedResult(f"The path '{path}' is outside the repo.")
-            if str(relative_path) != ".":
-                relative_paths[relative_to].add(relative_path)
-
-        collisions = relative_paths[self.RelativeTo.MODEL] & relative_paths[self.RelativeTo.ROOT]
+    @staticmethod
+    def _validate_collision_between_local_and_shared(model_info):
+        paths_relative_to_model = model_info.paths_under_model_by_relative(
+            ModelFilePath.RelativeTo.MODEL
+        )
+        paths_relative_to_root = model_info.paths_under_model_by_relative(
+            ModelFilePath.RelativeTo.ROOT
+        )
+        collisions = paths_relative_to_model & paths_relative_to_root
         if collisions:
             raise SharedAndLocalPathCollision(
                 f"Invalid file tree. Shared file(s)/package(s) collide with local model's "
                 f"file(s)/package(s). Collisions: {collisions}."
             )
 
-    def _get_relative_path(self, path, model_info):
-        def _extract_path(p, root):
-            relative_path = p.relative_to(root)
-            relative_path = str(relative_path).replace("../", "")
-            return relative_path
-
-        logger.debug(f"Get relative path ... path: {path}, model_path: {model_info.model_path}")
-        if self._is_relative_to(path, model_info.model_path):
-            _extracted_path = _extract_path(path, model_info.model_path)
-            logger.debug(f"Path is relative to model. Extracted path: {_extracted_path}")
-            return self.RelativeTo.MODEL, _extracted_path
-        elif self._is_relative_to(path, self.options.root_dir):
-            _extracted_path = _extract_path(path, self.options.root_dir)
-            logger.debug(f"Path is relative to root. Extracted path: {_extracted_path}")
-            return self.RelativeTo.ROOT, _extracted_path
-        else:
-            return None, None
-
-    @staticmethod
-    def _is_relative_to(a_path, b_path):
-        try:
-            a_path.relative_to(b_path)
-            return True
-        except ValueError:
-            return False
-
     def _lookup_affected_models_by_the_current_action(self):
         logger.info("Lookup affected models by the current commit ...")
 
         for _, model_info in self.models_info.items():
-            model_info.changed_or_new_files = []
-            model_info.deleted_file_ids = []
             model_info.should_upload_all_files = self._should_upload_all_files(model_info)
 
         self._lookup_affected_models()
@@ -493,7 +542,12 @@ class CustomInferenceModel(CustomInferenceModelBase):
             return False
 
         # Users may have few local commits between remote pushes
-        return self._repo.is_ancestor_of(ancestor_sha, self.github_sha)
+        is_ancestor = self._repo.is_ancestor_of(ancestor_sha, self.github_sha)
+        logger.debug(
+            f"Is the latest model version's git commit sha ({ancestor_sha}) "
+            f"ancestor of the current commit ({self.github_sha})? Answer: {is_ancestor}"
+        )
+        return is_ancestor
 
     def _lookup_affected_models(self):
         # In a PR a merge commit is always the last commit, which we need to ignore.
@@ -501,8 +555,12 @@ class CustomInferenceModel(CustomInferenceModelBase):
             self._repo.print_pretty_log()
 
         for _, model_info in self.models_info.items():
+            model_info.changed_or_new_files = []
+            model_info.deleted_file_ids = []
+
             if model_info.should_upload_all_files:
                 continue
+
             from_commit_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
             if not from_commit_sha:
                 raise UnexpectedResult(
@@ -512,18 +570,20 @@ class CustomInferenceModel(CustomInferenceModelBase):
             changed_files, deleted_files = self._repo.find_changed_files(
                 self.github_sha, from_commit_sha
             )
+            logger.debug(f"Changed files: {changed_files}. Deleted files: {deleted_files}")
             self._handle_changed_or_new_files(model_info, changed_files)
             self._handle_deleted_files(model_info, deleted_files)
 
     @staticmethod
     def _handle_changed_or_new_files(model_info, changed_or_new_files):
         for changed_file in changed_or_new_files:
-            if changed_file in model_info.model_file_paths:
+            changed_model_filepath = model_info.model_file_paths.get(changed_file)
+            if changed_model_filepath:
                 logger.info(
                     f"Changed/new file '{changed_file}' affects model "
                     f"'{model_info.model_path.name}'"
                 )
-                model_info.changed_or_new_files.append(changed_file)
+                model_info.changed_or_new_files.append(changed_model_filepath)
 
     def _handle_deleted_files(self, model_info, deleted_files):
         for deleted_file in deleted_files:
@@ -532,15 +592,19 @@ class CustomInferenceModel(CustomInferenceModelBase):
             if model_info.git_model_id in self.datarobot_models:
                 latest_version = self.datarobot_models[model_info.git_model_id].latest_version
                 if latest_version:
-                    _, relative_path = self._get_relative_path(deleted_file, model_info)
-                    if not relative_path:
+                    model_root_dir = model_info.model_path
+                    repo_root_dir = self.options.root_dir
+                    path_under_model, relative_to = ModelFilePath.get_path_under_model(
+                        deleted_file, model_root_dir, repo_root_dir
+                    )
+                    if not path_under_model:
                         raise UnexpectedResult(f"The path '{deleted_file}' is outside the repo.")
 
                     model_info.deleted_file_ids.extend(
                         [
                             item["id"]
                             for item in latest_version["items"]
-                            if relative_path == item["filePath"]
+                            if path_under_model == item["filePath"]
                         ]
                     )
 
@@ -579,18 +643,16 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
     def _create_custom_model_version(self, custom_model_id, model_info):
         if model_info.should_upload_all_files:
-            changed_files_info = self._get_relative_paths(model_info, model_info.model_file_paths)
+            changed_file_paths = list(model_info.model_file_paths.values())
         else:
-            changed_files_info = self._get_relative_paths(
-                model_info, model_info.changed_or_new_files
-            )
+            changed_file_paths = model_info.changed_or_new_files
 
         logger.info(
             "Create custom inference model version. git_model_id: "
             f" {model_info.git_model_id}, from_latest: {model_info.should_upload_all_files}"
         )
         logger.debug(
-            f"Files to be uploaded: {changed_files_info}, git_model_id: {model_info.git_model_id}"
+            f"Files to be uploaded: {changed_file_paths}, git_model_id: {model_info.git_model_id}"
         )
 
         if self.is_pull_request:
@@ -624,19 +686,10 @@ class CustomInferenceModel(CustomInferenceModelBase):
             commit_url,
             main_branch_commit_sha,
             pull_request_commit_sha,
-            changed_files_info,
+            changed_file_paths,
             model_info.deleted_file_ids,
             from_latest=not model_info.should_upload_all_files,
         )
-
-    def _get_relative_paths(self, model_info, paths, for_upload=True):
-        file_references = []
-        for path in paths:
-            _, relative_path = self._get_relative_path(path, model_info)
-            if str(relative_path) != ".":
-                file_ref = FileInfo(path, relative_path) if for_upload else relative_path
-                file_references.append(file_ref)
-        return file_references
 
     def _test_custom_model_version(self, model_id, model_version_id, model_info):
         logger.info("Executing custom model test ...")

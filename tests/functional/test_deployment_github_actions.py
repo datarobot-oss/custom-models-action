@@ -10,9 +10,11 @@ from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
+from tests.functional.conftest import cleanup_models
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import run_github_action
 from tests.functional.conftest import set_persistent_schema_variable
+from tests.functional.conftest import printout
 from tests.functional.conftest import webserver_accessible
 
 
@@ -41,7 +43,7 @@ def deployment_metadata(deployment_metadata_yaml_file):
 
 
 @pytest.fixture
-def cleanup(dr_client, model_metadata, deployment_metadata):
+def cleanup(dr_client, repo_root_path, deployment_metadata):
     yield
 
     try:
@@ -51,10 +53,8 @@ def cleanup(dr_client, model_metadata, deployment_metadata):
     except (IllegalModelDeletion, DataRobotClientError):
         pass
 
-    try:
-        dr_client.delete_custom_model_by_git_model_id(model_metadata[ModelSchema.MODEL_ID_KEY])
-    except (IllegalModelDeletion, DataRobotClientError):
-        pass
+    # NOTE: we have more than one model in the tree
+    cleanup_models(dr_client, repo_root_path)
 
 
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
@@ -109,15 +109,22 @@ class TestDeploymentGitHubActions:
         event_name,
     ):
         # 1. Create a model just as a preliminary requirement (use GitHub action)
+        printout(
+            "Create a custom model as a preliminary requirement. "
+            "Run custom model GitHub action (push event) ..."
+        )
+        new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
         head_commit_sha = git_repo.head.commit.hexsha
         run_github_action(
             repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
         )
 
         # 2. Upload actuals dataset and set the deployment metadata with the dataset ID
+        printout("Upload actuals dataset ...")
         with self._upload_actuals_dataset(
             event_name, dr_client, deployment_metadata, deployment_metadata_yaml_file
         ):
+            printout("Run deployment GitHub action ...")
             # 3. Run a deployment github action
             run_github_action(
                 repo_root_path,
@@ -128,6 +135,7 @@ class TestDeploymentGitHubActions:
                 is_deploy=True,
             )
 
+        printout("Validate ...")
         deployments = dr_client.fetch_deployments()
         local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         if event_name == "push":
@@ -136,6 +144,7 @@ class TestDeploymentGitHubActions:
             assert all(d.get("gitDeploymentId") != local_git_deployment_id for d in deployments)
         else:
             assert False, f"Unsupported GitHub event name: {event_name}"
+        printout("Done")
 
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
     @pytest.mark.usefixtures("cleanup", "set_model_dataset_for_testing")
@@ -151,6 +160,7 @@ class TestDeploymentGitHubActions:
         event_name,
     ):
         # Disable challengers
+        printout("Disable challengers ...")
         self._enable_challenger(deployment_metadata, deployment_metadata_yaml_file, False)
 
         (
@@ -176,6 +186,7 @@ class TestDeploymentGitHubActions:
             assert latest_deployment_model_version_id != latest_model_version["id"]
         else:
             assert False, f"Unsupported GitHub event name: {event_name}"
+        printout("Done")
 
     @staticmethod
     def _deploy_a_model_than_run_github_action_to_replace_or_challenge(
@@ -188,13 +199,18 @@ class TestDeploymentGitHubActions:
         event_name,
     ):
 
-        # 1. Create a model just as a basic requirement (use GitHub action)
+        # 1. Create a model just as a preliminary requirement (use GitHub action)
+        printout(
+            "Create a custom model as a preliminary requirement. "
+            "Run custom model GitHub action (push event) ..."
+        )
         head_commit_sha = git_repo.head.commit.hexsha
         run_github_action(
             repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
         )
 
         # 2. Create a deployment
+        printout("Create a deployment. Run deployment GitHub action (push event) ...")
         run_github_action(
             repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=True
         )
@@ -203,6 +219,7 @@ class TestDeploymentGitHubActions:
         assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
 
         # 3. Make a local change to the model and commit
+        printout("Make a change to the model and run custom model GitHub action (push event) ...")
         new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
         os.chdir(repo_root_path)
         git_repo.git.commit("-a", "-m", f"Increase memory to {new_memory}")
@@ -214,10 +231,12 @@ class TestDeploymentGitHubActions:
         )
 
         # 5. Run GitHub action to replace the latest model in a deployment
+        printout(f"Run deployment GitHub action ({event_name} event) ...")
         run_github_action(
             repo_root_path, git_repo, main_branch_name, head_commit_sha, event_name, is_deploy=True
         )
 
+        printout(f"Validate ...")
         deployments = dr_client.fetch_deployments()
         the_deployment = next(
             d for d in deployments if d.get("gitDeploymentId") == local_git_deployment_id
@@ -252,12 +271,17 @@ class TestDeploymentGitHubActions:
         main_branch_name,
     ):
         # 1. Create a model just as a basic requirement (use GitHub action)
+        printout(
+            "Create a custom model as a preliminary requirement. "
+            "Run custom model GitHub action (push event) ..."
+        )
         head_commit_sha = git_repo.head.commit.hexsha
         run_github_action(
             repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
         )
 
         # 2. Run a deployment GitHub action to create a deployment
+        printout("Create a deployment. Runa deployment GitHub action (push event) ...")
         run_github_action(
             repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=True
         )
@@ -266,6 +290,7 @@ class TestDeploymentGitHubActions:
         assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
 
         # 3. Delete a deployment local definition yaml file
+        printout("Delete deployment. Run deployment GitHub action (push event) ...")
         os.remove(deployment_metadata_yaml_file)
         os.chdir(repo_root_path)
         git_repo.git.commit("-a", "-m", f"Delete the deployment definition file")
@@ -280,11 +305,13 @@ class TestDeploymentGitHubActions:
             is_deploy=True,
             allow_deployment_deletion=False,
         )
+        printout("Validate ...")
         deployments = dr_client.fetch_deployments()
         local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
 
         # 5. Run a deployment GitHub action for pull request with allowed deployment deletion
+        printout("Run deployment GitHub action (pull request) with allowed deletion ...")
         run_github_action(
             repo_root_path,
             git_repo,
@@ -294,11 +321,13 @@ class TestDeploymentGitHubActions:
             is_deploy=True,
             allow_deployment_deletion=True,
         )
+        printout("Validate ...")
         deployments = dr_client.fetch_deployments()
         local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
 
         # 6. Run a deployment GitHub action for push with allowed deployment deletion
+        printout("Run deployment GitHub action (push) with allowed deletion ...")
         run_github_action(
             repo_root_path,
             git_repo,
@@ -308,9 +337,11 @@ class TestDeploymentGitHubActions:
             is_deploy=True,
             allow_deployment_deletion=True,
         )
+        printout("Validate ...")
         deployments = dr_client.fetch_deployments()
         local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         assert all(d.get("gitDeploymentId") != local_git_deployment_id for d in deployments)
+        printout("Done")
 
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
     @pytest.mark.usefixtures("cleanup", "set_model_dataset_for_testing")
@@ -326,6 +357,7 @@ class TestDeploymentGitHubActions:
         event_name,
     ):
         # Enable challengers (although it is the default)
+        printout("Enable challengers ...")
         self._enable_challenger(deployment_metadata, deployment_metadata_yaml_file, True)
 
         (
@@ -354,3 +386,4 @@ class TestDeploymentGitHubActions:
             assert len(challengers) == 1, challengers
         else:
             assert False, f"Unsupported GitHub event name: {event_name}"
+        printout("Done")

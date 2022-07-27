@@ -10,7 +10,9 @@ import pytest
 from mock.mock import PropertyMock
 
 from common.data_types import DataRobotModel
+from common.git_tool import GitTool
 from custom_inference_model import CustomInferenceModel
+from custom_inference_model import ModelFilePath
 from custom_inference_model import ModelInfo
 from common.exceptions import (
     IllegalModelDeletion,
@@ -104,7 +106,9 @@ class TestCustomInferenceModel:
         models_info = list(custom_inference_model.models_info.values())
         for model_index in range(num_models):
             model_main_program_filepath = models_info[model_index].main_program_filepath()
-            make_a_change_and_commit(git_repo, [model_main_program_filepath], 2 + model_index)
+            make_a_change_and_commit(
+                git_repo, [model_main_program_filepath.resolved], 2 + model_index
+            )
 
         head_git_sha = "HEAD"
         for last_provision_git_sha in [None, f"HEAD~{num_models}"]:
@@ -278,6 +282,7 @@ class TestGlobPatterns:
         options,
         num_models,
         is_multi,
+        common_filepath,
         with_include_glob,
         with_exclude_glob,
     ):
@@ -298,9 +303,9 @@ class TestGlobPatterns:
             assert excluded_src_path not in model_file_paths
 
             if with_include_glob:
-                assert common_path_with_code in model_file_paths
+                assert common_filepath.absolute() in model_file_paths
             else:
-                assert common_path_with_code not in model_file_paths
+                assert common_filepath.absolute() not in model_file_paths
 
             if with_exclude_glob:
                 assert readme_file_path.absolute() not in model_file_paths
@@ -310,26 +315,31 @@ class TestGlobPatterns:
     @pytest.mark.parametrize(
         "included_paths, excluded_paths, expected_num_model_files",
         [
-            ({"./custom.py", "./bbb.py", "score/bbb.md"}, {}, 3),
-            ({"./custom.py", "./bbb.py", "score/bbb.md"}, {"bbb.py"}, 2),
-            ({"./custom.py", ".//bbb.py", "score/bbb.md"}, {"bbb.py"}, 2),
-            ({"./custom.py", "bbb.py", "score/bbb.py"}, {"bbb.py"}, 2),
-            ({"./custom.py", "bbb.py", "score/bbb.py"}, {"bbb.sh"}, 3),
-            ({"./custom.py", "bbb.py", "score/./bbb.py"}, {"score/bbb.py"}, 2),
-            ({"./custom.py", "bbb.py", "score//bbb.py"}, {"score/bbb.py"}, 2),
-            ({"./custom.py", ".//bbb.py", "score/./bbb.py"}, {"score/bbb.py"}, 2),
-            ({"./custom.py", "score/../bbb.py"}, {"score/bbb.py"}, 2),
-            ({"./custom.py", "score/../bbb.py"}, {"bbb.py"}, 1),
-            ({"./custom.py", "//score/bbb.py"}, {"/score/bbb.py"}, 1),
-            ({"./custom.py", "//score/./bbb.py"}, {"/score/bbb.py"}, 1),
+            ({"/m/custom.py", "/m", "/m/score/bbb.md"}, {}, 2),
+            ({"/m/custom.py", "/m/.", "/m/score/bbb.md"}, {}, 2),
+            ({"/m/custom.py", "/m/bbb.py", "/m/score/bbb.md"}, {}, 3),
+            ({"/m/./custom.py", "/m/./bbb.py", "/m/./score/bbb.md"}, {"/m/bbb.py"}, 2),
+            ({"/m/./custom.py", "/m/.//bbb.py", "/m/score/bbb.md"}, {"/m/bbb.py"}, 2),
+            ({"/m/./custom.py", "/m/bbb.py", "/m/score/bbb.py"}, {"/m/bbb.py"}, 2),
+            ({"/m/./custom.py", "/m/bbb.py", "/m/score/bbb.py"}, {"bbb.sh"}, 3),
+            ({"/m/./custom.py", "/m/bbb.py", "/m/score/./bbb.py"}, {"/m/score/bbb.py"}, 2),
+            ({"/m/./custom.py", "/m/bbb.py", "/m/score//bbb.py"}, {"/m/score/bbb.py"}, 2),
+            ({"/m/./custom.py", "/m/.//bbb.py", "/m/score/./bbb.py"}, {"/m/score/bbb.py"}, 2),
+            ({"/m/./custom.py", "/m/score/../bbb.py"}, {"/m/score/bbb.py"}, 2),
+            ({"/m/./custom.py", "/m/score/../bbb.py"}, {"/m/bbb.py"}, 1),
+            ({"/m/./custom.py", "/m//score/bbb.py"}, {"/m//score/bbb.py"}, 1),
+            ({"/m/./custom.py", "/m//score/./bbb.py"}, {"/m/score/bbb.py"}, 1),
         ],
     )
     def test_filtered_model_paths(self, included_paths, excluded_paths, expected_num_model_files):
-        model_info = ModelInfo("yaml-path", "model-path", None)
-        CustomInferenceModel._set_filtered_model_paths(model_info, included_paths, excluded_paths)
-        assert len(model_info.model_file_paths) == expected_num_model_files
-        for excluded_path in excluded_paths:
-            assert Path(excluded_path) not in model_info.model_file_paths
+        model_info = ModelInfo("yaml-path", "/m", None)
+        with patch("common.git_tool.Repo.init"), patch("custom_inference_model.DrClient"):
+            CustomInferenceModel._set_filtered_model_paths(
+                model_info, included_paths, excluded_paths, repo_root_dir="/"
+            )
+            assert len(model_info.model_file_paths) == expected_num_model_files
+            for excluded_path in excluded_paths:
+                assert Path(excluded_path) not in model_info.model_file_paths
 
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
     def test_missing_main_program(self, models_factory, common_path_with_code, options, is_multi):
@@ -378,9 +388,13 @@ class TestGlobPatterns:
             model_path = Path("/repo/model")
             model_info = ModelInfo("yaml-path", model_path, None)
             mock_models_info_property.return_value = model_info
-            mock_model_file_paths_property.return_value = [Path(p) for p in local_paths] + [
-                Path(p) for p in shared_paths
-            ]
+            model_file_paths_property = {
+                p: ModelFilePath(p, model_path, options.root_dir) for p in local_paths
+            }
+            model_file_paths_property.update(
+                {p: ModelFilePath(p, model_path, options.root_dir) for p in shared_paths}
+            )
+            mock_model_file_paths_property.return_value = model_file_paths_property
             with patch("common.git_tool.Repo.init"), patch("custom_inference_model.DrClient"):
                 custom_inference_model = CustomInferenceModel(options)
                 if collision_expected:
