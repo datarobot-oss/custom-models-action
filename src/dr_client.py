@@ -218,7 +218,7 @@ class DrClient:
         commit_url,
         main_branch_commit_sha,
         pull_request_commit_sha=None,
-        changed_files_info=None,
+        changed_file_paths=None,
         file_ids_to_delete=None,
         from_latest=False,
     ):
@@ -230,7 +230,7 @@ class DrClient:
                 commit_url,
                 main_branch_commit_sha,
                 pull_request_commit_sha,
-                changed_files_info,
+                changed_file_paths,
                 file_ids_to_delete=file_ids_to_delete,
                 base_env_id=base_env_id,
             )
@@ -266,7 +266,7 @@ class DrClient:
         commit_url,
         main_branch_commit_sha,
         pull_request_commit_sha,
-        changed_files_info,
+        changed_file_paths,
         file_ids_to_delete=None,
         base_env_id=None,
     ):
@@ -284,7 +284,7 @@ class DrClient:
             ),
         ]
 
-        file_objs = cls._setup_model_version_files(changed_files_info, file_ids_to_delete, payload)
+        file_objs = cls._setup_model_version_files(changed_file_paths, file_ids_to_delete, payload)
 
         if base_env_id:
             payload.append(("baseEnvironmentId", base_env_id))
@@ -300,13 +300,12 @@ class DrClient:
         return payload, file_objs
 
     @staticmethod
-    def _setup_model_version_files(changed_files_info, file_ids_to_delete, payload):
+    def _setup_model_version_files(changed_file_paths, file_ids_to_delete, payload):
         file_objs = []
-        for file_info in changed_files_info or []:
-            file_path = str(file_info.actual_path)
-            fd = open(file_path, "rb")
+        for model_filepath in changed_file_paths or []:
+            fd = open(model_filepath.resolved, "rb")
             file_objs.append(fd)
-            path_under_model = str(file_info.path_under_model)
+            path_under_model = str(model_filepath.under_model)
 
             payload.append(("file", (path_under_model, fd)))
             payload.append(("filePath", path_under_model))

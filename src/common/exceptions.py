@@ -29,6 +29,10 @@ class ModelMainEntryPointNotFound(GenericException):
     pass
 
 
+class PathOutsideTheRepository(GenericException):
+    pass
+
+
 class SharedAndLocalPathCollision(GenericException):
     pass
 

@@ -11,6 +11,8 @@ from bson import ObjectId
 from git import Repo
 
 from common.convertors import MemoryConvertor
+from common.exceptions import DataRobotClientError
+from common.exceptions import IllegalModelDeletion
 from dr_client import DrClient
 from main import main
 from schema_validator import ModelSchema
@@ -23,6 +25,17 @@ def webserver_accessible():
     if webserver and api_token:
         return DrClient(webserver, api_token, verify_cert=False).is_accessible()
     return False
+
+
+def cleanup_models(dr_client, repo_root_path):
+    for model_yaml_file in repo_root_path.rglob("**/model.yaml"):
+        with open(model_yaml_file) as f:
+            model_metadata = yaml.safe_load(f)
+
+        try:
+            dr_client.delete_custom_model_by_git_model_id(model_metadata[ModelSchema.MODEL_ID_KEY])
+        except (IllegalModelDeletion, DataRobotClientError):
+            pass
 
 
 @contextlib.contextmanager
@@ -95,7 +108,12 @@ def build_repo_for_testing(repo_root_path, git_repo):
     with open(second_model_metadata_yaml_filepath, "w") as f:
         yaml.safe_dump(second_model_metadata, f)
 
-    # 2. Add files to repo
+    # 7. Copy deployments
+    deployments_src_root_dir = Path(__file__).parent / ".." / "deployments"
+    dst_deployments_dir = repo_root_path / deployments_src_root_dir.name
+    shutil.copytree(deployments_src_root_dir, dst_deployments_dir)
+
+    # 8. Add files to repo
     os.chdir(repo_root_path)
     git_repo.git.add("--all")
     git_repo.git.commit("-m", "Initial commit", "--no-verify")

@@ -10,6 +10,7 @@ from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
+from tests.functional.conftest import cleanup_models
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import run_github_action
 from tests.functional.conftest import set_persistent_schema_variable
@@ -41,7 +42,7 @@ def deployment_metadata(deployment_metadata_yaml_file):
 
 
 @pytest.fixture
-def cleanup(dr_client, model_metadata, deployment_metadata):
+def cleanup(dr_client, repo_root_path, deployment_metadata):
     yield
 
     try:
@@ -51,10 +52,8 @@ def cleanup(dr_client, model_metadata, deployment_metadata):
     except (IllegalModelDeletion, DataRobotClientError):
         pass
 
-    try:
-        dr_client.delete_custom_model_by_git_model_id(model_metadata[ModelSchema.MODEL_ID_KEY])
-    except (IllegalModelDeletion, DataRobotClientError):
-        pass
+    # NOTE: we have more than one model in the tree
+    cleanup_models(dr_client, repo_root_path)
 
 
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")

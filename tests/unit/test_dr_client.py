@@ -4,8 +4,8 @@ import pytest
 import responses
 from bson import ObjectId
 
-from common.data_types import FileInfo
 from common.exceptions import DataRobotClientError
+from custom_inference_model import ModelFilePath
 from custom_inference_model import ModelInfo
 from dr_api_attrs import DrApiAttrs
 from dr_client import DrClient
@@ -379,16 +379,22 @@ class TestCustomModelVersionRoutes:
         main_branch_commit_sha,
         pull_request_commit_sha,
         single_model_file_paths,
+        single_model_root_path,
+        repo_root_path,
     ):
         file_objs = []
         try:
-            changed_files_info = [FileInfo(p, p) for p in single_model_file_paths]
+            regression_model_info._model_path = single_model_root_path
+            changed_files_info = [
+                ModelFilePath(p, regression_model_info.model_path, repo_root_path)
+                for p in single_model_file_paths
+            ]
             payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(
                 regression_model_info,
                 commit_url,
                 main_branch_commit_sha,
                 pull_request_commit_sha,
-                changed_files_info=changed_files_info,
+                changed_file_paths=changed_files_info,
                 file_ids_to_delete=None,
                 base_env_id=str(ObjectId()),
             )
