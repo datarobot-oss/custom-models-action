@@ -46,14 +46,13 @@ class GitTool:
             deleted_files = []
             for git_index in diff:
                 a_path = self.repo_path / git_index.a_path
-                b_path = self.repo_path / git_index.b_path
                 if git_index.change_type in ["M", "A"]:
-                    changed_or_new_files.append(self.repo_path / a_path)
+                    changed_or_new_files.append(a_path)
                 elif git_index.change_type in ["D"]:
-                    deleted_files.append(self.repo_path / a_path)
+                    deleted_files.append(a_path)
                 elif git_index.change_type in ["R", "T"]:
-                    deleted_files.append(self.repo_path / a_path)
-                    changed_or_new_files.append(self.repo_path / b_path)
+                    deleted_files.append(a_path)
+                    changed_or_new_files.append(self.repo_path / git_index.b_path)
             return changed_or_new_files, deleted_files
         else:
             return self._categorize_changed_files(to_commit.stats.files)
