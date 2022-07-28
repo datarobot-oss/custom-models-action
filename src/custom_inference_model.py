@@ -146,6 +146,7 @@ class ModelInfo:
 
     def set_model_paths(self, paths, repo_root_path):
         self._model_file_paths = {}
+        logger.info(f"Model {self.model_path} is set with the following paths: {paths}")
         for p in paths:
             model_filepath = ModelFilePath(p, self.model_path, repo_root_path)
             self._model_file_paths[model_filepath.resolved] = model_filepath
