@@ -7,7 +7,6 @@ from bson import ObjectId
 from mock import patch
 from mock import PropertyMock
 
-from common.data_types import DataRobotDeployment
 from common.data_types import DataRobotModel
 from common.exceptions import AssociatedModelNotFound
 from common.exceptions import AssociatedModelVersionNotFound

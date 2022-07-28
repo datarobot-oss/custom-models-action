@@ -16,7 +16,7 @@ test-unit:
 .PHONY: test-unit
 
 test-functional: validate-env-DATAROBOT_WEBSERVER validate-env-DATAROBOT_API_TOKEN
-	set -ex; PYTHONPATH=.:src pytest tests/functional
+	set -ex; PYTHONPATH=.:src pytest -v --log-cli-level error ${FLAGS} tests/functional
 .PHONY: test
 
 black:

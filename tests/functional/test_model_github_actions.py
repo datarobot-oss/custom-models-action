@@ -1,15 +1,16 @@
+import contextlib
 from enum import Enum
 import os
 
 import pytest
-import yaml
 
 from common.convertors import MemoryConvertor
-from common.exceptions import DataRobotClientError
-from common.exceptions import IllegalModelDeletion
 from schema_validator import ModelSchema
+from tests.functional.conftest import cleanup_models
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import run_github_action
+from tests.functional.conftest import set_persistent_schema_variable
+from tests.functional.conftest import printout
 from tests.functional.conftest import webserver_accessible
 
 
@@ -27,14 +28,7 @@ def merge_branch_name():
 def cleanup(dr_client, repo_root_path):
     yield
 
-    for model_yaml_file in repo_root_path.rglob("**/model.yaml"):
-        with open(model_yaml_file) as f:
-            model_metadata = yaml.safe_load(f)
-
-        try:
-            dr_client.delete_custom_model_by_git_model_id(model_metadata[ModelSchema.MODEL_ID_KEY])
-        except (IllegalModelDeletion, DataRobotClientError):
-            pass
+    cleanup_models(dr_client, repo_root_path)
 
 
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
@@ -45,6 +39,17 @@ class TestModelGitHubActions:
         ADD_FILE = 2
         REMOVE_FILE = 3
         DELETE_MODEL = 4
+
+    @contextlib.contextmanager
+    def enable_custom_model_testing(self, model_metadata_yaml_file, model_metadata):
+        with set_persistent_schema_variable(
+            model_metadata_yaml_file,
+            model_metadata,
+            False,
+            ModelSchema.TEST_KEY,
+            ModelSchema.TEST_SKIP_KEY,
+        ):
+            yield
 
     @pytest.mark.usefixtures("cleanup")
     def test_e2e_pull_request_event_with_multiple_changes(
@@ -69,25 +74,33 @@ class TestModelGitHubActions:
         assert changes[-1] == self.Change.REMOVE_FILE
 
         # 1. Create feature branch
+        printout("Create a feature branch ...")
         feature_branch = git_repo.create_head(feature_branch_name)
 
         # 2. Make changes, one at a time on a feature branch
+        printout(
+            "Make several changes on a feature branch, one at a time ... "
+            f"{[c.name for c in changes]}"
+        )
         for change in changes:
             # 3. Checkout feature branch
             feature_branch.checkout()
 
             # 4. Make a change and commit it
             if change == self.Change.INCREASE_MEMORY:
+                printout("Increase the model memory ...")
                 new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
                 git_repo.git.add(model_metadata_yaml_file)
                 git_repo.git.commit("-m", f"Increase memory to {new_memory}")
             elif change == self.Change.ADD_FILE:
+                printout("Add a new file to the mode ...")
                 for filepath in files_to_add_and_remove:
                     with open(filepath, "w") as f:
                         f.write("# New file for testing")
                     git_repo.git.add(filepath)
                 git_repo.git.commit("-m", "Add new files.")
             elif change == self.Change.REMOVE_FILE:
+                printout("Remove files from the model ...")
                 for filepath in files_to_add_and_remove:
                     os.remove(filepath)
                     git_repo.git.add(filepath)
@@ -102,6 +115,7 @@ class TestModelGitHubActions:
             git_repo.git.merge(feature_branch, "--no-ff")
 
             # 7. Run GitHub pull request action
+            printout("Run custom model GitHub action (pull-request)...")
             run_github_action(
                 repo_root_path,
                 git_repo,
@@ -112,6 +126,7 @@ class TestModelGitHubActions:
             )
 
             # 8. Validation
+            printout("Validate the change ...")
             cm_version = dr_client.fetch_custom_model_latest_version_by_git_model_id(
                 model_metadata[ModelSchema.MODEL_ID_KEY]
             )
@@ -131,20 +146,26 @@ class TestModelGitHubActions:
                 git_repo.delete_head(merge_branch, "--force")
 
         # 11. Merge changes from the merge branch into the main branch
+        printout("Merge the feature branch ...")
         git_repo.git.merge(merge_branch, "--squash")
         git_repo.git.add("--all")
         git_repo.git.commit("-m", "Changes from merged feature branch")
         head_commit_sha = git_repo.head.commit.hexsha
-        run_github_action(
-            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
-        )
+
+        printout("Run custom model GitHub action (push event) with testing ...")
+        with self.enable_custom_model_testing(model_metadata_yaml_file, model_metadata):
+            run_github_action(
+                repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
+            )
 
         # 12. Validation
+        printout("Validate ...")
         cm_version = dr_client.fetch_custom_model_latest_version_by_git_model_id(
             model_metadata[ModelSchema.MODEL_ID_KEY]
         )
         # Assuming 'INCREASE_MEMORY` change took place
         assert cm_version["maximumMemory"] == MemoryConvertor.to_bytes(new_memory)
+        printout("Done")
 
     @pytest.mark.usefixtures("cleanup")
     def test_e2e_pull_request_event_with_model_deletion(
@@ -169,16 +190,21 @@ class TestModelGitHubActions:
         feature_branch = git_repo.create_head(feature_branch_name)
 
         # 2. Make changes, one at a time on a feature branch
+        printout(
+            f"Make several changes in a pull request, one at a time ... {[c.name for c in changes]}"
+        )
         for change in changes:
             # 3. Checkout feature branch
             feature_branch.checkout()
 
             # 4. Make a change and commit it
             if change == self.Change.INCREASE_MEMORY:
+                printout("Increase the model memory ...")
                 new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
                 git_repo.git.add(model_metadata_yaml_file)
                 git_repo.git.commit("-m", f"Increase memory to {new_memory}")
             elif change == self.Change.DELETE_MODEL:
+                printout("Delete the model ...")
                 os.remove(model_metadata_yaml_file)
                 git_repo.git.add(model_metadata_yaml_file)
                 git_repo.git.commit("-m", f"Delete the model definition file")
@@ -192,6 +218,7 @@ class TestModelGitHubActions:
             git_repo.git.merge(feature_branch, "--no-ff")
 
             # 7. Run GitHub pull request action
+            printout("Run custom model GitHub action (pull-request) ...")
             run_github_action(
                 repo_root_path,
                 git_repo,
@@ -202,6 +229,7 @@ class TestModelGitHubActions:
             )
 
             # 8. Validation
+            printout("Validate the change ...")
             if change == self.Change.INCREASE_MEMORY:
                 cm_version = dr_client.fetch_custom_model_latest_version_by_git_model_id(
                     model_metadata[ModelSchema.MODEL_ID_KEY]
@@ -221,38 +249,46 @@ class TestModelGitHubActions:
                 git_repo.delete_head(merge_branch, "--force")
 
         # 11. Merge changes from the merge branch into the main branch
+        printout("Merge to the main branch ...")
         git_repo.git.merge(merge_branch, "--squash")
         git_repo.git.add("--all")
         git_repo.git.commit("-m", "Changes from merged feature branch")
         head_commit_sha = git_repo.head.commit.hexsha
+        printout("Run custom model GitHub action (push event) ...")
         run_github_action(
             repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
         )
 
         # 12. Validation. The model is actually deleted only upon merging.
+        printout("Validate after merging ...")
         assert change == self.Change.DELETE_MODEL
         models = dr_client.fetch_custom_models()
         if models:
             assert all(
                 m.get("gitModelId") != model_metadata[ModelSchema.MODEL_ID_KEY] for m in models
             )
+        printout("Done")
 
     @pytest.mark.usefixtures("cleanup")
     def test_e2e_push_event_with_multiple_changes(
         self, repo_root_path, git_repo, model_metadata_yaml_file, main_branch_name
     ):
         # 1. Make three changes, one at a time on the main branch
-        for _ in range(3):
+        printout("Make 3 changes one at a time on the main branch ...")
+        for index in range(3):
             # 2. Make a change and commit it
+            printout(f"Increase memory ... {index + 1}")
             new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
             git_repo.git.add(model_metadata_yaml_file)
             git_repo.git.commit("-m", f"Increase memory to {new_memory}")
 
             # 3. Run GitHub pull request action
             head_commit_sha = git_repo.head.commit.hexsha
+            printout("Run custom model GitHub action (push event) ...")
             run_github_action(
                 repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
             )
+        printout("Done")
 
     def test_is_accessible(self):
         assert webserver_accessible()

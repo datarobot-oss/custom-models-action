@@ -195,10 +195,14 @@ def models_factory(repo_root_path, common_path_with_code, single_model_factory):
 
 
 @pytest.fixture
-def single_model_file_paths(models_factory, repo_root_path):
+def single_model_root_path(repo_root_path):
+    return repo_root_path / "model_0"
+
+
+@pytest.fixture
+def single_model_file_paths(models_factory, single_model_root_path, repo_root_path):
     models_factory(1)
-    model_path = repo_root_path / "model_0"
-    return list(model_path.rglob("*.*"))
+    return list(single_model_root_path.rglob("*.*"))
 
 
 @pytest.fixture
@@ -207,7 +211,7 @@ def options(repo_root_path):
         webserver="www.dummy.com",
         api_token="abc123",
         skip_cert_verification=True,
-        root_dir=repo_root_path.absolute(),
+        root_dir=repo_root_path,
         branch="master",
         allow_model_deletion=True,
     )
