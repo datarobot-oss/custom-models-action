@@ -30,6 +30,19 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
+      - name: GitHub Environment Variables
+        run: |
+          echo "GITHUB_EVENT_NAME: ${GITHUB_EVENT_NAME}"
+          echo "GITHUB_SHA: ${GITHUB_SHA}"
+          echo "GITHUB_HEAD_REF: ${GITHUB_HEAD_REF}"
+          echo "GITHUB_BASE_REF: ${GITHUB_BASE_REF}"
+          echo "GITHUB_REF: ${GITHUB_REF}"
+          echo "GITHUB_REF_NAME: ${GITHUB_REF_NAME}"
+          echo "GITHUB_REF_PROTECTED: ${GITHUB_REF_PROTECTED}"
+          echo "GITHUB_REF_TYPE: ${GITHUB_REF_TYPE}"
+          echo "GITHUB_RUN_ID: ${GITHUB_RUN_ID}"
+          echo "GITHUB_RUN_NUMBER: ${GITHUB_RUN_NUMBER}"
+
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
         with:
@@ -60,6 +73,19 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
+      - name: GitHub Environment Variables
+        run: |
+          echo "GITHUB_EVENT_NAME: ${GITHUB_EVENT_NAME}"
+          echo "GITHUB_SHA: ${GITHUB_SHA}"
+          echo "GITHUB_HEAD_REF: ${GITHUB_HEAD_REF}"
+          echo "GITHUB_BASE_REF: ${GITHUB_BASE_REF}"
+          echo "GITHUB_REF: ${GITHUB_REF}"
+          echo "GITHUB_REF_NAME: ${GITHUB_REF_NAME}"
+          echo "GITHUB_REF_PROTECTED: ${GITHUB_REF_PROTECTED}"
+          echo "GITHUB_REF_TYPE: ${GITHUB_REF_TYPE}"
+          echo "GITHUB_RUN_ID: ${GITHUB_RUN_ID}"
+          echo "GITHUB_RUN_NUMBER: ${GITHUB_RUN_NUMBER}"
+
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
         with:

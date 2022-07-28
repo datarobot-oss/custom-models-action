@@ -102,7 +102,7 @@ class GitTool:
             "-n",
             "7",
         )
-        logger.debug(git_logs)
+        logger.debug(f"\n{git_logs}")
 
     def feature_branch_top_commit_sha_of_a_merge_commit(self, commit_sha):
         commit = self.repo.commit(commit_sha)
