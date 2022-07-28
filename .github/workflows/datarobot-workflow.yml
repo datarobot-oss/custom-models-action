@@ -32,6 +32,7 @@ jobs:
     steps:
       - name: GitHub Environment Variables
         run: |
+          echo ""
           echo "GITHUB_EVENT_NAME: ${GITHUB_EVENT_NAME}"
           echo "GITHUB_SHA: ${GITHUB_SHA}"
           echo "GITHUB_HEAD_REF: ${GITHUB_HEAD_REF}"
@@ -75,6 +76,7 @@ jobs:
     steps:
       - name: GitHub Environment Variables
         run: |
+          echo ""
           echo "GITHUB_EVENT_NAME: ${GITHUB_EVENT_NAME}"
           echo "GITHUB_SHA: ${GITHUB_SHA}"
           echo "GITHUB_HEAD_REF: ${GITHUB_HEAD_REF}"
