@@ -207,6 +207,10 @@ class CustomInferenceModelBase(ABC):
         return os.environ.get("GITHUB_EVENT_NAME")
 
     @property
+    def ref_name(self):
+        return os.environ.get("GITHUB_REF_NAME")
+
+    @property
     def is_pull_request(self):
         return self.event_name == "pull_request"
 
@@ -214,9 +218,11 @@ class CustomInferenceModelBase(ABC):
     def is_push(self):
         return self.event_name == "push"
 
-    @property
-    def ancestor_attribute_ref(self):
-        return "pullRequestCommitSha" if self.is_pull_request else "mainBranchCommitSha"
+    def ancestor_attribute_ref(self, git_model_version):
+        latest_custom_model_version_ref_name = git_model_version["refName"]
+        if self.is_pull_request and self.ref_name == latest_custom_model_version_ref_name:
+            return "pullRequestCommitSha"
+        return "mainBranchCommitSha"
 
     @property
     def github_sha(self):
@@ -369,7 +375,7 @@ class CustomInferenceModelBase(ABC):
             # GitHub action client.
             return False
 
-        return git_model_version[self.ancestor_attribute_ref]
+        return git_model_version[self.ancestor_attribute_ref(git_model_version)]
 
     @abstractmethod
     def _label(self):
@@ -676,13 +682,15 @@ class CustomInferenceModel(CustomInferenceModelBase):
                 user_and_project=self.github_repository, sha=main_branch_commit_sha
             )
         logger.info(
-            f"GitHub commit URL: {commit_url}, main branch commit sha: {main_branch_commit_sha}, "
+            f"GitHub version info. Ref name: {self.ref_name}, commit URL: {commit_url}, "
+            f"main branch commit sha: {main_branch_commit_sha}, "
             f"pull request commit sha: {pull_request_commit_sha}"
         )
 
         return self._dr_client.create_custom_model_version(
             custom_model_id,
             model_info,
+            self.ref_name,
             commit_url,
             main_branch_commit_sha,
             pull_request_commit_sha,
