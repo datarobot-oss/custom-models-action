@@ -333,7 +333,9 @@ class TestGlobPatterns:
     )
     def test_filtered_model_paths(self, included_paths, excluded_paths, expected_num_model_files):
         model_info = ModelInfo("yaml-path", "/m", None)
-        with patch("common.git_tool.Repo.init"), patch("custom_inference_model.DrClient"):
+        with patch("common.git_tool.Repo.init"), patch("custom_inference_model.DrClient"), patch(
+            "custom_inference_model.ModelInfo.git_model_id", new_callable=PropertyMock("123")
+        ):
             CustomInferenceModel._set_filtered_model_paths(
                 model_info, included_paths, excluded_paths, repo_root_dir="/"
             )
