@@ -319,12 +319,16 @@ class TestCustomModelVersionRoutes:
         return "4e784ec8fa76beebaaf4391f23e0a3f7f666d329"
 
     @pytest.fixture
+    def ref_name(self):
+        return "feature-branch"
+
+    @pytest.fixture
     def commit_url(self, pull_request_commit_sha):
         return f"https://github.com/user/project/{pull_request_commit_sha}"
 
     @pytest.fixture
     def regression_model_version_response_factory(
-        self, custom_model_id, commit_url, main_branch_commit_sha, pull_request_commit_sha
+        self, custom_model_id, ref_name, commit_url, main_branch_commit_sha, pull_request_commit_sha
     ):
         def _inner(version_id):
             return {
@@ -351,6 +355,7 @@ class TestCustomModelVersionRoutes:
                 "label": "1.2",
                 "baseEnvironmentId": "629741dc5621557833bd5aa3",
                 "git_model_version": {
+                    "ref_name": ref_name,
                     "commit_url": commit_url,
                     "main_branch_commit_sha": main_branch_commit_sha,
                     "pull_request_commit_sha": pull_request_commit_sha,
@@ -375,6 +380,7 @@ class TestCustomModelVersionRoutes:
     def test_full_payload_setup_for_custom_model_version_creation(
         self,
         regression_model_info,
+        ref_name,
         commit_url,
         main_branch_commit_sha,
         pull_request_commit_sha,
@@ -391,6 +397,7 @@ class TestCustomModelVersionRoutes:
             ]
             payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(
                 regression_model_info,
+                ref_name,
                 commit_url,
                 main_branch_commit_sha,
                 pull_request_commit_sha,
@@ -418,6 +425,7 @@ class TestCustomModelVersionRoutes:
         ]
         assert git_model_version_json_str, values
         git_model_version_json = json.loads(git_model_version_json_str[0])
+        assert "refName" in git_model_version_json
         assert "commitUrl" in git_model_version_json
         assert "mainBranchCommitSha" in git_model_version_json
         assert "pullRequestCommitSha" in git_model_version_json
@@ -431,12 +439,14 @@ class TestCustomModelVersionRoutes:
     def test_minimal_payload_setup_for_custom_model_version_creation(
         self,
         minimal_regression_model_info,
+        ref_name,
         commit_url,
         main_branch_commit_sha,
         pull_request_commit_sha,
     ):
         payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(
             minimal_regression_model_info,
+            ref_name,
             commit_url,
             main_branch_commit_sha,
             pull_request_commit_sha,
@@ -457,6 +467,8 @@ class TestCustomModelVersionRoutes:
         custom_model_id,
         regression_model_info,
         custom_models_version_url_factory,
+        ref_name,
+        commit_url,
         main_branch_commit_sha,
         pull_request_commit_sha,
         regression_model_version_response,
@@ -467,7 +479,12 @@ class TestCustomModelVersionRoutes:
             datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
         )
         version_id = dr_client.create_custom_model_version(
-            custom_model_id, regression_model_info, main_branch_commit_sha, pull_request_commit_sha
+            custom_model_id,
+            regression_model_info,
+            ref_name,
+            commit_url,
+            main_branch_commit_sha,
+            pull_request_commit_sha,
         )
         assert version_id is not None
 
@@ -479,6 +496,8 @@ class TestCustomModelVersionRoutes:
         custom_model_id,
         regression_model_info,
         custom_models_version_url_factory,
+        ref_name,
+        commit_url,
         main_branch_commit_sha,
         pull_request_commit_sha,
         regression_model_version_response,
@@ -493,6 +512,8 @@ class TestCustomModelVersionRoutes:
             dr_client.create_custom_model_version(
                 custom_model_id,
                 regression_model_info,
+                ref_name,
+                commit_url,
                 main_branch_commit_sha,
                 pull_request_commit_sha,
             )

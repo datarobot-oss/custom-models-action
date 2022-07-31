@@ -215,6 +215,7 @@ class DrClient:
         self,
         custom_model_id,
         model_info,
+        ref_name,
         commit_url,
         main_branch_commit_sha,
         pull_request_commit_sha=None,
@@ -227,6 +228,7 @@ class DrClient:
             base_env_id = model_info.get_value(ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_KEY)
             payload, file_objs = self._setup_payload_for_custom_model_version_creation(
                 model_info,
+                ref_name,
                 commit_url,
                 main_branch_commit_sha,
                 pull_request_commit_sha,
@@ -263,6 +265,7 @@ class DrClient:
     def _setup_payload_for_custom_model_version_creation(
         cls,
         model_info,
+        ref_name,
         commit_url,
         main_branch_commit_sha,
         pull_request_commit_sha,
@@ -276,6 +279,7 @@ class DrClient:
                 "gitModelVersion",
                 json.dumps(
                     {
+                        "refName": ref_name,
                         "commitUrl": commit_url,
                         "mainBranchCommitSha": main_branch_commit_sha,
                         "pullRequestCommitSha": pull_request_commit_sha,
