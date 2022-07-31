@@ -145,6 +145,7 @@ class ModelInfo:
         return self.main_program_filepath() is not None
 
     def set_model_paths(self, paths, repo_root_path):
+        logger.debug(f"Model {self.git_model_id} is set with the following paths: {paths}")
         self._model_file_paths = {}
         for p in paths:
             model_filepath = ModelFilePath(p, self.model_path, repo_root_path)
@@ -564,7 +565,11 @@ class CustomInferenceModel(CustomInferenceModelBase):
             model_info.changed_or_new_files = []
             model_info.deleted_file_ids = []
 
+            logger.debug(
+                f"Searching model {model_info.git_model_id} changes since its last DR version."
+            )
             if model_info.should_upload_all_files:
+                logger.debug(f"Model {model_info.git_model_id} will upload all its files.")
                 continue
 
             from_commit_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
@@ -576,7 +581,10 @@ class CustomInferenceModel(CustomInferenceModelBase):
             changed_files, deleted_files = self._repo.find_changed_files(
                 self.github_sha, from_commit_sha
             )
-            logger.debug(f"Changed files: {changed_files}. Deleted files: {deleted_files}")
+            logger.debug(
+                f"Model {model_info.git_model_id} changes since commit {from_commit_sha}. "
+                f"Changed files: {changed_files}. Deleted files: {deleted_files}."
+            )
             self._handle_changed_or_new_files(model_info, changed_files)
             self._handle_deleted_files(model_info, deleted_files)
 
@@ -585,7 +593,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
         for changed_file in changed_or_new_files:
             changed_model_filepath = model_info.model_file_paths.get(changed_file)
             if changed_model_filepath:
-                logger.info(
+                logger.debug(
                     f"Changed/new file '{changed_file}' affects model "
                     f"'{model_info.model_path.name}'"
                 )
@@ -612,6 +620,10 @@ class CustomInferenceModel(CustomInferenceModelBase):
                             for item in latest_version["items"]
                             if path_under_model == item["filePath"]
                         ]
+                    )
+                    logger.debug(
+                        f"File path {deleted_file} will be deleted from model "
+                        f"{model_info.git_model_id}."
                     )
 
     def _apply_datarobot_actions_for_affected_models(self):
@@ -658,7 +670,8 @@ class CustomInferenceModel(CustomInferenceModelBase):
             f" {model_info.git_model_id}, from_latest: {model_info.should_upload_all_files}"
         )
         logger.debug(
-            f"Files to be uploaded: {changed_file_paths}, git_model_id: {model_info.git_model_id}"
+            f"Files to be uploaded: {[p.under_model for p in changed_file_paths]}, "
+            f"git_model_id: {model_info.git_model_id}"
         )
 
         if self.is_pull_request:
