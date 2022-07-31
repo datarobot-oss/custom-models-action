@@ -12,3 +12,5 @@ version:
   model_environment: 5e8c889607389fe0f466c72d
 
   include_glob_pattern: ["./*", "../common/*"]
+
+  memory: 512Mi
