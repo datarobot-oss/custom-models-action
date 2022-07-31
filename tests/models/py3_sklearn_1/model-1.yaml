@@ -14,4 +14,4 @@ version:
   include_glob_pattern: ["./*", "../common/*"]
   exclude_glob_pattern: ["README.md"]
 
-  memory: 512Mi
+  memory: 256Mi
