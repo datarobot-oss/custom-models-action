@@ -15,7 +15,9 @@ from common.exceptions import NoValidAncestor
 from custom_inference_deployment import CustomInferenceDeployment
 from custom_inference_model import CustomInferenceModelBase
 from dr_client import DrClient
-from schema_validator import DeploymentSchema, ModelSchema, SharedSchema
+from schema_validator import DeploymentSchema
+from schema_validator import ModelSchema
+from schema_validator import SharedSchema
 from tests.unit.conftest import write_to_file
 
 

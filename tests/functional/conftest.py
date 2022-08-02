@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import logging
 import os
 import shutil
@@ -133,9 +134,8 @@ def set_model_dataset_for_testing(dr_client, model_metadata, model_metadata_yaml
         try:
             dataset_id = dr_client.upload_dataset(test_dataset_filepath)
 
-            with set_persistent_schema_variable(
+            with temporarily_replace_schema_value(
                 model_metadata_yaml_file,
-                model_metadata,
                 dataset_id,
                 ModelSchema.TEST_KEY,
                 ModelSchema.TEST_DATA_KEY,
@@ -147,20 +147,39 @@ def set_model_dataset_for_testing(dr_client, model_metadata, model_metadata_yaml
 
 
 @contextlib.contextmanager
-def set_persistent_schema_variable(yaml_filepath, metadata, new_value, *args):
+def _temporarily_replace_schema(yaml_filepath, metadata_or_value, *args):
     try:
-        origin_value = SharedSchema.get_value(metadata, *args)
-        SharedSchema.set_value(metadata, *args, new_value)
-        with open(yaml_filepath, "w") as f:
-            yaml.safe_dump(metadata, f)
+        origin_metadata = None
+        with open(yaml_filepath) as f:
+            origin_metadata = yaml.safe_load(f)
 
-        yield
+        if args:  # Assuming a value replacement
+            new_metadata = copy.deepcopy(origin_metadata)
+            SharedSchema.set_value(new_metadata, *args, metadata_or_value)
+        else:  # Assuming a metadata replacement
+            new_metadata = metadata_or_value
+
+        with open(yaml_filepath, "w") as f:
+            yaml.safe_dump(new_metadata, f)
+
+        yield new_metadata
 
     finally:
-        args = args + (origin_value,)
-        SharedSchema.set_value(metadata, *args)
-        with open(yaml_filepath, "w") as f:
-            yaml.safe_dump(metadata, f)
+        if origin_metadata:
+            with open(yaml_filepath, "w") as f:
+                yaml.safe_dump(origin_metadata, f)
+
+
+@contextlib.contextmanager
+def temporarily_replace_schema(yaml_filepath, new_metadata):
+    with _temporarily_replace_schema(yaml_filepath, new_metadata) as new_metadata:
+        yield new_metadata
+
+
+@contextlib.contextmanager
+def temporarily_replace_schema_value(yaml_filepath, new_value, *args):
+    with _temporarily_replace_schema(yaml_filepath, new_value, *args) as new_metadata:
+        yield new_metadata
 
 
 @pytest.fixture
@@ -207,6 +226,16 @@ def main_branch_name():
 
 
 @pytest.fixture
+def feature_branch_name():
+    return "feature"
+
+
+@pytest.fixture
+def merge_branch_name():
+    return "merge-feature-branch"
+
+
+@pytest.fixture
 def dr_client():
     webserver = os.environ.get("DATAROBOT_WEBSERVER")
     api_token = os.environ.get("DATAROBOT_API_TOKEN")
@@ -239,9 +268,12 @@ def run_github_action(
     is_deploy,
     allow_deployment_deletion=True,
 ):
+    ref_name = main_branch_name if event_name == "push" else "merge-branch"
     with github_env_set("GITHUB_EVENT_NAME", event_name), github_env_set(
         "GITHUB_SHA", git_repo.commit(main_branch_head_sha).hexsha
-    ), github_env_set("GITHUB_BASE_REF", main_branch_name):
+    ), github_env_set("GITHUB_BASE_REF", main_branch_name), github_env_set(
+        "GITHUB_REF_NAME", ref_name
+    ):
         args = [
             "--webserver",
             os.environ.get("DATAROBOT_WEBSERVER"),

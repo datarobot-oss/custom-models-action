@@ -8,7 +8,10 @@ from schema import Optional
 from schema import Or
 
 from common.convertors import MemoryConvertor
+from common.exceptions import InvalidDeploymentSchema
 from common.exceptions import InvalidModelSchema
+from common.exceptions import InvalidSchema
+from common.exceptions import TooFewArguments
 from common.exceptions import UnexpectedType
 
 logger = logging.getLogger()
@@ -25,7 +28,7 @@ class SharedSchema:
             cls._validate_single_transformed(transformed)
             return transformed
         except SchemaError as se:
-            raise InvalidModelSchema(se.code)
+            raise InvalidSchema(se.code)
 
     @classmethod
     def _validate_single_transformed(cls, single_transformed_metadata):
@@ -42,7 +45,7 @@ class SharedSchema:
                 cls._validate_single_transformed(single_metadata)
             return transformed
         except SchemaError as se:
-            raise InvalidModelSchema(se.code)
+            raise InvalidSchema(se.code)
 
     @classmethod
     def _next_single_transformed(cls, transformed_metadata):
@@ -112,7 +115,7 @@ class SharedSchema:
         ----------
         metadata : dict
             A model schema dictionary.
-        args : str
+        args : list[str]
             A variable number of strings, representing key hierarchy in the metadata.
 
         Returns
@@ -137,10 +140,25 @@ class SharedSchema:
 
     @staticmethod
     def set_value(metadata: dict, *args):
+        """
+        Set a value in the metadata. If the key(s) do not exist, they'll be added.
+
+        Parameters
+        ----------
+        metadata : dict
+            The metadata.
+        args : list
+            A sequence of keys ending with a value argument.
+        """
         if not isinstance(metadata, dict):
             raise UnexpectedType(
                 "Expecting first argument (metadata) to be a dict! "
                 f"type: {type(metadata)}, value: '{metadata}'"
+            )
+        if len(args) < 2:
+            raise TooFewArguments(
+                "Invalid number of arguments. Expecting to at least two arguments, "
+                f"a key and a value. Args: {args}."
             )
         section = metadata
         if len(args) > 2:  # Nested dictionaries
@@ -476,15 +494,17 @@ class DeploymentSchema(SharedSchema):
     ENABLE_FEATURE_DRIFT_KEY = "enable_feature_drift"  # Settings, Optional
     ENABLE_PREDICTIONS_COLLECTION_KEY = "enable_predictions_collection"  # Settings, Optional
 
-    ASSOCIATION_ID_KEY = "association_id"  # Settings, Optional
-    ACTUALS_DATASET_ID_KEY = "actuals_dataset_id"
+    ASSOCIATION_KEY = "association"
+    ASSOCIATION_PRED_ID_KEY = "prediction_id"
+    ASSOCIATION_REQUIRED_IN_PRED_REQUEST_KEY = "required_in_pred_request"
+    ASSOCIATION_ACTUALS_ID_KEY = "actuals_id"
+    ASSOCIATION_ACTUALS_DATASET_ID_KEY = "actuals_dataset_id"
 
     ENABLE_CHALLENGER_MODELS_KEY = "enable_challenger_models"
 
-    ENABLE_SEGMENT_ANALYSIS_KEY = "segment_analysis"  # Settings, Optional
-    SEGMENT_ANALYSIS_ATTRIBUTES_KEY = (
-        "segment_analysis_attributes"  # Settings.segment_analysis, Optional
-    )
+    SEGMENT_ANALYSIS_KEY = "segment_analysis"  # Settings, Optional
+    ENABLE_SEGMENT_ANALYSIS_KEY = "enabled"
+    SEGMENT_ANALYSIS_ATTRIBUTES_KEY = "attributes"  # Settings.segment_analysis, Optional
 
     # The 'DATASET_WITH_PARTITIONING_COLUMN_KEY' is mutually exclusive with the
     # 'TRAINING_DATASET_KEY' & 'HOLDOUT_DATASET_KEY'. The latter two are used with unstructured
@@ -511,16 +531,27 @@ class DeploymentSchema(SharedSchema):
                     IMPORTANCE_MODERATE_VALUE,
                     IMPORTANCE_LOW_VALUE,
                 ),
-                Optional(ASSOCIATION_ID_KEY): And(str, len),  # Update settings
-                Optional(ACTUALS_DATASET_ID_KEY): And(str, lambda i: ObjectId.is_valid(i)),
+                Optional(ASSOCIATION_KEY): {
+                    Optional(ASSOCIATION_PRED_ID_KEY): And(str, len),
+                    Optional(ASSOCIATION_REQUIRED_IN_PRED_REQUEST_KEY): bool,
+                    # NOTE: The ACTUALS dataset is submitted when the deployment is created.
+                    # If the user changes it, later on, in his yaml definition, it'll not be
+                    # uploaded, unless the association ASSOCIATION_PRED_ID_KEY will be changed too.
+                    Optional(ASSOCIATION_ACTUALS_ID_KEY): And(str, len),
+                    Optional(ASSOCIATION_ACTUALS_DATASET_ID_KEY): And(
+                        str, lambda i: ObjectId.is_valid(i)
+                    ),
+                },
                 Optional(ENABLE_TARGET_DRIFT_KEY): bool,  # Update settings
                 Optional(ENABLE_FEATURE_DRIFT_KEY): bool,  # Update settings
                 Optional(ENABLE_PREDICTIONS_COLLECTION_KEY): bool,  # Update settings
                 Optional(ENABLE_CHALLENGER_MODELS_KEY): bool,  # Update settings
-                Optional(ENABLE_SEGMENT_ANALYSIS_KEY): bool,  # Update settings
-                Optional(SEGMENT_ANALYSIS_ATTRIBUTES_KEY): And(  # Update settings
-                    list, lambda l: all(len(a) > 0 for a in l)
-                ),
+                Optional(SEGMENT_ANALYSIS_KEY): {
+                    ENABLE_SEGMENT_ANALYSIS_KEY: bool,
+                    Optional(SEGMENT_ANALYSIS_ATTRIBUTES_KEY): And(
+                        list, lambda l: all(len(a) > 0 for a in l)
+                    ),
+                },
                 Optional(DATASET_WITH_PARTITIONING_COLUMN_KEY): And(str, len),
                 Optional(TRAINING_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
                 Optional(HOLDOUT_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
@@ -603,4 +634,6 @@ class DeploymentSchema(SharedSchema):
                 cls.DATASET_WITH_PARTITIONING_COLUMN_KEY,
             }
             if len(mutual_exclusive_keys & settings_section.keys()) > 1:
-                raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")
+                raise InvalidDeploymentSchema(
+                    f"Only one of '{mutual_exclusive_keys}' keys is allowed."
+                )

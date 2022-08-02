@@ -74,7 +74,12 @@ def main(args=None):
         # Avoid printing the stacktrace
         logger.error(str(e))
         print(f"::set-output name=message::{str(e)}")
-        sys.exit(e.code)
+        if args:
+            # It was called from the functional tests
+            raise e
+        else:
+            # It was called from the GitHub action
+            sys.exit(e.code)
 
 
 if __name__ == "__main__":
