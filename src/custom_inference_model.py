@@ -98,6 +98,7 @@ class ModelInfo:
         self.should_upload_all_files = False
         self.changed_or_new_files = []
         self.deleted_file_ids = []
+        self.should_update_settings = False
 
     @property
     def yaml_filepath(self):
@@ -162,10 +163,15 @@ class ModelInfo:
 
     @property
     def is_affected_by_commit(self):
+        return self.should_create_new_version or self.should_update_settings
+
+    @property
+    def should_create_new_version(self):
         return (
             self.should_upload_all_files
-            or len(self.changed_or_new_files) > 0
-            or len(self.deleted_file_ids) > 0
+            or self.changed_or_new_files
+            or self.get_value(ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY)
+            or self.get_value(ModelSchema.VERSION_KEY, ModelSchema.REPLICAS_KEY)
         )
 
     @property
@@ -174,8 +180,11 @@ class ModelInfo:
             ModelSchema.TEST_KEY, ModelSchema.TEST_SKIP_KEY
         )
 
-    def get_value(self, *args):
-        return ModelSchema.get_value(self.metadata, *args)
+    def get_value(self, key, *args):
+        return ModelSchema.get_value(self.metadata, key, *args)
+
+    def get_settings_value(self, key, *sub_keys):
+        return self.get_value(ModelSchema.SETTINGS_SECTION_KEY, key, *sub_keys)
 
 
 class CustomInferenceModelBase(ABC):
@@ -517,6 +526,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
         for _, model_info in self.models_info.items():
             model_info.should_upload_all_files = self._should_upload_all_files(model_info)
+            model_info.should_update_settings = model_info.should_upload_all_files
 
         self._lookup_affected_models()
 
@@ -599,6 +609,11 @@ class CustomInferenceModel(CustomInferenceModelBase):
                 )
                 model_info.changed_or_new_files.append(changed_model_filepath)
 
+            # A change could happen in the model's definition (yaml), which is not necessarily
+            # included by the glob patterns
+            if model_info.yaml_filepath.samefile(changed_file):
+                model_info.should_update_settings = True
+
     def _handle_deleted_files(self, model_info, deleted_files):
         for deleted_file in deleted_files:
             # Being stateless, check each deleted file against the stored custom model version
@@ -628,36 +643,45 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
     def _apply_datarobot_actions_for_affected_models(self):
         logger.info("Apply DataRobot actions for affected models ...")
-        self._handle_model_changes_or_creation()
+        self._handle_model_changes()
         self._handle_deleted_models()
 
-    def _handle_model_changes_or_creation(self):
+    def _handle_model_changes(self):
         for git_model_id, model_info in self.models_info.items():
             if model_info.is_affected_by_commit:
                 logger.info(f"Model '{model_info.model_path}' is affected by commit.")
 
-                custom_model_id, already_existed = self._get_or_create_custom_model(model_info)
-                if not already_existed:
-                    self._total_created += 1
-                version_id = self._create_custom_model_version(custom_model_id, model_info)
-                if model_info.should_run_test:
-                    self._test_custom_model_version(custom_model_id, version_id, model_info)
+                if model_info.should_create_new_version:
+                    custom_model, already_existed = self._get_or_create_custom_model(model_info)
+                    if not already_existed:
+                        self._total_created += 1
+
+                    custom_model_id = custom_model["id"]
+                    version_id = self._create_custom_model_version(custom_model_id, model_info)
+                    if model_info.should_run_test:
+                        self._test_custom_model_version(custom_model_id, version_id, model_info)
+
+                    logger.info(
+                        "Custom inference model version was successfully created. "
+                        f"git_model_id: {git_model_id}, model_id: {custom_model_id}, "
+                        f"version_id: {version_id}"
+                    )
+                else:
+                    custom_model = self.datarobot_models[model_info.git_model_id].model
+
+                if model_info.should_update_settings:
+                    self._update_model_settings(custom_model, model_info)
 
                 self._total_affected += 1
-                logger.info(
-                    "Custom inference model version was successfully created. "
-                    f"git_model_id: {git_model_id}, model_id: {custom_model_id}, "
-                    f"version_id: {version_id}"
-                )
 
     def _get_or_create_custom_model(self, model_info):
         already_exists = model_info.git_model_id in self.datarobot_models
         if already_exists:
-            custom_model_id = self.datarobot_models[model_info.git_model_id].model["id"]
+            custom_model = self.datarobot_models[model_info.git_model_id].model
         else:
-            custom_model_id = self._dr_client.create_custom_model(model_info)
-            logger.info(f"Custom inference model was created: {custom_model_id}")
-        return custom_model_id, already_exists
+            custom_model = self._dr_client.create_custom_model(model_info)
+            logger.info(f"Custom inference model was created: {custom_model['id']}")
+        return custom_model, already_exists
 
     def _create_custom_model_version(self, custom_model_id, model_info):
         if model_info.should_upload_all_files:
@@ -715,6 +739,42 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def _test_custom_model_version(self, model_id, model_version_id, model_info):
         logger.info("Executing custom model test ...")
         self._dr_client.run_custom_model_version_testing(model_id, model_version_id, model_info)
+
+    def _update_model_settings(self, datarobot_custom_model, model_info):
+        self._update_training_and_holdout_datasets(datarobot_custom_model, model_info)
+
+    def _update_training_and_holdout_datasets(self, datarobot_custom_model, model_info):
+        if model_info.is_unstructured:
+            custom_model = (
+                self._dr_client.update_training_and_holdout_datasets_for_unstructured_models(
+                    datarobot_custom_model, model_info
+                )
+            )
+            if custom_model:
+                logger.info(
+                    "Training / holdout dataset were updated for unstructured model. "
+                    f"Git model ID: {model_info.git_model_id}. "
+                    "Training dataset name: "
+                    f" {custom_model['externalMlopsStatsConfig']['trainingDatasetName']}. "
+                    "Training dataset ID: "
+                    f" {custom_model['externalMlopsStatsConfig']['trainingDatasetId']}. "
+                    "Holdout dataset name: "
+                    f" {custom_model['externalMlopsStatsConfig']['holdoutDatasetName']}. "
+                    "Holdout dataset ID: "
+                    f" {custom_model['externalMlopsStatsConfig']['holdoutDatasetId']}. "
+                )
+        else:
+            custom_model = self._dr_client.update_training_dataset_for_structured_models(
+                datarobot_custom_model, model_info
+            )
+            if custom_model:
+                logger.info(
+                    "Training dataset was updated for structured model. "
+                    f"Git model ID: {model_info.git_model_id}. "
+                    f"Dataset name: {custom_model['trainingDataFileName']}. "
+                    f"Dataset ID: {custom_model['trainingDatasetId']}. "
+                    f"Dataset version ID: {custom_model['trainingDatasetVersionId']}. "
+                )
 
     def _handle_deleted_models(self):
         if not self.options.allow_model_deletion:

@@ -41,17 +41,17 @@ class DeploymentInfo:
         challenger_enabled = self.get_settings_value(DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY)
         return True if challenger_enabled is None else challenger_enabled
 
-    def get_value(self, *args):
-        return DeploymentSchema.get_value(self.metadata, *args)
+    def get_value(self, key, *args):
+        return DeploymentSchema.get_value(self.metadata, key, *args)
 
-    def set_value(self, *args):
-        return DeploymentSchema.set_value(self.metadata, *args)
+    def set_value(self, key, *args, value):
+        return DeploymentSchema.set_value(self.metadata, key, *args, value=value)
 
     def get_settings_value(self, key, *sub_keys):
         return self.get_value(DeploymentSchema.SETTINGS_SECTION_KEY, key, *sub_keys)
 
-    def set_settings_value(self, *args):
-        return self.set_value(DeploymentSchema.SETTINGS_SECTION_KEY, *args)
+    def set_settings_value(self, key, *args, value):
+        return self.set_value(DeploymentSchema.SETTINGS_SECTION_KEY, key, *args, value=value)
 
 
 class CustomInferenceDeployment(CustomInferenceModelBase):

@@ -93,5 +93,5 @@ class UnexpectedNumOfModelVersions(GenericException):
     pass
 
 
-class TooFewArguments(GenericException):
+class TooFewKeys(GenericException):
     pass

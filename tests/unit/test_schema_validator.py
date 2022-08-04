@@ -4,11 +4,11 @@ from collections import namedtuple
 import pytest
 from bson import ObjectId
 
-from common.exceptions import InvalidDeploymentSchema
 from common.exceptions import InvalidModelSchema
 from itertools import combinations
 
 from common.exceptions import InvalidSchema
+from common.exceptions import TooFewKeys
 from common.exceptions import UnexpectedType
 from schema_validator import ModelSchema, DeploymentSchema
 from tests.unit.conftest import create_partial_deployment_schema
@@ -151,7 +151,7 @@ class TestModelSchemaValidator:
         self._validate_for_model_type(is_single, _set_unstructured_keys)
 
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
-    def test_invalid_mutual_exclusive_keys(self, is_single):
+    def test_invalid_mutual_exclusive_keys_target_types(self, is_single):
         Key = namedtuple("Key", ["type", "name", "value"])
         mutual_exclusive_keys = {
             Key(
@@ -198,6 +198,28 @@ class TestModelSchemaValidator:
             _set_single_model_keys(comb, model_schema)
             with pytest.raises(InvalidSchema):
                 self._validate_schema(is_single, model_schema)
+
+    @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
+    def test_invalid_mutual_exclusive_keys_partitioning_and_holdout(self, is_single):
+        model_metadata = create_partial_model_schema(is_single, num_models=1, with_target_type=True)
+
+        edit_metadata = (
+            model_metadata
+            if is_single
+            else model_metadata[ModelSchema.MULTI_MODELS_KEY][0][ModelSchema.MODEL_ENTRY_META_KEY]
+        )
+        edit_metadata[ModelSchema.SETTINGS_SECTION_KEY][ModelSchema.HOLDOUT_DATASET_KEY] = str(
+            ObjectId()
+        )
+        edit_metadata[ModelSchema.SETTINGS_SECTION_KEY][
+            ModelSchema.PARTITIONING_COLUMN_KEY
+        ] = "holdout"
+
+        with pytest.raises(InvalidModelSchema):
+            if is_single:
+                ModelSchema.validate_and_transform_single(model_metadata)
+            else:
+                ModelSchema.validate_and_transform_multi(model_metadata)
 
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
     @pytest.mark.parametrize(
@@ -284,11 +306,6 @@ class TestModelSchemaValidator:
 
 
 class TestModelSchemaGetValue:
-    def test_top_metadata(self, mock_full_binary_model_schema):
-        input_metadata = mock_full_binary_model_schema
-        returned_value = ModelSchema.get_value(input_metadata)
-        assert returned_value == input_metadata
-
     def test_first_level_key(self, mock_full_binary_model_schema):
         input_metadata = mock_full_binary_model_schema
         returned_value = ModelSchema.get_value(input_metadata, ModelSchema.SETTINGS_SECTION_KEY)
@@ -327,13 +344,18 @@ class TestModelSchemaGetValue:
         with pytest.raises(UnexpectedType):
             ModelSchema.get_value(ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.NAME_KEY)
 
+    def test_no_keys_failure(self, mock_full_binary_model_schema):
+        input_metadata = mock_full_binary_model_schema
+        with pytest.raises(TooFewKeys):
+            ModelSchema.get_value(input_metadata)
+
 
 class TestModelSchemaSetValue:
     @pytest.mark.parametrize("key_name", [ModelSchema.TARGET_NAME_KEY, "non-existing-key"])
     def test_first_level_key(self, mock_full_binary_model_schema, key_name):
         input_metadata = copy.deepcopy(mock_full_binary_model_schema)
         name = str(ObjectId())
-        metadata = ModelSchema.set_value(input_metadata, key_name, name)
+        metadata = ModelSchema.set_value(input_metadata, key_name, value=name)
         assert metadata[key_name] == name
         assert input_metadata[key_name] == name
 
@@ -355,7 +377,7 @@ class TestModelSchemaSetValue:
     def test_second_level_key(self, mock_full_binary_model_schema, section_name, key_name):
         input_metadata = copy.deepcopy(mock_full_binary_model_schema)
         value = str(ObjectId())
-        metadata = ModelSchema.set_value(input_metadata, section_name, key_name, value)
+        metadata = ModelSchema.set_value(input_metadata, section_name, key_name, value=value)
         assert metadata[section_name][key_name] == value
         assert input_metadata[section_name][key_name] == value
 
@@ -376,19 +398,3 @@ class TestDeploymentSchemaValidator:
         assert not DeploymentSchema.is_single_deployment_schema(multi_deployments_schema)
         assert not ModelSchema.is_multi_models_schema(multi_deployments_schema)
         assert not ModelSchema.is_single_model_schema(multi_deployments_schema)
-
-    @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
-    def test_invalid_mutual_exclusive_keys(self, is_single):
-        for key in (DeploymentSchema.TRAINING_DATASET_KEY, DeploymentSchema.HOLDOUT_DATASET_KEY):
-            deployment_metadata = create_partial_deployment_schema(is_single)
-            edit_metadata = deployment_metadata if is_single else deployment_metadata[0]
-            edit_metadata[DeploymentSchema.SETTINGS_SECTION_KEY][key] = str(ObjectId())
-            edit_metadata[DeploymentSchema.SETTINGS_SECTION_KEY][
-                DeploymentSchema.DATASET_WITH_PARTITIONING_COLUMN_KEY
-            ] = str(ObjectId())
-
-            with pytest.raises(InvalidDeploymentSchema):
-                if is_single:
-                    DeploymentSchema.validate_and_transform_single(deployment_metadata)
-                else:
-                    DeploymentSchema.validate_and_transform_multi(deployment_metadata)

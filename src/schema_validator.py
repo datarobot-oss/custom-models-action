@@ -8,10 +8,9 @@ from schema import Optional
 from schema import Or
 
 from common.convertors import MemoryConvertor
-from common.exceptions import InvalidDeploymentSchema
 from common.exceptions import InvalidModelSchema
 from common.exceptions import InvalidSchema
-from common.exceptions import TooFewArguments
+from common.exceptions import TooFewKeys
 from common.exceptions import UnexpectedType
 
 logger = logging.getLogger()
@@ -106,7 +105,7 @@ class SharedSchema:
         pass
 
     @staticmethod
-    def get_value(metadata: dict, *args):
+    def get_value(metadata: dict, *keys):
         """
         Extract a value from the metadata, for a given key hierarchy. The assumption is that parent
         keys are always dictionaries.
@@ -115,7 +114,7 @@ class SharedSchema:
         ----------
         metadata : dict
             A model schema dictionary.
-        args : list[str]
+        keys : list[str]
             A variable number of strings, representing key hierarchy in the metadata.
 
         Returns
@@ -128,9 +127,11 @@ class SharedSchema:
                 "Expecting first argument (metadata) to be a dict! "
                 f"type: {type(metadata)}, value: '{metadata}'"
             )
+        if len(keys) < 1:
+            raise TooFewKeys("Invalid number of keys. Expecting at least to one key")
 
         value = metadata
-        for index, arg in enumerate(args):
+        for index, arg in enumerate(keys):
             if not isinstance(value, dict):
                 value = None
                 break
@@ -139,7 +140,7 @@ class SharedSchema:
         return value
 
     @staticmethod
-    def set_value(metadata: dict, *args):
+    def set_value(metadata: dict, *keys, value):
         """
         Set a value in the metadata. If the key(s) do not exist, they'll be added.
 
@@ -147,26 +148,26 @@ class SharedSchema:
         ----------
         metadata : dict
             The metadata.
-        args : list
-            A sequence of keys ending with a value argument.
+        keys: tuple
+            A dynamic number of hierarchical keys. Requires at least one.
+        value : Any
+            A value to set
         """
         if not isinstance(metadata, dict):
             raise UnexpectedType(
                 "Expecting first argument (metadata) to be a dict! "
                 f"type: {type(metadata)}, value: '{metadata}'"
             )
-        if len(args) < 2:
-            raise TooFewArguments(
-                "Invalid number of arguments. Expecting to at least two arguments, "
-                f"a key and a value. Args: {args}."
-            )
+        if len(keys) < 1:
+            raise TooFewKeys("Invalid number of keys. Expecting at least to one key")
+
         section = metadata
-        if len(args) > 2:  # Nested dictionaries
-            for key in args[:-2]:
+        if len(keys) > 1:  # Nested dictionaries
+            for key in keys[:-1]:
                 if key not in section:
                     section[key] = {}
                 section = section[key]
-        section[args[-2]] = args[-1]
+        section[keys[-1]] = value
         return metadata
 
 
@@ -200,7 +201,11 @@ class ModelSchema(SharedSchema):
 
     NAME_KEY = "name"
     DESCRIPTION_KEY = "description"
+
+    # The 'PARTITIONING_COLUMN_KEY' is relevant for structured models only and is optional.
+    PARTITIONING_COLUMN_KEY = "partitioning_column"
     TRAINING_DATASET_KEY = "training_dataset"
+    # The 'HOLDOUT_DATASET' is relevant for unstructured models only and is optional.
     HOLDOUT_DATASET_KEY = "holdout_dataset"
 
     VERSION_KEY = "version"
@@ -257,6 +262,7 @@ class ModelSchema(SharedSchema):
             SharedSchema.SETTINGS_SECTION_KEY: {
                 NAME_KEY: And(str, len),
                 Optional(DESCRIPTION_KEY): And(str, len),
+                Optional(PARTITIONING_COLUMN_KEY): And(str, len),
                 Optional(TRAINING_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
                 Optional(HOLDOUT_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
             },
@@ -422,6 +428,12 @@ class ModelSchema(SharedSchema):
             if len(mutual_exclusive_keys & model_metadata.keys()) > 1:
                 raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")
 
+        settings_section = cls.get_value(model_metadata, ModelSchema.SETTINGS_SECTION_KEY)
+        if settings_section:
+            mutual_exclusive_keys = {cls.PARTITIONING_COLUMN_KEY, cls.HOLDOUT_DATASET_KEY}
+            if len(mutual_exclusive_keys & settings_section.keys()) > 1:
+                raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")
+
     @classmethod
     def _validate_dependent_keys(cls, model_metadata):
         if cls.is_binary(model_metadata):
@@ -506,13 +518,6 @@ class DeploymentSchema(SharedSchema):
     ENABLE_SEGMENT_ANALYSIS_KEY = "enabled"
     SEGMENT_ANALYSIS_ATTRIBUTES_KEY = "attributes"  # Settings.segment_analysis, Optional
 
-    # The 'DATASET_WITH_PARTITIONING_COLUMN_KEY' is mutually exclusive with the
-    # 'TRAINING_DATASET_KEY' & 'HOLDOUT_DATASET_KEY'. The latter two are used with unstructured
-    # models.
-    DATASET_WITH_PARTITIONING_COLUMN_KEY = "dataset_with_partitioning_column"
-    TRAINING_DATASET_KEY = "training_dataset"
-    HOLDOUT_DATASET_KEY = "holdout_dataset"
-
     DEPLOYMENT_SCHEMA = Schema(
         {
             DEPLOYMENT_ID_KEY: And(str, len),
@@ -552,9 +557,6 @@ class DeploymentSchema(SharedSchema):
                         list, lambda l: all(len(a) > 0 for a in l)
                     ),
                 },
-                Optional(DATASET_WITH_PARTITIONING_COLUMN_KEY): And(str, len),
-                Optional(TRAINING_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
-                Optional(HOLDOUT_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
             },
         }
     )
@@ -621,19 +623,3 @@ class DeploymentSchema(SharedSchema):
     def _next_single_transformed(cls, multi_transformed):
         for deployment_entry in multi_transformed:
             yield deployment_entry
-
-    @classmethod
-    def _validate_mutual_exclusive_keys(cls, deployment_metadata):
-        settings_section = cls.get_value(deployment_metadata, DeploymentSchema.SETTINGS_SECTION_KEY)
-        if not settings_section:
-            return
-
-        for dataset_for_unstructured in [cls.TRAINING_DATASET_KEY, cls.HOLDOUT_DATASET_KEY]:
-            mutual_exclusive_keys = {
-                dataset_for_unstructured,
-                cls.DATASET_WITH_PARTITIONING_COLUMN_KEY,
-            }
-            if len(mutual_exclusive_keys & settings_section.keys()) > 1:
-                raise InvalidDeploymentSchema(
-                    f"Only one of '{mutual_exclusive_keys}' keys is allowed."
-                )

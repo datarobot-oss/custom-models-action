@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 from pathlib import Path
+import random
 from tempfile import TemporaryDirectory
 
 import pytest
@@ -16,6 +17,7 @@ from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
 from dr_client import DrClient
 from main import main
+from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 from schema_validator import SharedSchema
 
@@ -29,14 +31,18 @@ def webserver_accessible():
 
 
 def cleanup_models(dr_client, repo_root_path):
-    for model_yaml_file in repo_root_path.rglob("**/model.yaml"):
-        with open(model_yaml_file) as f:
-            model_metadata = yaml.safe_load(f)
+    custom_models = dr_client.fetch_custom_models()
+    if custom_models:
+        for model_yaml_file in repo_root_path.rglob("**/model.yaml"):
+            with open(model_yaml_file) as f:
+                model_metadata = yaml.safe_load(f)
 
-        try:
-            dr_client.delete_custom_model_by_git_model_id(model_metadata[ModelSchema.MODEL_ID_KEY])
-        except (IllegalModelDeletion, DataRobotClientError):
-            pass
+            try:
+                dr_client.delete_custom_model_by_git_model_id(
+                    model_metadata[ModelSchema.MODEL_ID_KEY]
+                )
+            except (IllegalModelDeletion, DataRobotClientError):
+                pass
 
 
 def printout(msg):
@@ -74,49 +80,58 @@ def git_repo(repo_root_path):
 
 @pytest.fixture
 def build_repo_for_testing(repo_root_path, git_repo):
-    # 1. Copy models from source tree
-    models_src_root_dir = Path(__file__).parent / ".." / "models"
-    dst_models_dir = repo_root_path / models_src_root_dir.name
-    shutil.copytree(models_src_root_dir, dst_models_dir)
+    def _setup_model(src_model_filepath, dst_models_root_dir, model_index):
+        dst_model_path = dst_models_root_dir / f"model_{model_index}"
+        shutil.copytree(src_model_filepath, dst_model_path)
 
-    # 2. Rename first model to indicate '1'
-    model_filepath_1 = next(dst_models_dir.glob("*"))
-    first_model_filepath = str(model_filepath_1) + "_1"
-    model_filepath_1 = model_filepath_1.rename(first_model_filepath)
+        model_metadata_yaml_filepath = next(dst_model_path.rglob("**/model.yaml"))
+        with open(model_metadata_yaml_filepath, "r") as reader:
+            model_metadata = yaml.safe_load(reader)
 
-    # 3. Duplicate the first model to simulate more than one model
-    second_model_filepath = first_model_filepath.replace("_1", "_2")
-    shutil.copytree(first_model_filepath, second_model_filepath)
+        # Set model ID
+        unique_id = random.randint(1, 2**32)
+        new_model_id = f"{model_metadata[ModelSchema.MODEL_ID_KEY]}-{unique_id:010}"
+        ModelSchema.set_value(model_metadata, ModelSchema.MODEL_ID_KEY, value=new_model_id)
 
-    second_model_metadata_yaml_filepath = next(Path(second_model_filepath).rglob("**/model.yaml"))
-    with open(second_model_metadata_yaml_filepath, "r") as f:
-        second_model_metadata = yaml.safe_load(f)
+        # Set model name
+        new_model_name = f"My Awsome GitHub Model {unique_id} [GitHub CI/CD, Functional Tests]"
+        ModelSchema.set_value(
+            model_metadata,
+            ModelSchema.SETTINGS_SECTION_KEY,
+            ModelSchema.NAME_KEY,
+            value=new_model_name,
+        )
 
-    # 4. Change second model ID
-    second_model_id = second_model_metadata[ModelSchema.MODEL_ID_KEY]
-    second_model_id = second_model_id.replace("1", "2")
-    ModelSchema.set_value(second_model_metadata, ModelSchema.MODEL_ID_KEY, second_model_id)
+        with open(model_metadata_yaml_filepath, "w") as writer:
+            yaml.safe_dump(model_metadata, writer)
 
-    # 5. Change second model name
-    second_model_name = ModelSchema.get_value(
-        second_model_metadata, ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.NAME_KEY
+        return model_metadata
+
+    # source model filepath
+    src_models_root_dir = Path(__file__).parent / ".." / "models"
+    src_model_path = next(
+        p for p in src_models_root_dir.glob("**") if not p.samefile(src_models_root_dir)
     )
-    second_model_name = second_model_name.replace("1", "2")
-    ModelSchema.set_value(
-        second_model_metadata,
-        ModelSchema.SETTINGS_SECTION_KEY,
-        ModelSchema.NAME_KEY,
-        second_model_name,
-    )
+    dst_models_root_dir = repo_root_path / "models"
 
-    # 6. Save second model metadata
-    with open(second_model_metadata_yaml_filepath, "w") as f:
-        yaml.safe_dump(second_model_metadata, f)
+    first_model_metadata = _setup_model(src_model_path, dst_models_root_dir, 1)
+    _setup_model(src_model_path, dst_models_root_dir, 2)
 
     # 7. Copy deployments
     deployments_src_root_dir = Path(__file__).parent / ".." / "deployments"
     dst_deployments_dir = repo_root_path / deployments_src_root_dir.name
     shutil.copytree(deployments_src_root_dir, dst_deployments_dir)
+
+    deployment_yaml_filepath = next(dst_deployments_dir.glob("deployment.yaml"))
+    with open(deployment_yaml_filepath, "r") as f:
+        deployment_metadata = yaml.safe_load(f)
+    DeploymentSchema.set_value(
+        deployment_metadata,
+        DeploymentSchema.MODEL_ID_KEY,
+        value=first_model_metadata[ModelSchema.MODEL_ID_KEY],
+    )
+    with open(deployment_yaml_filepath, "w") as f:
+        yaml.safe_dump(deployment_metadata, f)
 
     # 8. Add files to repo
     os.chdir(repo_root_path)
@@ -128,7 +143,10 @@ def build_repo_for_testing(repo_root_path, git_repo):
 def set_model_dataset_for_testing(dr_client, model_metadata, model_metadata_yaml_file):
     if ModelSchema.TEST_KEY in model_metadata:
         test_dataset_filepath = (
-            Path(__file__).parent / ".." / "datasets" / "juniors_3_year_stats_regression_small.csv"
+            Path(__file__).parent
+            / ".."
+            / "datasets"
+            / "juniors_3_year_stats_regression_pred_requests.csv"
         )
         dataset_id = None
         try:
@@ -136,26 +154,28 @@ def set_model_dataset_for_testing(dr_client, model_metadata, model_metadata_yaml
 
             with temporarily_replace_schema_value(
                 model_metadata_yaml_file,
-                dataset_id,
                 ModelSchema.TEST_KEY,
                 ModelSchema.TEST_DATA_KEY,
+                new_value=dataset_id,
             ):
                 yield dataset_id
         finally:
             if dataset_id:
                 dr_client.delete_dataset(dataset_id)
+    else:
+        yield
 
 
 @contextlib.contextmanager
-def _temporarily_replace_schema(yaml_filepath, metadata_or_value, *args):
+def _temporarily_replace_schema(yaml_filepath, *keys, metadata_or_value):
     try:
         origin_metadata = None
         with open(yaml_filepath) as f:
             origin_metadata = yaml.safe_load(f)
 
-        if args:  # Assuming a value replacement
+        if keys:  # Assuming a value replacement
             new_metadata = copy.deepcopy(origin_metadata)
-            SharedSchema.set_value(new_metadata, *args, metadata_or_value)
+            SharedSchema.set_value(new_metadata, *keys, value=metadata_or_value)
         else:  # Assuming a metadata replacement
             new_metadata = metadata_or_value
 
@@ -172,13 +192,15 @@ def _temporarily_replace_schema(yaml_filepath, metadata_or_value, *args):
 
 @contextlib.contextmanager
 def temporarily_replace_schema(yaml_filepath, new_metadata):
-    with _temporarily_replace_schema(yaml_filepath, new_metadata) as new_metadata:
+    with _temporarily_replace_schema(yaml_filepath, metadata_or_value=new_metadata) as new_metadata:
         yield new_metadata
 
 
 @contextlib.contextmanager
-def temporarily_replace_schema_value(yaml_filepath, new_value, *args):
-    with _temporarily_replace_schema(yaml_filepath, new_value, *args) as new_metadata:
+def temporarily_replace_schema_value(yaml_filepath, key, *sub_keys, new_value):
+    with _temporarily_replace_schema(
+        yaml_filepath, key, *sub_keys, metadata_or_value=new_value
+    ) as new_metadata:
         yield new_metadata
 
 
@@ -263,11 +285,12 @@ def run_github_action(
     repo_root_path,
     git_repo,
     main_branch_name,
-    main_branch_head_sha,
     event_name,
     is_deploy,
+    main_branch_head_sha=None,
     allow_deployment_deletion=True,
 ):
+    main_branch_head_sha = main_branch_head_sha or git_repo.head.commit.hexsha
     ref_name = main_branch_name if event_name == "push" else "merge-branch"
     with github_env_set("GITHUB_EVENT_NAME", event_name), github_env_set(
         "GITHUB_SHA", git_repo.commit(main_branch_head_sha).hexsha
@@ -293,3 +316,20 @@ def run_github_action(
             args.append("--allow-deployment-deletion")
 
         main(args)
+
+
+@contextlib.contextmanager
+def upload_and_update_dataset(dr_client, dataset_filepath, metadata_yaml_filepath, *settings_keys):
+    dataset_id = None
+    try:
+        dataset_id = dr_client.upload_dataset(dataset_filepath)
+        with temporarily_replace_schema_value(
+            metadata_yaml_filepath,
+            SharedSchema.SETTINGS_SECTION_KEY,
+            *settings_keys,
+            new_value=dataset_id,
+        ):
+            yield dataset_id
+    finally:
+        if dataset_id:
+            dr_client.delete_dataset(dataset_id)

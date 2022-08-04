@@ -35,14 +35,17 @@ def make_a_change_and_commit(git_repo, file_paths, index):
     git_repo.index.commit(f"Change number {index}")
 
 
-def create_partial_model_schema(is_single=True, num_models=1):
+def create_partial_model_schema(is_single=True, num_models=1, with_target_type=False):
     def _partial_model_schema(name):
-        return {
+        partial_schema = {
             ModelSchema.MODEL_ID_KEY: str(uuid.uuid4()),
             ModelSchema.TARGET_NAME_KEY: "target_feature_col",
             ModelSchema.SETTINGS_SECTION_KEY: {"name": name},
             ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: str(ObjectId())},
         }
+        if with_target_type:
+            partial_schema[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_REGRESSION_KEY
+        return partial_schema
 
     if is_single:
         model_schema = _partial_model_schema(f"single-model")
