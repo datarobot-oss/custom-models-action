@@ -28,12 +28,13 @@ class DrClient:
     MODEL_PACKAGES_CREATE_ROUTE = "modelPackages/fromCustomModelVersion/"
     DEPLOYMENTS_ROUTE = "deployments/"
     DEPLOYMENTS_CREATE_ROUTE = "deployments/fromModelPackage/"
-    DEPLOYMENT_SETTINGS_ROUTE = "deployments/{deployment_id}/settings/"
+    DEPLOYMENT_ROUTE = "deployments/{deployment_id}/"
+    DEPLOYMENT_SETTINGS_ROUTE = DEPLOYMENT_ROUTE + "settings/"
     PREDICTION_ENVIRONMENTS_ROUTE = "predictionEnvironments/?supportedModelFormats=customModel"
-    DEPLOYMENT_MODEL_ROUTE = "deployments/{deployment_id}/model/"
+    DEPLOYMENT_MODEL_ROUTE = DEPLOYMENT_ROUTE + "model/"
     DEPLOYMENT_MODEL_VALIDATION_ROUTE = DEPLOYMENT_MODEL_ROUTE + "validation/"
-    DEPLOYMENT_MODEL_CHALLENGER_ROUTE = "deployments/{deployment_id}/challengers/"
-    DEPLOYMENT_ACTUALS_UPDATE_ROUTE = "deployments/{deployment_id}/actuals/fromDataset/"
+    DEPLOYMENT_MODEL_CHALLENGER_ROUTE = DEPLOYMENT_ROUTE + "challengers/"
+    DEPLOYMENT_ACTUALS_UPDATE_ROUTE = DEPLOYMENT_ROUTE + "actuals/fromDataset/"
 
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
@@ -511,12 +512,19 @@ class DrClient:
         logger.debug("Fetching deployments...")
         return self._paginated_fetch(self.DEPLOYMENTS_ROUTE)
 
+    def fetch_deployment_by_git_id(self, git_deployment_id):
+        deployments = self.fetch_deployments()
+        try:
+            return next(d for d in deployments if d.get("gitDeploymentId") == git_deployment_id)
+        except StopIteration:
+            return None
+
     def create_deployment(self, custom_model_version, deployment_info):
         model_package = self._create_model_package_from_custom_model_version(
             custom_model_version["id"]
         )
         deployment_id = self._create_deployment_from_model_package(model_package, deployment_info)
-        deployment = self._update_deployment_settings(deployment_id, deployment_info)
+        deployment = self.update_deployment_settings(deployment_id, deployment_info)
         return deployment
 
     def _create_model_package_from_custom_model_version(self, custom_model_version_id):
@@ -533,9 +541,7 @@ class DrClient:
         return response.json()
 
     def _create_deployment_from_model_package(self, model_package, deployment_info):
-        label = deployment_info.get_value(
-            DeploymentSchema.SETTINGS_SECTION_KEY, DeploymentSchema.LABEL_KEY
-        )
+        label = deployment_info.get_settings_value(DeploymentSchema.LABEL_KEY)
         if not label:
             label = f"{model_package['target']['name']} Predictions [GitHub CI/CD]"
 
@@ -548,9 +554,7 @@ class DrClient:
             ),
         }
 
-        importance = deployment_info.get_value(
-            DeploymentSchema.SETTINGS_SECTION_KEY, DeploymentSchema.IMPORTANCE_KEY
-        )
+        importance = deployment_info.get_settings_value(DeploymentSchema.IMPORTANCE_KEY)
         if importance:
             payload["importance"] = importance
 
@@ -580,48 +584,68 @@ class DrClient:
             )
         return prediction_envs[0]["id"]
 
-    def _update_deployment_settings(self, deployment_id, deployment_info):
+    def update_deployment_settings(self, deployment_id, deployment_info, actual_settings=None):
+        """
+        This method updates the deployment setting. It can be called with the actual deployment
+        settings in order to avoid submission of unneeded settings. The reason for not always
+        submitting the desired settings is because a change in a given setting might result
+        in a long, heavy computation jobs in the backend. One fundamental rule is that if
+        the corresponding definition does not exist in the local definition, it'll not be
+        submitted to DataRobot.
+
+        Parameters
+        ----------
+        deployment_id : ObjectId
+            The DataRobot deployment ID.
+        deployment_info :  DeploymentInfo
+            A deployment info class.
+        actual_settings : dict
+            Optional. The settings that were fetched from DataRobot.
+        """
+
         payload = {}
-        association_id = deployment_info.get_value(
-            DeploymentSchema.SETTINGS_SECTION_KEY, DeploymentSchema.ASSOCIATION_ID_KEY
-        )
-        if association_id:
-            # NOTE: this is a simplified alternative, which supports a single association ID
-            payload["associationId"] = {
-                "requiredInPredictionRequests": True,
-                "columnNames": [association_id],
-            }
 
-        target_drift = deployment_info.get_value(
-            DeploymentSchema.SETTINGS_SECTION_KEY, DeploymentSchema.ENABLE_TARGET_DRIFT_KEY
+        desired_association_section = deployment_info.get_settings_value(
+            DeploymentSchema.ASSOCIATION_KEY
         )
-        if target_drift is not None:
-            payload["targetDrift"] = {"enabled": target_drift}
-
-        feature_drift = deployment_info.get_value(
-            DeploymentSchema.SETTINGS_SECTION_KEY, DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY
-        )
-        if feature_drift is not None:
-            payload["featureDrift"] = {"enabled": feature_drift}
-
-        segmented_analysis = deployment_info.get_value(
-            DeploymentSchema.SETTINGS_SECTION_KEY, DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY
-        )
-        if segmented_analysis is not None:
-            payload["segmentAnalysis"] = {"enabled": segmented_analysis}
-            attributes = deployment_info.get_value(
-                DeploymentSchema.SETTINGS_SECTION_KEY,
-                DeploymentSchema.SEGMENT_ANALYSIS_ATTRIBUTES_KEY,
+        if desired_association_section:
+            payload["associationId"] = self._setup_association_payload(
+                deployment_info, actual_settings
             )
-            if attributes:
-                payload["segmentAnalysis"]["attributes"] = attributes
 
-        predictions_data_collection = deployment_info.get_value(
-            DeploymentSchema.SETTINGS_SECTION_KEY,
-            DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY,
+        desired_target_drift = deployment_info.get_settings_value(
+            DeploymentSchema.ENABLE_TARGET_DRIFT_KEY
         )
-        enabled = True if predictions_data_collection is None else predictions_data_collection
-        payload["predictionsDataCollection"] = {"enabled": enabled}
+        if desired_target_drift is not None:
+            actual_targe_drift = actual_settings["targetDrift"] if actual_settings else None
+            if actual_targe_drift != desired_target_drift:
+                payload["targetDrift"] = {"enabled": desired_target_drift}
+
+        desired_feature_drift = deployment_info.get_settings_value(
+            DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY
+        )
+        if desired_feature_drift is not None:
+            actual_feature_drift = actual_settings["featureDrift"] if actual_settings else None
+            if actual_feature_drift != desired_feature_drift:
+                payload["featureDrift"] = {"enabled": desired_feature_drift}
+
+        desired_segmented_analysis = deployment_info.get_settings_value(
+            DeploymentSchema.SEGMENT_ANALYSIS_KEY
+        )
+        if desired_segmented_analysis:
+            payload["segmentAnalysis"] = self._setup_segmented_analysis(
+                deployment_info, actual_settings
+            )
+
+        # A special case, in which the default is to enable challengers
+        if deployment_info.is_challenger_enabled:
+            payload["predictionsDataCollection"] = {"enabled": True}
+        else:
+            desired_pred_collection_enabled = deployment_info.get_settings_value(
+                DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY,
+            )
+            if desired_pred_collection_enabled is not None:
+                payload["predictionsDataCollection"] = {"enabled": desired_pred_collection_enabled}
 
         payload["challengerModels"] = {"enabled": deployment_info.is_challenger_enabled}
 
@@ -641,6 +665,78 @@ class DrClient:
         response = self._http_requester.get(location, raw=True)
         return response.json()
 
+    @staticmethod
+    def _setup_association_payload(deployment_info, actual_settings):
+        association_payload = {}
+        desired_association_pred_id = deployment_info.get_settings_value(
+            DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_PRED_ID_KEY
+        )
+        if desired_association_pred_id is not None:
+            actuals_cols = (
+                actual_settings["associationId"]["columnNames"] if actual_settings else None
+            )
+            desired_association_pred_id = [desired_association_pred_id]
+            if desired_association_pred_id != actuals_cols:
+                association_payload["columnNames"] = desired_association_pred_id
+
+        desired_required = deployment_info.get_settings_value(
+            DeploymentSchema.ASSOCIATION_KEY,
+            DeploymentSchema.ASSOCIATION_REQUIRED_IN_PRED_REQUEST_KEY,
+        )
+        if desired_required is not None:
+            actual_required = (
+                actual_settings["associationId"]["requiredInPredictionRequests"]
+                if actual_settings
+                else None
+            )
+            if desired_required != actual_required:
+                # NOTE: this is a simplified alternative, which supports a single association ID
+                association_payload["requiredInPredictionRequests"] = desired_required
+
+        return association_payload
+
+    @staticmethod
+    def _setup_segmented_analysis(deployment_info, actual_settings):
+        segmented_analysis_payload = {}
+        desired_enabled = deployment_info.get_settings_value(
+            DeploymentSchema.SEGMENT_ANALYSIS_KEY,
+            DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY,
+        )
+        if desired_enabled is not None:
+            actual_enabled = (
+                actual_settings["segmentAnalysis"]["enabled"] if actual_settings else None
+            )
+            if desired_enabled != actual_enabled:
+                segmented_analysis_payload = {"enabled": desired_enabled}
+
+        desired_attributes = deployment_info.get_settings_value(
+            DeploymentSchema.SEGMENT_ANALYSIS_KEY,
+            DeploymentSchema.SEGMENT_ANALYSIS_ATTRIBUTES_KEY,
+        )
+        if desired_attributes is not None:
+            actual_attributes = (
+                actual_settings["segmentAnalysis"]["attributes"] if actual_settings else None
+            )
+            if desired_attributes != actual_attributes:
+                segmented_analysis_payload["attributes"] = desired_attributes
+
+        return segmented_analysis_payload
+
+    def fetch_deployment_settings(self, deployment_id, deployment_info):
+        response = self._http_requester.get(
+            self.DEPLOYMENT_SETTINGS_ROUTE.format(deployment_id=deployment_id)
+        )
+        if response.status_code != 200:
+            raise DataRobotClientError(
+                "Failed to fetch deployment settings."
+                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"Deployment id: {deployment_id}, "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        return response.json()
+
     def submit_deployment_actuals(
         self, target_name, association_id, actuals_dataset_id, datarobot_deployment
     ):
@@ -654,6 +750,16 @@ class DrClient:
         location = self._wait_for_async_resolution(response.headers["Location"])
         response = self._http_requester.get(location, raw=True)
         return response.json()  # Accuracy
+
+    def update_deployment_label(self, deployment_id, label):
+        response = self._http_requester.patch(
+            self.DEPLOYMENT_ROUTE.format(deployment_id=deployment_id), json={"label": label}
+        )
+        if response.status_code != 204:
+            raise DataRobotClientError(
+                f"Failed to update deployment label. Error: {response.text}.",
+                code=response.status_code,
+            )
 
     def delete_deployment_by_id(self, deployment_id):
         sub_path = f"{self.DEPLOYMENTS_ROUTE}{deployment_id}/"

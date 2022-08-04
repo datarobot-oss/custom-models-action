@@ -9,19 +9,9 @@ from schema_validator import ModelSchema
 from tests.functional.conftest import cleanup_models
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import run_github_action
-from tests.functional.conftest import set_persistent_schema_variable
+from tests.functional.conftest import temporarily_replace_schema_value
 from tests.functional.conftest import printout
 from tests.functional.conftest import webserver_accessible
-
-
-@pytest.fixture
-def feature_branch_name():
-    return "feature"
-
-
-@pytest.fixture
-def merge_branch_name():
-    return "merge-feature-branch"
 
 
 @pytest.fixture
@@ -42,12 +32,8 @@ class TestModelGitHubActions:
 
     @contextlib.contextmanager
     def enable_custom_model_testing(self, model_metadata_yaml_file, model_metadata):
-        with set_persistent_schema_variable(
-            model_metadata_yaml_file,
-            model_metadata,
-            False,
-            ModelSchema.TEST_KEY,
-            ModelSchema.TEST_SKIP_KEY,
+        with temporarily_replace_schema_value(
+            model_metadata_yaml_file, False, ModelSchema.TEST_KEY, ModelSchema.TEST_SKIP_KEY
         ):
             yield
 

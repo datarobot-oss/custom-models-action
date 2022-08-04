@@ -10,7 +10,6 @@ import pytest
 from mock.mock import PropertyMock
 
 from common.data_types import DataRobotModel
-from common.git_tool import GitTool
 from custom_inference_model import CustomInferenceModel
 from custom_inference_model import ModelFilePath
 from custom_inference_model import ModelInfo

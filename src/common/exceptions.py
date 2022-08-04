@@ -4,9 +4,17 @@ class GenericException(Exception):
         self.code = code
 
 
-class InvalidModelSchema(GenericException):
+class InvalidSchema(GenericException):
     def __init__(self, msg, code=-1):
         super().__init__(msg.split("\n")[-1], code)
+
+
+class InvalidModelSchema(InvalidSchema):
+    pass
+
+
+class InvalidDeploymentSchema(InvalidSchema):
+    pass
 
 
 class UnexpectedType(GenericException):
@@ -82,4 +90,8 @@ class AssociatedModelVersionNotFound(GenericException):
 
 
 class UnexpectedNumOfModelVersions(GenericException):
+    pass
+
+
+class TooFewArguments(GenericException):
     pass

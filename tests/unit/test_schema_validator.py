@@ -4,9 +4,11 @@ from collections import namedtuple
 import pytest
 from bson import ObjectId
 
+from common.exceptions import InvalidDeploymentSchema
 from common.exceptions import InvalidModelSchema
 from itertools import combinations
 
+from common.exceptions import InvalidSchema
 from common.exceptions import UnexpectedType
 from schema_validator import ModelSchema, DeploymentSchema
 from tests.unit.conftest import create_partial_deployment_schema
@@ -51,7 +53,7 @@ class TestModelSchemaValidator:
 
     def _validate_for_model_type(self, is_single, setup_model_keys_func):
         model_schema = create_partial_model_schema(is_single, num_models=1)
-        with pytest.raises(InvalidModelSchema):
+        with pytest.raises(InvalidSchema):
             # Partial schema should fail
             self._validate_schema(is_single, model_schema)
 
@@ -194,7 +196,7 @@ class TestModelSchemaValidator:
         comb_keys = combinations(mutual_exclusive_keys, 2)
         for comb in comb_keys:
             _set_single_model_keys(comb, model_schema)
-            with pytest.raises(InvalidModelSchema):
+            with pytest.raises(InvalidSchema):
                 self._validate_schema(is_single, model_schema)
 
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
@@ -224,7 +226,7 @@ class TestModelSchemaValidator:
         if not is_single:
             regression_model_schema = self._wrap_multi(regression_model_schema)
 
-        with pytest.raises(InvalidModelSchema) as e:
+        with pytest.raises(InvalidSchema) as e:
             self._validate_schema(is_single, regression_model_schema)
 
         assert f"Missing key: '{sub_key if sub_key else key}'" in str(e)
@@ -254,7 +256,7 @@ class TestModelSchemaValidator:
         regression_model_schema[forbidden_key] = "Non allowed extra key"
         if not is_single:
             regression_model_schema = self._wrap_multi(regression_model_schema)
-        with pytest.raises(InvalidModelSchema) as e:
+        with pytest.raises(InvalidSchema) as e:
             self._validate_schema(is_single, regression_model_schema)
         assert f"Wrong key '{forbidden_key}'" in str(e)
 
@@ -385,7 +387,7 @@ class TestDeploymentSchemaValidator:
                 DeploymentSchema.DATASET_WITH_PARTITIONING_COLUMN_KEY
             ] = str(ObjectId())
 
-            with pytest.raises(InvalidModelSchema):
+            with pytest.raises(InvalidDeploymentSchema):
                 if is_single:
                     DeploymentSchema.validate_and_transform_single(deployment_metadata)
                 else:

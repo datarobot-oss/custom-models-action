@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import os
 from pathlib import Path
 
@@ -8,13 +9,15 @@ from bson import ObjectId
 
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
+from custom_inference_deployment import DeploymentInfo
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 from tests.functional.conftest import cleanup_models
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import run_github_action
-from tests.functional.conftest import set_persistent_schema_variable
+from tests.functional.conftest import temporarily_replace_schema_value
 from tests.functional.conftest import printout
+from tests.functional.conftest import temporarily_replace_schema
 from tests.functional.conftest import webserver_accessible
 
 
@@ -68,7 +71,8 @@ class TestDeploymentGitHubActions:
             association_id = DeploymentSchema.get_value(
                 deployment_metadata,
                 DeploymentSchema.SETTINGS_SECTION_KEY,
-                DeploymentSchema.ASSOCIATION_ID_KEY,
+                DeploymentSchema.ASSOCIATION_KEY,
+                DeploymentSchema.ASSOCIATION_ACTUALS_ID_KEY,
             )
             if association_id:
                 actuals_filepath = (
@@ -80,12 +84,12 @@ class TestDeploymentGitHubActions:
                 dataset_id = None
                 try:
                     dataset_id = dr_client.upload_dataset(actuals_filepath)
-                    with set_persistent_schema_variable(
+                    with temporarily_replace_schema_value(
                         deployment_metadata_yaml_file,
-                        deployment_metadata,
                         dataset_id,
                         DeploymentSchema.SETTINGS_SECTION_KEY,
-                        DeploymentSchema.ACTUALS_DATASET_ID_KEY,
+                        DeploymentSchema.ASSOCIATION_KEY,
+                        DeploymentSchema.ASSOCIATION_ACTUALS_DATASET_ID_KEY,
                     ):
                         yield dataset_id
                 finally:
@@ -135,15 +139,16 @@ class TestDeploymentGitHubActions:
                 is_deploy=True,
             )
 
+        # 4. Validate
         printout("Validate ...")
-        deployments = dr_client.fetch_deployments()
         local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         if event_name == "push":
-            assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
+            assert dr_client.fetch_deployment_by_git_id(local_git_deployment_id) is not None
         elif event_name == "pull_request":
-            assert all(d.get("gitDeploymentId") != local_git_deployment_id for d in deployments)
+            assert dr_client.fetch_deployment_by_git_id(local_git_deployment_id) is None
         else:
             assert False, f"Unsupported GitHub event name: {event_name}"
+
         printout("Done")
 
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
@@ -387,3 +392,153 @@ class TestDeploymentGitHubActions:
         else:
             assert False, f"Unsupported GitHub event name: {event_name}"
         printout("Done")
+
+    @pytest.mark.parametrize("event_name", ["push", "pull_request"])
+    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
+    def test_e2e_deployment_settings(
+        self,
+        dr_client,
+        repo_root_path,
+        git_repo,
+        deployment_metadata,
+        deployment_metadata_yaml_file,
+        main_branch_name,
+        event_name,
+    ):
+        # 1. Create a model just as a basic requirement (use GitHub action)
+        printout(
+            "Create a custom model as a preliminary requirement. "
+            "Run custom model GitHub action (push event) ..."
+        )
+        head_commit_sha = git_repo.head.commit.hexsha
+        run_github_action(
+            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
+        )
+
+        # 2. Run a deployment GitHub action to create a deployment
+        printout("Create a deployment. Run a deployment GitHub action (push event) ...")
+        run_github_action(
+            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=True
+        )
+        local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        deployment = dr_client.fetch_deployment_by_git_id(local_git_deployment_id)
+        assert deployment is not None
+
+        for check_func in [self._test_deployment_label, self._test_deployment_settings]:
+            with check_func(
+                dr_client,
+                deployment,
+                deployment_metadata,
+                deployment_metadata_yaml_file,
+                event_name,
+            ):
+                printout(f"Run deployment GitHub action ({event_name}")
+                run_github_action(
+                    repo_root_path,
+                    git_repo,
+                    main_branch_name,
+                    head_commit_sha,
+                    event_name,
+                    is_deploy=True,
+                )
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _test_deployment_label(
+        dr_client, deployment, deployment_metadata, deployment_metadata_yaml_file, event_name
+    ):
+        printout("Change deployment name")
+        old_name = deployment["label"]
+        new_name = f"{old_name} - NEW"
+        with temporarily_replace_schema_value(
+            deployment_metadata_yaml_file,
+            new_name,
+            DeploymentSchema.SETTINGS_SECTION_KEY,
+            DeploymentSchema.LABEL_KEY,
+        ):
+            yield
+
+        deployment = dr_client.fetch_deployment_by_git_id(
+            deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        )
+        if event_name == "push":
+            assert deployment["label"] == new_name
+        elif event_name == "pull_request":
+            assert deployment["label"] == old_name
+        else:
+            assert False, f"Unsupported GitHub event name: {event_name}"
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _test_deployment_settings(
+        dr_client,
+        deployment,
+        deployment_metadata,
+        deployment_metadata_yaml_file,
+        event_name,
+    ):
+        deployment_info = DeploymentInfo(deployment_metadata_yaml_file, deployment_metadata)
+        deployment_settings = dr_client.fetch_deployment_settings(deployment["id"], deployment_info)
+
+        new_value = not deployment_settings["targetDrift"]["enabled"]
+        deployment_info.set_settings_value(DeploymentSchema.ENABLE_TARGET_DRIFT_KEY, new_value)
+
+        new_value = not deployment_settings["featureDrift"]["enabled"]
+        # TODO: Remove the next line when a support for learning data assignment is implemented
+        new_value = False
+        deployment_info.set_settings_value(DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY, new_value)
+
+        new_value = not deployment_settings["segmentAnalysis"]["enabled"]
+        deployment_info.set_settings_value(
+            DeploymentSchema.SEGMENT_ANALYSIS_KEY,
+            DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY,
+            new_value,
+        )
+
+        new_value = not deployment_settings["challengerModels"]["enabled"]
+        deployment_info.set_settings_value(DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY, new_value)
+        deployment_info.set_settings_value(
+            DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY, new_value
+        )
+
+        with temporarily_replace_schema(deployment_metadata_yaml_file, deployment_info.metadata):
+            yield
+
+        new_deployment_settings = dr_client.fetch_deployment_settings(
+            deployment["id"], deployment_info
+        )
+        if event_name == "push":
+            expected_target_drift = deployment_info.get_settings_value(
+                DeploymentSchema.ENABLE_TARGET_DRIFT_KEY
+            )
+            expected_feature_drift = deployment_info.get_settings_value(
+                DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY
+            )
+            expected_segment_analysis = deployment_info.get_settings_value(
+                DeploymentSchema.SEGMENT_ANALYSIS_KEY, DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY
+            )
+            expected_challenger_models = deployment_info.get_settings_value(
+                DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY
+            )
+            expected_predictions_data_collection = deployment_info.get_settings_value(
+                DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY
+            )
+        elif event_name == "pull_request":
+            expected_target_drift = deployment_settings["targetDrift"]["enabled"]
+            expected_feature_drift = deployment_settings["featureDrift"]["enabled"]
+            expected_segment_analysis = new_deployment_settings["segmentAnalysis"]["enabled"]
+            expected_challenger_models = deployment_settings["challengerModels"]["enabled"]
+            expected_predictions_data_collection = deployment_settings["predictionsDataCollection"][
+                "enabled"
+            ]
+        else:
+            assert False, f"Unsupported GitHub event name: {event_name}"
+
+        assert expected_target_drift == new_deployment_settings["targetDrift"]["enabled"]
+        assert expected_feature_drift == new_deployment_settings["featureDrift"]["enabled"]
+        assert expected_segment_analysis == new_deployment_settings["segmentAnalysis"]["enabled"]
+        assert expected_challenger_models == new_deployment_settings["challengerModels"]["enabled"]
+        assert (
+            expected_predictions_data_collection
+            == new_deployment_settings["predictionsDataCollection"]["enabled"]
+        )

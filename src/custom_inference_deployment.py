@@ -44,8 +44,14 @@ class DeploymentInfo:
     def get_value(self, *args):
         return DeploymentSchema.get_value(self.metadata, *args)
 
-    def get_settings_value(self, key):
-        return self.get_value(DeploymentSchema.SETTINGS_SECTION_KEY, key)
+    def set_value(self, *args):
+        return DeploymentSchema.set_value(self.metadata, *args)
+
+    def get_settings_value(self, key, *sub_keys):
+        return self.get_value(DeploymentSchema.SETTINGS_SECTION_KEY, key, *sub_keys)
+
+    def set_settings_value(self, *args):
+        return self.set_value(DeploymentSchema.SETTINGS_SECTION_KEY, *args)
 
 
 class CustomInferenceDeployment(CustomInferenceModelBase):
@@ -210,6 +216,8 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                             datarobot_model.latest_version, datarobot_deployment
                         )
 
+                self._handle_deployment_changes(deployment_info, datarobot_deployment)
+
     def _create_deployment(self, deployment_info):
         logger.info(
             f"Creating a deployment ... git_deployment_id: {deployment_info.git_deployment_id}"
@@ -217,7 +225,7 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         custom_model = self.datarobot_models.get(deployment_info.git_model_id)
         deployment = self._dr_client.create_deployment(custom_model.latest_version, deployment_info)
         logger.info(
-            f"A new deployment was created, "
+            "A new deployment was created, "
             f"git_id: {deployment_info.git_deployment_id}, id: {deployment['id']}"
         )
 
@@ -227,15 +235,26 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         self._total_affected += 1
 
     def _handle_follow_up_deployment_settings(self, deployment_info, deployment):
-        association_id = deployment_info.get_settings_value(DeploymentSchema.ASSOCIATION_ID_KEY)
-        actuals_dataset_id = deployment_info.get_settings_value(
-            DeploymentSchema.ACTUALS_DATASET_ID_KEY
+        self._submit_actuals(deployment_info, deployment)
+
+    def _submit_actuals(self, deployment_info, deployment):
+        desired_association_id = deployment_info.get_settings_value(
+            DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_ACTUALS_ID_KEY
         )
-        if association_id and actuals_dataset_id:
+        desired_dataset_id = deployment_info.get_settings_value(
+            DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_ACTUALS_DATASET_ID_KEY
+        )
+        if desired_association_id and desired_dataset_id:
+            logger.info(
+                "Submitting actuals for a deployment."
+                f"Git deployment ID: {deployment_info.git_deployment_id}, "
+                f"actuals association ID: {desired_association_id}, "
+                f"actuals dataset ID: {desired_dataset_id}, "
+            )
             model_info = self.models_info.get(deployment_info.git_model_id)
             target_name = model_info.get_value(ModelSchema.TARGET_NAME_KEY)
             self._dr_client.submit_deployment_actuals(
-                target_name, association_id, actuals_dataset_id, deployment
+                target_name, desired_association_id, desired_dataset_id, deployment
             )
 
     @staticmethod
@@ -276,6 +295,58 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             f"git_deployment_id: {git_deployment_id}."
             f"challenger_id: {challenger['id']}."
         )
+
+    def _handle_deployment_changes(self, deployment_info, datarobot_deployment):
+        desired_label = deployment_info.get_settings_value(DeploymentSchema.LABEL_KEY)
+        if desired_label != datarobot_deployment.deployment["label"]:
+            datarobot_deployment_id = datarobot_deployment.deployment["id"]
+            self._dr_client.update_deployment_label(datarobot_deployment_id, desired_label)
+
+        self._handle_deployment_settings(deployment_info, datarobot_deployment)
+
+    def _handle_deployment_settings(self, deployment_info, datarobot_deployment):
+        datarobot_deployment_id = datarobot_deployment.deployment["id"]
+        actual_deployment_settings = self._dr_client.fetch_deployment_settings(
+            datarobot_deployment_id, deployment_info
+        )
+        self._dr_client.update_deployment_settings(
+            datarobot_deployment_id, deployment_info, actual_deployment_settings
+        )
+
+        if self._should_submit_new_actuals(deployment_info, actual_deployment_settings):
+            self._submit_actuals(deployment_info, datarobot_deployment)
+
+    @staticmethod
+    def _should_submit_new_actuals(deployment_info, actual_settings):
+        """
+        New actuals are assumed to be submitted only if the association ID was changed.
+
+        Parameters
+        ----------
+        deployment_info : DeploymentInfo
+            The deployment info.
+        actual_settings : dict
+            The actual deployment settings from DataRobot.
+
+        Returns
+        -------
+        bool,
+            Whether the actuals should be submitted or not
+        """
+
+        desired_association_section = deployment_info.get_settings_value(
+            DeploymentSchema.ASSOCIATION_KEY
+        )
+        if desired_association_section is not None:
+            desired_association_pred_id = deployment_info.get_settings_value(
+                DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_PRED_ID_KEY
+            )
+            if desired_association_pred_id is not None:
+                actuals_cols = (
+                    actual_settings["associationId"]["columnNames"] if actual_settings else None
+                )
+                return [desired_association_pred_id] != actuals_cols
+        return False
 
     def _handle_deleted_deployments(self):
         if not self.is_push:
