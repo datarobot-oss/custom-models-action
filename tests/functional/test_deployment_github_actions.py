@@ -18,6 +18,7 @@ from tests.functional.conftest import run_github_action
 from tests.functional.conftest import temporarily_replace_schema_value
 from tests.functional.conftest import printout
 from tests.functional.conftest import temporarily_replace_schema
+from tests.functional.conftest import upload_and_update_dataset
 from tests.functional.conftest import webserver_accessible
 
 
@@ -79,22 +80,16 @@ class TestDeploymentGitHubActions:
                     Path(__file__).parent
                     / ".."
                     / "datasets"
-                    / "juniors_3_year_stats_regression_small_actuals.csv"
+                    / "juniors_3_year_stats_regression_actuals.csv"
                 )
-                dataset_id = None
-                try:
-                    dataset_id = dr_client.upload_dataset(actuals_filepath)
-                    with temporarily_replace_schema_value(
-                        deployment_metadata_yaml_file,
-                        dataset_id,
-                        DeploymentSchema.SETTINGS_SECTION_KEY,
-                        DeploymentSchema.ASSOCIATION_KEY,
-                        DeploymentSchema.ASSOCIATION_ACTUALS_DATASET_ID_KEY,
-                    ):
-                        yield dataset_id
-                finally:
-                    if dataset_id:
-                        dr_client.delete_dataset(dataset_id)
+                with upload_and_update_dataset(
+                    dr_client,
+                    actuals_filepath,
+                    deployment_metadata_yaml_file,
+                    DeploymentSchema.ASSOCIATION_KEY,
+                    DeploymentSchema.ASSOCIATION_ACTUALS_DATASET_ID_KEY,
+                ) as dataset_id:
+                    yield dataset_id
         else:
             yield None
 
@@ -117,11 +112,7 @@ class TestDeploymentGitHubActions:
             "Create a custom model as a preliminary requirement. "
             "Run custom model GitHub action (push event) ..."
         )
-        new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
-        head_commit_sha = git_repo.head.commit.hexsha
-        run_github_action(
-            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
-        )
+        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
 
         # 2. Upload actuals dataset and set the deployment metadata with the dataset ID
         printout("Upload actuals dataset ...")
@@ -131,12 +122,7 @@ class TestDeploymentGitHubActions:
             printout("Run deployment GitHub action ...")
             # 3. Run a deployment github action
             run_github_action(
-                repo_root_path,
-                git_repo,
-                main_branch_name,
-                head_commit_sha,
-                event_name,
-                is_deploy=True,
+                repo_root_path, git_repo, main_branch_name, event_name, is_deploy=True
             )
 
         # 4. Validate
@@ -209,16 +195,11 @@ class TestDeploymentGitHubActions:
             "Create a custom model as a preliminary requirement. "
             "Run custom model GitHub action (push event) ..."
         )
-        head_commit_sha = git_repo.head.commit.hexsha
-        run_github_action(
-            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
-        )
+        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
 
         # 2. Create a deployment
         printout("Create a deployment. Run deployment GitHub action (push event) ...")
-        run_github_action(
-            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=True
-        )
+        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=True)
         local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         deployments = dr_client.fetch_deployments()
         assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
@@ -230,16 +211,11 @@ class TestDeploymentGitHubActions:
         git_repo.git.commit("-a", "-m", f"Increase memory to {new_memory}")
 
         # 4. Run GitHub action to create a new model version in DataRobot
-        head_commit_sha = git_repo.head.commit.hexsha
-        run_github_action(
-            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
-        )
+        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
 
         # 5. Run GitHub action to replace the latest model in a deployment
         printout(f"Run deployment GitHub action ({event_name} event) ...")
-        run_github_action(
-            repo_root_path, git_repo, main_branch_name, head_commit_sha, event_name, is_deploy=True
-        )
+        run_github_action(repo_root_path, git_repo, main_branch_name, event_name, is_deploy=True)
 
         printout(f"Validate ...")
         deployments = dr_client.fetch_deployments()
@@ -280,16 +256,11 @@ class TestDeploymentGitHubActions:
             "Create a custom model as a preliminary requirement. "
             "Run custom model GitHub action (push event) ..."
         )
-        head_commit_sha = git_repo.head.commit.hexsha
-        run_github_action(
-            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
-        )
+        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
 
         # 2. Run a deployment GitHub action to create a deployment
         printout("Create a deployment. Runa deployment GitHub action (push event) ...")
-        run_github_action(
-            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=True
-        )
+        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=True)
         deployments = dr_client.fetch_deployments()
         local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
@@ -305,7 +276,6 @@ class TestDeploymentGitHubActions:
             repo_root_path,
             git_repo,
             main_branch_name,
-            head_commit_sha,
             "push",
             is_deploy=True,
             allow_deployment_deletion=False,
@@ -321,7 +291,6 @@ class TestDeploymentGitHubActions:
             repo_root_path,
             git_repo,
             main_branch_name,
-            head_commit_sha,
             "pull_request",
             is_deploy=True,
             allow_deployment_deletion=True,
@@ -337,7 +306,6 @@ class TestDeploymentGitHubActions:
             repo_root_path,
             git_repo,
             main_branch_name,
-            head_commit_sha,
             "push",
             is_deploy=True,
             allow_deployment_deletion=True,
@@ -410,16 +378,11 @@ class TestDeploymentGitHubActions:
             "Create a custom model as a preliminary requirement. "
             "Run custom model GitHub action (push event) ..."
         )
-        head_commit_sha = git_repo.head.commit.hexsha
-        run_github_action(
-            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=False
-        )
+        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
 
         # 2. Run a deployment GitHub action to create a deployment
         printout("Create a deployment. Run a deployment GitHub action (push event) ...")
-        run_github_action(
-            repo_root_path, git_repo, main_branch_name, head_commit_sha, "push", is_deploy=True
-        )
+        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=True)
         local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         deployment = dr_client.fetch_deployment_by_git_id(local_git_deployment_id)
         assert deployment is not None
@@ -434,12 +397,7 @@ class TestDeploymentGitHubActions:
             ):
                 printout(f"Run deployment GitHub action ({event_name}")
                 run_github_action(
-                    repo_root_path,
-                    git_repo,
-                    main_branch_name,
-                    head_commit_sha,
-                    event_name,
-                    is_deploy=True,
+                    repo_root_path, git_repo, main_branch_name, event_name, is_deploy=True
                 )
 
     @staticmethod
@@ -452,9 +410,9 @@ class TestDeploymentGitHubActions:
         new_name = f"{old_name} - NEW"
         with temporarily_replace_schema_value(
             deployment_metadata_yaml_file,
-            new_name,
             DeploymentSchema.SETTINGS_SECTION_KEY,
             DeploymentSchema.LABEL_KEY,
+            new_value=new_name,
         ):
             yield
 
@@ -481,24 +439,30 @@ class TestDeploymentGitHubActions:
         deployment_settings = dr_client.fetch_deployment_settings(deployment["id"], deployment_info)
 
         new_value = not deployment_settings["targetDrift"]["enabled"]
-        deployment_info.set_settings_value(DeploymentSchema.ENABLE_TARGET_DRIFT_KEY, new_value)
+        deployment_info.set_settings_value(
+            DeploymentSchema.ENABLE_TARGET_DRIFT_KEY, value=new_value
+        )
 
         new_value = not deployment_settings["featureDrift"]["enabled"]
         # TODO: Remove the next line when a support for learning data assignment is implemented
         new_value = False
-        deployment_info.set_settings_value(DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY, new_value)
+        deployment_info.set_settings_value(
+            DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY, value=new_value
+        )
 
         new_value = not deployment_settings["segmentAnalysis"]["enabled"]
         deployment_info.set_settings_value(
             DeploymentSchema.SEGMENT_ANALYSIS_KEY,
             DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY,
-            new_value,
+            value=new_value,
         )
 
         new_value = not deployment_settings["challengerModels"]["enabled"]
-        deployment_info.set_settings_value(DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY, new_value)
         deployment_info.set_settings_value(
-            DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY, new_value
+            DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY, value=new_value
+        )
+        deployment_info.set_settings_value(
+            DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY, value=new_value
         )
 
         with temporarily_replace_schema(deployment_metadata_yaml_file, deployment_info.metadata):

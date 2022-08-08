@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from collections import namedtuple
 
 from requests_toolbelt import MultipartEncoder
 
@@ -19,12 +20,14 @@ logger = logging.getLogger(__name__)
 class DrClient:
 
     CUSTOM_MODELS_ROUTE = "customModels/"
-    CUSTOM_MODELS_VERSIONS_ROUTE = "customModels/{model_id}/versions/"
-    CUSTOM_MODELS_VERSION_ROUTE = "customModels/{model_id}/versions/{model_ver_id}/"
+    CUSTOM_MODEL_ROUTE = CUSTOM_MODELS_ROUTE + "{model_id}/"
+    CUSTOM_MODELS_VERSIONS_ROUTE = CUSTOM_MODEL_ROUTE + "versions/"
+    CUSTOM_MODELS_VERSION_ROUTE = CUSTOM_MODEL_ROUTE + "versions/{model_ver_id}/"
     CUSTOM_MODELS_TEST_ROUTE = "customModelTests/"
+    CUSTOM_MODEL_DEPLOYMENTS_ROUTE = "customModelDeployments/"
+    CUSTOM_MODEL_TRAINING_DATA = CUSTOM_MODEL_ROUTE + "trainingData/"
     DATASETS_ROUTE = "datasets/"
     DATASET_UPLOAD_ROUTE = DATASETS_ROUTE + "fromFile/"
-    CUSTOM_MODEL_DEPLOYMENTS_ROUTE = "customModelDeployments/"
     MODEL_PACKAGES_CREATE_ROUTE = "modelPackages/fromCustomModelVersion/"
     DEPLOYMENTS_ROUTE = "deployments/"
     DEPLOYMENTS_CREATE_ROUTE = "deployments/fromModelPackage/"
@@ -83,6 +86,13 @@ class DrClient:
         logger.debug("Fetching custom models...")
         return self._paginated_fetch(self.CUSTOM_MODELS_ROUTE)
 
+    def fetch_custom_model_by_git_id(self, git_model_id):
+        custom_models = self.fetch_custom_models()
+        try:
+            return next(cm for cm in custom_models if cm.get("gitModelId") == git_model_id)
+        except StopIteration:
+            return None
+
     def _paginated_fetch(self, route_url, **kwargs):
         def _fetch_single_page(url, raw):
             response = self._http_requester.get(url, raw, **kwargs)
@@ -123,17 +133,27 @@ class DrClient:
                 code=response.status_code,
             )
 
-        custom_model_id = response.json()["id"]
-        logger.debug(f"Custom model created successfully (id: {custom_model_id})")
-        return custom_model_id
+        custom_model = response.json()
+        logger.debug(f"Custom model created successfully (id: {custom_model['id']})")
+        return custom_model
 
     @staticmethod
     def _setup_payload_for_custom_model_creation(model_info):
         target_type = model_info.get_value(ModelSchema.TARGET_TYPE_KEY)
 
+        target_type_map = {
+            ModelSchema.TARGET_TYPE_BINARY_KEY: "Binary",
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY: "Binary",
+            ModelSchema.TARGET_TYPE_REGRESSION_KEY: "Regression",
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY: "Regression",
+            ModelSchema.TARGET_TYPE_MULTICLASS_KEY: "Multiclass",
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY: "Multiclass",
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY: "Unstructured",
+        }
+
         payload = {
             "customModelType": "inference",  # Currently, there's support only for inference models
-            "targetType": target_type,
+            "targetType": target_type_map.get(target_type),
             "targetName": model_info.get_value(ModelSchema.TARGET_NAME_KEY),
             "isUnstructuredModelKind": model_info.is_unstructured,
             "gitModelId": model_info.get_value(ModelSchema.MODEL_ID_KEY),
@@ -201,8 +221,7 @@ class DrClient:
     def fetch_custom_model_latest_version_by_git_model_id(self, git_model_id):
         logger.debug(f"Fetching custom model versions for git model '{git_model_id}' ...")
 
-        custom_models = self.fetch_custom_models()
-        custom_model = next(cm for cm in custom_models if cm.get("gitModelId") == git_model_id)
+        custom_model = self.fetch_custom_model_by_git_id(git_model_id)
         if not custom_model:
             return None
 
@@ -275,7 +294,6 @@ class DrClient:
         base_env_id=None,
     ):
         payload = [
-            ("isMajorUpdate", str(True)),
             (
                 "gitModelVersion",
                 json.dumps(
@@ -290,6 +308,9 @@ class DrClient:
         ]
 
         file_objs = cls._setup_model_version_files(changed_file_paths, file_ids_to_delete, payload)
+
+        is_major = True if changed_file_paths or file_ids_to_delete or base_env_id else False
+        payload.append(("isMajorUpdate", str(is_major)))
 
         if base_env_id:
             payload.append(("baseEnvironmentId", base_env_id))
@@ -330,12 +351,8 @@ class DrClient:
             )
 
     def delete_custom_model_by_git_model_id(self, git_model_id):
-        custom_models = self.fetch_custom_models()
-        try:
-            test_custom_model = next(
-                cm for cm in custom_models if cm.get("gitModelId") == git_model_id
-            )
-        except StopIteration:
+        test_custom_model = self.fetch_custom_model_by_git_id(git_model_id)
+        if not test_custom_model:
             raise IllegalModelDeletion(
                 f"Given custom model does not exist. git_model_id: {git_model_id}."
             )
@@ -872,7 +889,86 @@ class DrClient:
             raise DataRobotClientError(
                 "Failed to fetch deployment challengers. "
                 f"deployment_id: {deployment_id}, "
-                f"Response status: {response.status_code} "
+                f"Response status: {response.status_code}, "
                 f"Response body: {response.text}",
             )
         return response.json()["data"]
+
+    def update_training_and_holdout_datasets_for_unstructured_models(
+        self, datarobot_custom_model, model_info
+    ):
+        ext_stats_payload = {}
+        remote_settings = datarobot_custom_model.get("externalMlopsStatsConfig", {}) or {}
+
+        DatasetParam = namedtuple("DatasetParam", ["local", "remote"])
+        dataset_params = [
+            DatasetParam(ModelSchema.TRAINING_DATASET_KEY, "trainingDatasetId"),
+            DatasetParam(ModelSchema.HOLDOUT_DATASET_KEY, "holdoutDatasetId"),
+        ]
+        for dataset_param in dataset_params:
+            local_value = model_info.get_settings_value(dataset_param.local)
+            if local_value and local_value != remote_settings.get(dataset_param.remote):
+                ext_stats_payload[dataset_param.remote] = local_value
+
+        if ext_stats_payload:
+            payload = {"externalMlopsStatsConfig": ext_stats_payload}
+            url = self.CUSTOM_MODEL_ROUTE.format(model_id=datarobot_custom_model["id"])
+            response = self._http_requester.patch(url, json=payload)
+            if response.status_code != 200:
+                raise DataRobotClientError(
+                    "Failed to update training / holdout datasets for unstructured model. "
+                    f"Git model ID: {model_info.git_model_id}, "
+                    f"DataRobot model ID: {datarobot_custom_model['id']}, "
+                    f"Response status: {response.status_code}, "
+                    f"Response body: {response.text}",
+                )
+            return response.json()
+        else:
+            return None
+
+    def update_training_dataset_for_structured_models(self, datarobot_custom_model, model_info):
+        """
+        Updates a training dataset, which may contain a partition column.
+
+        Parameters
+        ----------
+        datarobot_custom_model : dict
+            DataRobot custom model structure.
+        model_info : ModelInfo
+            A structure that contains a local model definition.
+
+        Returns
+        -------
+        CustomModel
+            The updated custom model
+
+        """
+        training_dataset_payload = {}
+
+        DatasetParam = namedtuple("DatasetParam", ["local", "remote"])
+        dataset_params = [
+            DatasetParam(ModelSchema.TRAINING_DATASET_KEY, "datasetId"),
+            DatasetParam(ModelSchema.PARTITIONING_COLUMN_KEY, "partitionColumn"),
+        ]
+        for dataset_param in dataset_params:
+            local_value = model_info.get_settings_value(dataset_param.local)
+            if local_value and local_value != datarobot_custom_model.get(dataset_param.remote):
+                training_dataset_payload[dataset_param.remote] = local_value
+
+        if training_dataset_payload:
+            url = self.CUSTOM_MODEL_TRAINING_DATA.format(model_id=datarobot_custom_model["id"])
+            response = self._http_requester.patch(url, json=training_dataset_payload)
+            if response.status_code != 202:
+                raise DataRobotClientError(
+                    "Failed to update training dataset for structured model. "
+                    f"Git model ID: {model_info.git_model_id}, "
+                    f"DataRobot model ID: {datarobot_custom_model['id']}, "
+                    f"Response status: {response.status_code}, "
+                    f"Response body: {response.text}",
+                )
+            location = response.headers["Location"]
+            self._wait_for_async_resolution(location)
+            response = self._http_requester.get(location, raw=True)
+            return response.json()
+        else:
+            return None

@@ -163,8 +163,8 @@ class TestCustomModelRoutes:
         dr_client = DrClient(
             datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
         )
-        custom_model_id = dr_client.create_custom_model(regression_model_info)
-        assert custom_model_id is not None
+        custom_model = dr_client.create_custom_model(regression_model_info)
+        assert custom_model is not None
 
     @responses.activate
     def test_create_custom_model_failure(
