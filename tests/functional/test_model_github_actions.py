@@ -6,12 +6,14 @@ from pathlib import Path
 import pytest
 
 from common.convertors import MemoryConvertor
+from dr_client import DrClient
 from schema_validator import ModelSchema
 from tests.functional.conftest import cleanup_models
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import run_github_action
 from tests.functional.conftest import temporarily_replace_schema_value
 from tests.functional.conftest import printout
+from tests.functional.conftest import unique_str
 from tests.functional.conftest import upload_and_update_dataset
 from tests.functional.conftest import webserver_accessible
 
@@ -395,3 +397,61 @@ class TestModelGitHubActions:
                     cleanup_models(dr_client, repo_root_path)
 
         printout("Done")
+
+    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
+    def test_e2e_update_model_settings(
+        self,
+        dr_client,
+        repo_root_path,
+        git_repo,
+        model_metadata,
+        model_metadata_yaml_file,
+        main_branch_name,
+    ):
+        git_model_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
+
+        # 1. Create a model just as a preliminary requirement (use GitHub action)
+        printout(
+            "Create a custom model as a preliminary requirement. "
+            "Run custom model GitHub action (push event) ..."
+        )
+        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
+
+        unique_string = unique_str()
+        for settings_key, desired_settings_value in [
+            (ModelSchema.NAME_KEY, f"Some another name {unique_string}"),
+            (ModelSchema.DESCRIPTION_KEY, f"Some unique desc {unique_string}"),
+            (ModelSchema.LANGUAGE_KEY, "Legacy"),
+            (ModelSchema.TARGET_NAME_KEY, "XBH/AB_jr"),  # Taken from the associated dataset
+            (ModelSchema.PREDICTION_THRESHOLD_KEY, 0.2),  # Assuming the model type is regression
+        ]:
+            custom_model = dr_client.fetch_custom_model_by_git_id(git_model_id)
+            actual_settings_value = custom_model[DrClient.MODEL_SETTINGS_KEYS_MAP[settings_key]]
+            assert (
+                desired_settings_value != actual_settings_value,
+                f"Desired settings value '{desired_settings_value}' should be differ than the "
+                f"actual '{actual_settings_value}'.",
+            )
+
+            with temporarily_replace_schema_value(
+                model_metadata_yaml_file,
+                ModelSchema.SETTINGS_SECTION_KEY,
+                settings_key,
+                new_value=desired_settings_value,
+            ):
+                git_repo.git.add(model_metadata_yaml_file)
+                git_repo.git.commit("-m", f"Update model settings '{settings_key}'")
+
+                printout("Run custom inference models GitHub action (push) ...")
+                run_github_action(
+                    repo_root_path, git_repo, main_branch_name, "push", is_deploy=False
+                )
+
+                # Validate
+                custom_model = dr_client.fetch_custom_model_by_git_id(git_model_id)
+                actual_settings_value = custom_model[DrClient.MODEL_SETTINGS_KEYS_MAP[settings_key]]
+                assert (
+                    desired_settings_value == actual_settings_value,
+                    f"Desired settings value '{desired_settings_value}' should be equal to the "
+                    f"actual '{actual_settings_value}'.",
+                )

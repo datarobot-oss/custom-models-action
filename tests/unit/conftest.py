@@ -39,8 +39,10 @@ def create_partial_model_schema(is_single=True, num_models=1, with_target_type=F
     def _partial_model_schema(name):
         partial_schema = {
             ModelSchema.MODEL_ID_KEY: str(uuid.uuid4()),
-            ModelSchema.TARGET_NAME_KEY: "target_feature_col",
-            ModelSchema.SETTINGS_SECTION_KEY: {"name": name},
+            ModelSchema.SETTINGS_SECTION_KEY: {
+                ModelSchema.NAME_KEY: name,
+                ModelSchema.TARGET_NAME_KEY: "target_feature_col",
+            },
             ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: str(ObjectId())},
         }
         if with_target_type:
@@ -138,8 +140,10 @@ def single_model_factory(repo_root_path, common_path_with_code, excluded_src_pat
         single_model_metadata = {
             ModelSchema.MODEL_ID_KEY: git_model_id if git_model_id else str(uuid.uuid4()),
             ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
-            ModelSchema.TARGET_NAME_KEY: "Grade 2014",
-            ModelSchema.SETTINGS_SECTION_KEY: {ModelSchema.NAME_KEY: name},
+            ModelSchema.SETTINGS_SECTION_KEY: {
+                ModelSchema.NAME_KEY: name,
+                ModelSchema.TARGET_NAME_KEY: "Grade 2014",
+            },
             ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: str(ObjectId())},
         }
         if with_include_glob:
@@ -338,13 +342,13 @@ def mock_full_binary_model_schema(mock_full_custom_model_checks):
     return {
         ModelSchema.MODEL_ID_KEY: "abc123",
         ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_BINARY_KEY,
-        ModelSchema.TARGET_NAME_KEY: "target_column",
-        ModelSchema.POSITIVE_CLASS_LABEL_KEY: "1",
-        ModelSchema.NEGATIVE_CLASS_LABEL_KEY: "0",
-        ModelSchema.LANGUAGE_KEY: "Python",
         ModelSchema.SETTINGS_SECTION_KEY: {
             ModelSchema.NAME_KEY: "Awesome Model",
             ModelSchema.DESCRIPTION_KEY: "My awesome model",
+            ModelSchema.TARGET_NAME_KEY: "target_column",
+            ModelSchema.POSITIVE_CLASS_LABEL_KEY: "1",
+            ModelSchema.NEGATIVE_CLASS_LABEL_KEY: "0",
+            ModelSchema.LANGUAGE_KEY: "Python",
             ModelSchema.TRAINING_DATASET_KEY: "627790ba56215587b3021632",
             ModelSchema.HOLDOUT_DATASET_KEY: "627790ca5621558b55c78d78",
         },

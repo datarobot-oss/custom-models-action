@@ -253,15 +253,15 @@ class ModelSchema(SharedSchema):
                 TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
                 TARGET_TYPE_UNSTRUCTURED_OTHER_KEY,
             ),
-            TARGET_NAME_KEY: And(str, len),
-            Optional(PREDICTION_THRESHOLD_KEY): And(float, lambda n: 0 <= n <= 1),
-            Optional(POSITIVE_CLASS_LABEL_KEY): And(str, len),
-            Optional(NEGATIVE_CLASS_LABEL_KEY): And(str, len),
-            Optional(CLASS_LABELS_KEY): list,
-            Optional(LANGUAGE_KEY): And(str, len),
             SharedSchema.SETTINGS_SECTION_KEY: {
                 NAME_KEY: And(str, len),
                 Optional(DESCRIPTION_KEY): And(str, len),
+                Optional(LANGUAGE_KEY): And(str, len),
+                TARGET_NAME_KEY: And(str, len),
+                Optional(PREDICTION_THRESHOLD_KEY): And(float, lambda n: 0 <= n <= 1),
+                Optional(POSITIVE_CLASS_LABEL_KEY): And(str, len),
+                Optional(NEGATIVE_CLASS_LABEL_KEY): And(str, len),
+                Optional(CLASS_LABELS_KEY): list,
                 Optional(PARTITIONING_COLUMN_KEY): And(str, len),
                 Optional(TRAINING_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
                 Optional(HOLDOUT_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
@@ -419,35 +419,35 @@ class ModelSchema(SharedSchema):
 
     @classmethod
     def _validate_mutual_exclusive_keys(cls, model_metadata):
+        settings_section = model_metadata[ModelSchema.SETTINGS_SECTION_KEY]
         for binary_class_label_key in [cls.POSITIVE_CLASS_LABEL_KEY, cls.NEGATIVE_CLASS_LABEL_KEY]:
             mutual_exclusive_keys = {
                 cls.PREDICTION_THRESHOLD_KEY,
                 binary_class_label_key,
                 cls.CLASS_LABELS_KEY,
             }
-            if len(mutual_exclusive_keys & model_metadata.keys()) > 1:
-                raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")
-
-        settings_section = cls.get_value(model_metadata, ModelSchema.SETTINGS_SECTION_KEY)
-        if settings_section:
-            mutual_exclusive_keys = {cls.PARTITIONING_COLUMN_KEY, cls.HOLDOUT_DATASET_KEY}
             if len(mutual_exclusive_keys & settings_section.keys()) > 1:
                 raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")
 
+        mutual_exclusive_keys = {cls.PARTITIONING_COLUMN_KEY, cls.HOLDOUT_DATASET_KEY}
+        if len(mutual_exclusive_keys & settings_section.keys()) > 1:
+            raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")
+
     @classmethod
     def _validate_dependent_keys(cls, model_metadata):
+        settings_section = model_metadata[ModelSchema.SETTINGS_SECTION_KEY]
         if cls.is_binary(model_metadata):
             binary_label_keys = {
                 ModelSchema.POSITIVE_CLASS_LABEL_KEY,
                 ModelSchema.NEGATIVE_CLASS_LABEL_KEY,
             }
-            if len(binary_label_keys & set(model_metadata.keys())) != 2:
+            if len(binary_label_keys & set(settings_section.keys())) != 2:
                 raise InvalidModelSchema(
                     f"Binary model must be defined with the '{binary_label_keys}' keys."
                 )
         elif (
             cls.is_multiclass(model_metadata)
-            and model_metadata.get(ModelSchema.CLASS_LABELS_KEY) is None
+            and settings_section.get(ModelSchema.CLASS_LABELS_KEY) is None
         ):
             raise InvalidModelSchema(
                 f"Multiclass model must be define with the 'mapping_classes' key."
