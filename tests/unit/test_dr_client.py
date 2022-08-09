@@ -3,6 +3,9 @@
 #  This is proprietary source code of DataRobot, Inc. and its affiliates.
 #  Released under the terms of DataRobot Tool and Utility Agreement.
 
+# pylint: disable=protected-access
+# pylint: disable=too-many-arguments
+
 """A module that contains unit-tests for the DataRobot client module."""
 
 import json
@@ -19,22 +22,22 @@ from dr_client import DrClient
 from schema_validator import ModelSchema
 
 
-@pytest.fixture
-def webserver():
+@pytest.fixture(name="webserver")
+def fixture_webserver():
     """A fixture to return a fake DataRobot webserver."""
 
     return "http://www.datarobot.dummy-app"
 
 
-@pytest.fixture
-def api_token():
+@pytest.fixture(name="api_token")
+def fixture_api_token():
     """A fixture to return a fake API token."""
 
     return "123abc"
 
 
-@pytest.fixture
-def minimal_regression_model_info():
+@pytest.fixture(name="minimal_regression_model_info")
+def fixture_minimal_regression_model_info():
     """A fixture to create a ModelInfo with a minimal regression model information."""
     metadata = {
         ModelSchema.MODEL_ID_KEY: "abc123",
@@ -54,8 +57,8 @@ def minimal_regression_model_info():
     )
 
 
-@pytest.fixture
-def regression_model_info():
+@pytest.fixture(name="regression_model_info")
+def fixture_regression_model_info():
     """A fixture to create a local ModelInfo with information of a regression model."""
 
     metadata = {
@@ -206,12 +209,7 @@ class TestCustomModelRoutes:
 
     @responses.activate
     def test_create_custom_model_failure(
-        self,
-        webserver,
-        api_token,
-        regression_model_info,
-        custom_models_url,
-        regression_model_response,
+        self, webserver, api_token, regression_model_info, custom_models_url
     ):
         """A case to test a failure in custom model creation."""
 
@@ -532,7 +530,6 @@ class TestCustomModelVersionRoutes:
         commit_url,
         main_branch_commit_sha,
         pull_request_commit_sha,
-        regression_model_version_response,
     ):
         """A case to test a failure in creating a custom model version."""
 
@@ -617,9 +614,9 @@ class TestCustomModelVersionRoutes:
 
             assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
             configuration = DrClient._build_tests_configuration(mock_full_custom_model_checks)
-            for check in DrApiAttrs.DR_TEST_CHECK_MAP.keys():
+            for check in DrApiAttrs.DR_TEST_CHECK_MAP:
                 assert DrApiAttrs.to_dr_test_check(check) in configuration
-            for check in {"longRunningService", "errorCheck"}:
+            for check in ["longRunningService", "errorCheck"]:
                 assert check in configuration
 
         def test_full_custom_model_testing_configuration_with_all_disabled_checks(
@@ -631,7 +628,7 @@ class TestCustomModelVersionRoutes:
             """
 
             assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
-            for check, info in mock_full_custom_model_checks.items():
+            for _, info in mock_full_custom_model_checks.items():
                 info[ModelSchema.CHECK_ENABLED_KEY] = False
             configuration = DrClient._build_tests_configuration(mock_full_custom_model_checks)
             assert configuration == {"longRunningService": "fail", "errorCheck": "fail"}
@@ -641,11 +638,11 @@ class TestCustomModelVersionRoutes:
 
             assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
             parameters = DrClient._build_tests_parameters(mock_full_custom_model_checks)
-            for check in {
+            for check in [
                 ModelSchema.PREDICTION_VERIFICATION_KEY,
                 ModelSchema.PERFORMANCE_KEY,
                 ModelSchema.STABILITY_KEY,
-            }:
+            ]:
                 assert DrApiAttrs.to_dr_test_check(check) in parameters
 
         def test_full_custom_model_testing_parameters_with_all_disabled_checks(
@@ -656,7 +653,7 @@ class TestCustomModelVersionRoutes:
             """
 
             assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
-            for check, info in mock_full_custom_model_checks.items():
+            for _, info in mock_full_custom_model_checks.items():
                 info[ModelSchema.CHECK_ENABLED_KEY] = False
             parameters = DrClient._build_tests_parameters(mock_full_custom_model_checks)
             assert not parameters

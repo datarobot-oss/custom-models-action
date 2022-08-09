@@ -1,2 +1,4 @@
-black==22.3.0
-pycodestyle==2.8.0
+black==22.6.0
+flake8==5.0.4
+isort==5.10.1
+pylint==2.14.5

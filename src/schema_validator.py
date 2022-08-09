@@ -10,11 +10,12 @@ A module that contains schema validators for model and deployment definitions.
 import logging
 
 from bson import ObjectId
-from schema import And, Use
-from schema import Schema
-from schema import SchemaError
+from schema import And
 from schema import Optional
 from schema import Or
+from schema import Schema
+from schema import SchemaError
+from schema import Use
 
 from common.convertors import MemoryConvertor
 from common.exceptions import EmptyKey
@@ -40,8 +41,8 @@ class SharedSchema:
             transformed = schema.validate(metadata)
             cls._validate_single_transformed(transformed)
             return transformed
-        except SchemaError as se:
-            raise InvalidSchema(se.code)
+        except SchemaError as ex:
+            raise InvalidSchema(ex.code) from ex
 
     @classmethod
     def _validate_single_transformed(cls, single_transformed_metadata):
@@ -57,18 +58,18 @@ class SharedSchema:
             for single_metadata in cls._next_single_transformed(transformed):
                 cls._validate_single_transformed(single_metadata)
             return transformed
-        except SchemaError as se:
-            raise InvalidSchema(se.code)
+        except SchemaError as ex:
+            raise InvalidSchema(ex.code) from ex
 
     @classmethod
-    def _next_single_transformed(cls, transformed_metadata):
+    def _next_single_transformed(cls, multi_transformed):
         """
         A generator that must be implemented by a derived class. It returns the next
         metadata entry in a multi metadata definition.
 
         Parameters
         ----------
-        transformed_metadata : dict
+        multi_transformed : dict
             A multi metadata structure.
 
 
@@ -77,6 +78,7 @@ class SharedSchema:
         metadata : dict
             A metadata that represents a single entity.
         """
+
         raise NotImplementedError("The '_next_metadata' must be implemented by a derived class.")
 
     @classmethod
@@ -90,7 +92,6 @@ class SharedSchema:
         single_transformed_metadata : dict
             A metadata representation of a single entity after validation and transformation.
         """
-        pass
 
     @classmethod
     def _validate_dependent_keys(cls, single_transformed_metadata):
@@ -103,7 +104,6 @@ class SharedSchema:
         single_transformed_metadata : dict
             A metadata representation of a single entity after validation and transformation.
         """
-        pass
 
     @classmethod
     def _validate_data_integrity(cls, single_transformed_metadata):
@@ -116,7 +116,6 @@ class SharedSchema:
         single_transformed_metadata : dict
             A metadata representation of a single entity after validation and transformation.
         """
-        pass
 
     @staticmethod
     def get_value(metadata: dict, key, *sub_keys):
@@ -183,10 +182,10 @@ class SharedSchema:
 
         section = metadata
         keys = (key,) + sub_keys
-        for key in keys[:-1]:
-            if key not in section:
-                section[key] = {}
-            section = section[key]
+        for a_key in keys[:-1]:
+            if a_key not in section:
+                section[a_key] = {}
+            section = section[a_key]
             if not isinstance(section, dict):
                 raise UnexpectedType(
                     f"A section in a metadata is expected to be a dict. Section: {section}"
@@ -292,26 +291,26 @@ class ModelSchema(SharedSchema):
                 Optional(NEGATIVE_CLASS_LABEL_KEY): And(str, len),
                 Optional(CLASS_LABELS_KEY): list,
                 Optional(PARTITIONING_COLUMN_KEY): And(str, len),
-                Optional(TRAINING_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
-                Optional(HOLDOUT_DATASET_KEY): And(str, lambda i: ObjectId.is_valid(i)),
+                Optional(TRAINING_DATASET_KEY): And(str, ObjectId.is_valid),
+                Optional(HOLDOUT_DATASET_KEY): And(str, ObjectId.is_valid),
             },
             VERSION_KEY: {
-                MODEL_ENV_KEY: And(str, lambda i: ObjectId.is_valid(i)),
+                MODEL_ENV_KEY: And(str, ObjectId.is_valid),
                 Optional(INCLUDE_GLOB_KEY, default=[]): And(
                     list, lambda l: all(isinstance(e, str) and len(e) > 0 for e in l)
                 ),
                 Optional(EXCLUDE_GLOB_KEY, default=[]): And(
                     list, lambda l: all(isinstance(x, str) and len(x) > 0 for x in l)
                 ),
-                Optional(MEMORY_KEY): Use(lambda v: MemoryConvertor.to_bytes(v)),
+                Optional(MEMORY_KEY): Use(MemoryConvertor.to_bytes),
                 Optional(REPLICAS_KEY): And(int, lambda r: r > 0),
             },
             Optional(TEST_KEY): {
                 # The skip attribute allows users to have the test section in their yaml file
                 # and still disable testing
                 Optional(TEST_SKIP_KEY, default=False): bool,
-                Optional(TEST_DATA_KEY): And(str, lambda i: ObjectId.is_valid(i)),
-                Optional(MEMORY_KEY): Use(lambda v: MemoryConvertor.to_bytes(v)),
+                Optional(TEST_DATA_KEY): And(str, ObjectId.is_valid),
+                Optional(MEMORY_KEY): Use(MemoryConvertor.to_bytes),
                 Optional(CHECKS_KEY): {
                     Optional(NULL_VALUE_IMPUTATION_KEY): {
                         CHECK_ENABLED_KEY: bool,
@@ -324,7 +323,7 @@ class ModelSchema(SharedSchema):
                     Optional(PREDICTION_VERIFICATION_KEY): {
                         CHECK_ENABLED_KEY: bool,
                         BLOCK_DEPLOYMENT_IF_FAILS_KEY: bool,
-                        OUTPUT_DATASET_KEY: And(str, lambda i: ObjectId.is_valid(i)),
+                        OUTPUT_DATASET_KEY: And(str, ObjectId.is_valid),
                         PREDICTIONS_COLUMN: And(str, len),
                         Optional(MATCH_THRESHOLD_KEY): And(float, lambda v: 0 <= v <= 1),
                         Optional(PASSING_MATCH_RATE_KEY): And(int, lambda v: 0 <= v <= 100),
@@ -501,7 +500,7 @@ class ModelSchema(SharedSchema):
         """
 
         model_metadata = cls._validate_and_transform_single(cls.MODEL_SCHEMA, model_metadata)
-        logger.debug(f"Model configuration is valid (id: {model_metadata[cls.MODEL_ID_KEY]}).")
+        logger.debug("Model configuration is valid (id: %s).", model_metadata[cls.MODEL_ID_KEY])
         return model_metadata
 
     @classmethod
@@ -533,8 +532,8 @@ class ModelSchema(SharedSchema):
             yield model_entry[cls.MODEL_ENTRY_META_KEY]
 
     @classmethod
-    def _validate_mutual_exclusive_keys(cls, model_metadata):
-        settings_section = model_metadata[ModelSchema.SETTINGS_SECTION_KEY]
+    def _validate_mutual_exclusive_keys(cls, single_transformed_metadata):
+        settings_section = single_transformed_metadata[ModelSchema.SETTINGS_SECTION_KEY]
         for binary_class_label_key in [cls.POSITIVE_CLASS_LABEL_KEY, cls.NEGATIVE_CLASS_LABEL_KEY]:
             mutual_exclusive_keys = {
                 cls.PREDICTION_THRESHOLD_KEY,
@@ -549,9 +548,9 @@ class ModelSchema(SharedSchema):
             raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")
 
     @classmethod
-    def _validate_dependent_keys(cls, model_metadata):
-        settings_section = model_metadata[ModelSchema.SETTINGS_SECTION_KEY]
-        if cls.is_binary(model_metadata):
+    def _validate_dependent_keys(cls, single_transformed_metadata):
+        settings_section = single_transformed_metadata[ModelSchema.SETTINGS_SECTION_KEY]
+        if cls.is_binary(single_transformed_metadata):
             binary_label_keys = {
                 ModelSchema.POSITIVE_CLASS_LABEL_KEY,
                 ModelSchema.NEGATIVE_CLASS_LABEL_KEY,
@@ -561,15 +560,15 @@ class ModelSchema(SharedSchema):
                     f"Binary model must be defined with the '{binary_label_keys}' keys."
                 )
         elif (
-            cls.is_multiclass(model_metadata)
+            cls.is_multiclass(single_transformed_metadata)
             and settings_section.get(ModelSchema.CLASS_LABELS_KEY) is None
         ):
             raise InvalidModelSchema(
-                f"Multiclass model must be define with the 'mapping_classes' key."
+                "Multiclass model must be define with the 'mapping_classes' key."
             )
 
         stability = (
-            model_metadata.get(ModelSchema.TEST_KEY, {})
+            single_transformed_metadata.get(ModelSchema.TEST_KEY, {})
             .get(ModelSchema.CHECKS_KEY, {})
             .get(ModelSchema.STABILITY_KEY, {})
         )
@@ -583,21 +582,21 @@ class ModelSchema(SharedSchema):
                 )
 
     @classmethod
-    def _validate_data_integrity(cls, model_metadata):
-        if ModelSchema.TEST_KEY in model_metadata:
+    def _validate_data_integrity(cls, single_transformed_metadata):
+        if ModelSchema.TEST_KEY in single_transformed_metadata:
             skip_test_value = cls.get_value(
-                model_metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_SKIP_KEY
+                single_transformed_metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_SKIP_KEY
             )
             test_dataset_value = cls.get_value(
-                model_metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_DATA_KEY
+                single_transformed_metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_DATA_KEY
             )
             if (
                 not skip_test_value
-                and not cls.is_unstructured(model_metadata)
+                and not cls.is_unstructured(single_transformed_metadata)
                 and not ObjectId.is_valid(test_dataset_value)
             ):
                 raise InvalidModelSchema(
-                    f"Test data is invalid. Please provide a valid catalog ID from DataRobot."
+                    "Test data is invalid. Please provide a valid catalog ID from DataRobot."
                 )
 
 
@@ -662,9 +661,7 @@ class DeploymentSchema(SharedSchema):
                     # If the user changes it, later on, in his yaml definition, it'll not be
                     # uploaded, unless the association ASSOCIATION_PRED_ID_KEY will be changed too.
                     Optional(ASSOCIATION_ACTUALS_ID_KEY): And(str, len),
-                    Optional(ASSOCIATION_ACTUALS_DATASET_ID_KEY): And(
-                        str, lambda i: ObjectId.is_valid(i)
-                    ),
+                    Optional(ASSOCIATION_ACTUALS_DATASET_ID_KEY): And(str, ObjectId.is_valid),
                 },
                 Optional(ENABLE_TARGET_DRIFT_KEY): bool,  # Update settings
                 Optional(ENABLE_FEATURE_DRIFT_KEY): bool,  # Update settings
@@ -741,7 +738,7 @@ class DeploymentSchema(SharedSchema):
         """
         transformed = cls._validate_and_transform_single(cls.DEPLOYMENT_SCHEMA, deployment_metadata)
         logger.debug(
-            f"Deployment configuration is valid (id: {transformed[cls.DEPLOYMENT_ID_KEY]})."
+            "Deployment configuration is valid (id: %s).", transformed[cls.DEPLOYMENT_ID_KEY]
         )
         return transformed
 

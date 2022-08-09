@@ -3,29 +3,28 @@
 #  This is proprietary source code of DataRobot, Inc. and its affiliates.
 #  Released under the terms of DataRobot Tool and Utility Agreement.
 
+# pylint: disable=protected-access
+# pylint: disable=too-many-arguments
+
 """A module that contains unit-tests for the custom inference model GitHub action."""
 
 import contextlib
 import os
 from argparse import Namespace
-
 from pathlib import Path
 
-from mock import patch
 import pytest
-
+from mock import patch
 from mock.mock import PropertyMock
 
 from common.data_types import DataRobotModel
+from common.exceptions import IllegalModelDeletion
+from common.exceptions import ModelMainEntryPointNotFound
+from common.exceptions import ModelMetadataAlreadyExists
+from common.exceptions import SharedAndLocalPathCollision
 from custom_inference_model import CustomInferenceModel
 from custom_inference_model import ModelFilePath
 from custom_inference_model import ModelInfo
-from common.exceptions import (
-    IllegalModelDeletion,
-    ModelMainEntryPointNotFound,
-    ModelMetadataAlreadyExists,
-)
-from common.exceptions import SharedAndLocalPathCollision
 from dr_client import DrClient
 from tests.unit.conftest import make_a_change_and_commit
 
@@ -65,8 +64,8 @@ class TestCustomInferenceModel:
         """Test a failure of models' scanning and loading of multiple models with same ID."""
 
         git_model_id = "same-git-model-id-111"
-        single_model_factory(f"model-1", write_metadata=True, git_model_id=git_model_id)
-        single_model_factory(f"model-2", write_metadata=True, git_model_id=git_model_id)
+        single_model_factory("model-1", write_metadata=True, git_model_id=git_model_id)
+        single_model_factory("model-2", write_metadata=True, git_model_id=git_model_id)
         custom_inference_model = CustomInferenceModel(options)
         with pytest.raises(ModelMetadataAlreadyExists):
             custom_inference_model._scan_and_load_models_metadata()
@@ -307,6 +306,7 @@ class TestCustomInferenceModelDeletion:
 class TestGlobPatterns:
     """Contains unit-test for glob patters."""
 
+    @pytest.mark.usefixtures("common_path_with_code")
     @pytest.mark.parametrize("num_models", [1, 2, 3])
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
     @pytest.mark.parametrize(
@@ -322,7 +322,6 @@ class TestGlobPatterns:
     def test_glob_patterns(
         self,
         models_factory,
-        common_path_with_code,
         excluded_src_path,
         options,
         num_models,
@@ -392,8 +391,9 @@ class TestGlobPatterns:
             for excluded_path in excluded_paths:
                 assert Path(excluded_path) not in model_info.model_file_paths
 
+    @pytest.mark.usefixtures("common_path_with_code")
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
-    def test_missing_main_program(self, models_factory, common_path_with_code, options, is_multi):
+    def test_missing_main_program(self, models_factory, options, is_multi):
         """Test missing main program in a given model."""
 
         models_factory(1, is_multi, include_main_prog=False)

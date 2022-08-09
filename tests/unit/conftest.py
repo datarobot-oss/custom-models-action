@@ -3,6 +3,8 @@
 #  This is proprietary source code of DataRobot, Inc. and its affiliates.
 #  Released under the terms of DataRobot Tool and Utility Agreement.
 
+# pylint: disable=too-many-arguments
+
 """A configuration test module for unit-tests."""
 
 import logging
@@ -23,8 +25,8 @@ from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 
 
-@pytest.fixture
-def repo_root_path():
+@pytest.fixture(name="repo_root_path")
+def fixture_repo_root_path():
     """
     A fixture to temporarily create and return a root folder in which a repository will be
     initialized.
@@ -37,16 +39,16 @@ def repo_root_path():
 def write_to_file(file_path, content):
     """A method to write into a file."""
 
-    with open(file_path, "w") as f:
-        f.write(content)
+    with open(file_path, "w", encoding="utf-8") as fd:
+        fd.write(content)
 
 
 def make_a_change_and_commit(git_repo, file_paths, index):
     """Makes a single change in a provided Python files and commit the changes."""
 
     for file_path in file_paths:
-        with open(file_path, "a") as f:
-            f.write(f"\n# Automatic change ({index})")
+        with open(file_path, "a", encoding="utf-8") as fd:
+            fd.write(f"\n# Automatic change ({index})")
     git_repo.index.add([str(f) for f in file_paths])
     git_repo.index.commit(f"Change number {index}")
 
@@ -68,7 +70,7 @@ def create_partial_model_schema(is_single=True, num_models=1, with_target_type=F
         return partial_schema
 
     if is_single:
-        model_schema = _partial_model_schema(f"single-model")
+        model_schema = _partial_model_schema("single-model")
     else:
         model_schema = {ModelSchema.MULTI_MODELS_KEY: []}
         for counter in range(1, num_models + 1):
@@ -95,31 +97,32 @@ def create_partial_deployment_schema(is_single=True, num_deployments=1):
         }
 
     if is_single:
-        return _partial_deployment_schema(f"single-deployment")
-    else:
-        deployments_schema = []
-        for counter in range(1, num_deployments + 1):
-            single_deployment_schema = _partial_deployment_schema(f"deployment-{counter}")
-            deployments_schema.append(single_deployment_schema)
-        return deployments_schema
+        return _partial_deployment_schema("single-deployment")
+
+    deployments_schema = []
+    for counter in range(1, num_deployments + 1):
+        single_deployment_schema = _partial_deployment_schema(f"deployment-{counter}")
+        deployments_schema.append(single_deployment_schema)
+    return deployments_schema
 
 
-@pytest.fixture
-def common_path(repo_root_path):
+@pytest.fixture(name="common_path")
+def fixture_common_path(repo_root_path):
     """A fixture that returns the common directory path from the repository root."""
 
     return repo_root_path / "common"
 
 
-@pytest.fixture
-def common_filepath(common_path):
+@pytest.fixture(name="common_filepath")
+def fixture_common_filepath(common_path):
     """A fixture that returns the common.py file path under the common path."""
 
     return common_path / "common.py"
 
 
-@pytest.fixture
-def common_path_with_code(repo_root_path, common_path, common_filepath):
+@pytest.mark.usefixtures("repo_root_path")
+@pytest.fixture(name="common_path_with_code")
+def fixture_common_path_with_code(common_path, common_filepath):
     """
     A fixture to create a common path under the repository root dire and occupies it with
     source code.
@@ -133,8 +136,8 @@ def common_path_with_code(repo_root_path, common_path, common_filepath):
     return common_path
 
 
-@pytest.fixture
-def excluded_src_path(repo_root_path):
+@pytest.fixture(name="excluded_src_path")
+def fixture_excluded_src_path(repo_root_path):
     """
     A fixture to create directory and file under the root repository path that will not be
     part of any model definition.
@@ -146,8 +149,8 @@ def excluded_src_path(repo_root_path):
     return excluded_path
 
 
-@pytest.fixture
-def single_model_factory(repo_root_path, common_path_with_code, excluded_src_path):
+@pytest.fixture(name="single_model_factory")
+def fixture_single_model_factory(repo_root_path, common_path_with_code):
     """A factory fixture to create a single model definition."""
 
     def _inner(
@@ -194,8 +197,9 @@ def single_model_factory(repo_root_path, common_path_with_code, excluded_src_pat
     yield _inner
 
 
-@pytest.fixture
-def models_factory(repo_root_path, common_path_with_code, single_model_factory):
+@pytest.mark.usefixtures("common_path_with_code")
+@pytest.fixture(name="models_factory")
+def fixture_models_factory(repo_root_path, single_model_factory):
     """A fixture to create multiple model definitions."""
 
     def _inner(
@@ -206,7 +210,6 @@ def models_factory(repo_root_path, common_path_with_code, single_model_factory):
         include_main_prog=True,
     ):
         models_metadata = []
-        multi_models_yaml_content = {ModelSchema.MULTI_MODELS_KEY: []} if is_multi else None
         for counter in range(num_models):
             model_name = f"model_multi_{counter}" if is_multi else f"model_{counter}"
             model_metadata = single_model_factory(
@@ -217,14 +220,19 @@ def models_factory(repo_root_path, common_path_with_code, single_model_factory):
                 include_main_prog=include_main_prog,
             )
             models_metadata.append(model_metadata)
-            if is_multi:
+
+        if is_multi:
+            multi_models_yaml_content = {ModelSchema.MULTI_MODELS_KEY: []}
+            for model_metadata in models_metadata:
+                name = ModelSchema.get_value(
+                    model_metadata, ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.NAME_KEY
+                )
                 multi_models_yaml_content[ModelSchema.MULTI_MODELS_KEY].append(
                     {
-                        ModelSchema.MODEL_ENTRY_PATH_KEY: f"./{model_name}",
+                        ModelSchema.MODEL_ENTRY_PATH_KEY: f"./{name}",
                         ModelSchema.MODEL_ENTRY_META_KEY: model_metadata,
                     }
                 )
-        if is_multi:
             multi_models_content = yaml.dump(multi_models_yaml_content)
             write_to_file(repo_root_path / "models.yaml", multi_models_content)
 
@@ -233,15 +241,16 @@ def models_factory(repo_root_path, common_path_with_code, single_model_factory):
     return _inner
 
 
-@pytest.fixture
-def single_model_root_path(repo_root_path):
+@pytest.fixture(name="single_model_root_path")
+def fixture_single_model_root_path(repo_root_path):
     """A fixture to return the first model root path."""
 
     return repo_root_path / "model_0"
 
 
-@pytest.fixture
-def single_model_file_paths(models_factory, single_model_root_path, repo_root_path):
+@pytest.mark.usefixtures("repo_root_path")
+@pytest.fixture(name="single_model_file_paths")
+def fixture_single_model_file_paths(models_factory, single_model_root_path):
     """A fixture to return all the file paths below to a just created model."""
 
     models_factory(1)
@@ -303,8 +312,8 @@ def mock_handle_deleted_models():
         yield
 
 
-@pytest.fixture
-def git_repo(repo_root_path):
+@pytest.fixture(name="git_repo")
+def fixture_git_repo(repo_root_path):
     """A fixture to initialize a Git repository in a given root directory."""
 
     repo = Repo.init(repo_root_path)
@@ -316,8 +325,8 @@ def git_repo(repo_root_path):
     return repo
 
 
-@pytest.fixture
-def init_repo_for_root_path_factory(repo_root_path, git_repo):
+@pytest.fixture(name="init_repo_for_root_path_factory")
+def fixture_init_repo_for_root_path_factory(repo_root_path, git_repo):
     """A fixture to commit all changes in a given repository"""
 
     def _inner():
@@ -329,8 +338,10 @@ def init_repo_for_root_path_factory(repo_root_path, git_repo):
     return _inner
 
 
-@pytest.fixture
-def init_repo_with_models_factory(models_factory, init_repo_for_root_path_factory):
+@pytest.fixture(name="init_repo_with_models_factory")
+def fixture_init_repo_with_models_factory(
+    repo_root_path, models_factory, init_repo_for_root_path_factory
+):
     """
     A fixture to create models in a given repository, commit the changes and return the
     repository file path.
@@ -356,8 +367,8 @@ def init_repo_with_models_factory(models_factory, init_repo_for_root_path_factor
     return _inner
 
 
-@pytest.fixture
-def mock_full_custom_model_checks():
+@pytest.fixture(name="mock_full_custom_model_checks")
+def fixture_mock_full_custom_model_checks():
     """A fixture to get a full custom model test checks."""
 
     return {

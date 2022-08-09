@@ -3,6 +3,9 @@
 #  This is proprietary source code of DataRobot, Inc. and its affiliates.
 #  Released under the terms of DataRobot Tool and Utility Agreement.
 
+# pylint: disable=protected-access
+# pylint: disable=too-many-arguments
+
 """A module that contains unit-tests for the custom inference model deployment GitHub action."""
 
 import contextlib
@@ -11,8 +14,8 @@ import uuid
 import pytest
 import yaml
 from bson import ObjectId
-from mock import patch
 from mock import PropertyMock
+from mock import patch
 
 from common.data_types import DataRobotModel
 from common.exceptions import AssociatedModelNotFound
@@ -38,9 +41,8 @@ class TestCustomInferenceDeployment:
         yield common_path_with_code
 
     @pytest.fixture
-    def single_deployment_factory(
-        self, repo_root_path, common_path_with_code, excluded_src_path, single_model_factory
-    ):
+    @pytest.mark.usefixtures("common_path_with_code", "excluded_src_path")
+    def single_deployment_factory(self, repo_root_path, single_model_factory):
         """A factory fixture to create a single deployment along with a model."""
 
         def _inner(name, write_metadata=True, git_deployment_id=None, git_model_id=None):
@@ -65,7 +67,8 @@ class TestCustomInferenceDeployment:
         yield _inner
 
     @pytest.fixture
-    def deployments_factory(self, repo_root_path, common_path_with_code, models_factory):
+    @pytest.mark.usefixtures("common_path_with_code")
+    def deployments_factory(self, repo_root_path, models_factory):
         """A factory fixture to create deployments with associated models."""
 
         def _inner(num_deployments=2, is_multi=False):
@@ -197,49 +200,18 @@ class TestCustomInferenceDeployment:
         datarobot_models_by_model_id = {}
 
         if with_associated_dr_models:
-            for deployment_metadata in deployments_metadata:
-                datarobot_model_id = str(ObjectId())
-                datarobot_model_version_id = str(ObjectId())
-                latest_version = (
-                    {
-                        "id": datarobot_model_version_id,
-                        "gitModelVersion": {"mainBranchCommitSha": main_branch_sha},
-                    }
-                    if with_latest_dr_model_version
-                    else None
-                )
-                datarobot_models[deployment_metadata["git_datarobot_model_id"]] = DataRobotModel(
-                    model={"id": datarobot_model_id},
-                    latest_version=latest_version,
-                )
-                datarobot_models_by_model_id[datarobot_model_id] = datarobot_models[
-                    deployment_metadata["git_datarobot_model_id"]
-                ]
+            datarobot_models = self._setup_datarobot_models_map(
+                main_branch_sha, with_latest_dr_model_version, deployments_metadata
+            )
+            datarobot_models_by_model_id = self._setup_datarobot_models_by_model_id(
+                datarobot_models
+            )
 
         datarobot_deployments = []
         if with_dr_deployments:
-            for deployment_metadata in deployments_metadata:
-                datarobot_model = datarobot_models.get(
-                    deployment_metadata["git_datarobot_model_id"]
-                )
-                # DataRobot Deployments
-                custom_model_id = datarobot_model.model["id"] if datarobot_model else None
-                custom_model_ver_id = (
-                    datarobot_model.latest_version["id"]
-                    if datarobot_model and datarobot_model.latest_version
-                    else None
-                )
-                datarobot_deployments.append(
-                    {
-                        "gitDeploymentId": deployment_metadata["git_datarobot_deployment_id"],
-                        "model": {
-                            "customModelImage": {
-                                "customModelId": custom_model_id,
-                                "customModelVersionId": custom_model_ver_id,
-                            }
-                        },
-                    }
-                )
+            datarobot_deployments = self._setup_datarobot_deployments(
+                deployments_metadata, datarobot_models
+            )
 
         with patch.object(
             CustomInferenceModelBase,
@@ -248,11 +220,66 @@ class TestCustomInferenceDeployment:
         ), patch.object(
             CustomInferenceModelBase,
             "datarobot_model_by_id",
-            side_effect=lambda model_id: datarobot_models_by_model_id.get(model_id),
+            side_effect=datarobot_models_by_model_id.get,
         ), patch.object(
             DrClient, "fetch_deployments", return_value=datarobot_deployments
         ):
             yield
+
+    @staticmethod
+    def _setup_datarobot_models_map(
+        main_branch_sha, with_latest_dr_model_version, deployments_metadata
+    ):
+        datarobot_models = {}
+        for deployment_metadata in deployments_metadata:
+            datarobot_model_id = str(ObjectId())
+            datarobot_model_version_id = str(ObjectId())
+            latest_version = (
+                {
+                    "id": datarobot_model_version_id,
+                    "gitModelVersion": {"mainBranchCommitSha": main_branch_sha},
+                }
+                if with_latest_dr_model_version
+                else None
+            )
+            datarobot_models[deployment_metadata["git_datarobot_model_id"]] = DataRobotModel(
+                model={"id": datarobot_model_id},
+                latest_version=latest_version,
+            )
+        return datarobot_models
+
+    @staticmethod
+    def _setup_datarobot_models_by_model_id(datarobot_models):
+        datarobot_models_by_model_id = {}
+        for git_model_id, datarobot_model in datarobot_models.items():
+            datarobot_model_id = datarobot_model.model["id"]
+            datarobot_models_by_model_id[datarobot_model_id] = datarobot_models[git_model_id]
+        return datarobot_models_by_model_id
+
+    @staticmethod
+    def _setup_datarobot_deployments(deployments_metadata, datarobot_models):
+        datarobot_deployments = []
+        for deployment_metadata in deployments_metadata:
+            datarobot_model = datarobot_models.get(deployment_metadata["git_datarobot_model_id"])
+            # DataRobot Deployments
+            custom_model_id = datarobot_model.model["id"] if datarobot_model else None
+            custom_model_ver_id = (
+                datarobot_model.latest_version["id"]
+                if datarobot_model and datarobot_model.latest_version
+                else None
+            )
+            datarobot_deployments.append(
+                {
+                    "gitDeploymentId": deployment_metadata["git_datarobot_deployment_id"],
+                    "model": {
+                        "customModelImage": {
+                            "customModelId": custom_model_id,
+                            "customModelVersionId": custom_model_ver_id,
+                        }
+                    },
+                }
+            )
+        return datarobot_deployments
 
     def test_deployments_fetching_with_no_dr_latest_model_version_failure(
         self, options, mock_datarobot_deployments
@@ -293,13 +320,9 @@ class TestCustomInferenceDeployment:
         ):
             yield
 
+    @pytest.mark.usefixtures("repo_root_path")
     def test_deployments_integrity_validation_success(
-        self,
-        options,
-        repo_root_path,
-        deployments_factory,
-        git_repo,
-        init_repo_for_root_path_factory,
+        self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
     ):
         """Test a successful deployments' integrity validation."""
 
@@ -311,13 +334,9 @@ class TestCustomInferenceDeployment:
             custom_inference_deployment._fetch_deployments_from_datarobot()
             custom_inference_deployment._validate_deployments_integrity()
 
+    @pytest.mark.usefixtures("repo_root_path")
     def test_deployments_integrity_validation_no_dr_deployments(
-        self,
-        options,
-        repo_root_path,
-        deployments_factory,
-        git_repo,
-        init_repo_for_root_path_factory,
+        self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
     ):
         """
         Test a successful deployments integrity validation with no associated DataRobot
@@ -335,13 +354,9 @@ class TestCustomInferenceDeployment:
             custom_inference_deployment._fetch_deployments_from_datarobot()
             custom_inference_deployment._validate_deployments_integrity()
 
+    @pytest.mark.usefixtures("repo_root_path")
     def test_deployments_integrity_validation_no_associated_models(
-        self,
-        options,
-        repo_root_path,
-        deployments_factory,
-        git_repo,
-        init_repo_for_root_path_factory,
+        self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
     ):
         """
         Test a failure of deployments integrity validation with no associated models.
@@ -361,13 +376,9 @@ class TestCustomInferenceDeployment:
             with pytest.raises(AssociatedModelNotFound):
                 custom_inference_deployment._validate_deployments_integrity()
 
+    @pytest.mark.usefixtures("repo_root_path")
     def test_deployments_integrity_validation_no_latest_version(
-        self,
-        options,
-        repo_root_path,
-        deployments_factory,
-        git_repo,
-        init_repo_for_root_path_factory,
+        self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
     ):
         """Test a failure of deployments integrity validation with no latest model version."""
 
@@ -386,13 +397,9 @@ class TestCustomInferenceDeployment:
             with pytest.raises(AssociatedModelVersionNotFound):
                 custom_inference_deployment._validate_deployments_integrity()
 
+    @pytest.mark.usefixtures("repo_root_path")
     def test_deployments_integrity_validation_no_main_branch_sha_failure(
-        self,
-        options,
-        repo_root_path,
-        deployments_factory,
-        git_repo,
-        init_repo_for_root_path_factory,
+        self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
     ):
         """Test a failure of deployments integrity validation with no expected main branch SHA."""
 

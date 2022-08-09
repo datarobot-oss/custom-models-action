@@ -7,9 +7,9 @@
 
 import logging
 import os
+from pathlib import Path
 
 from git import Repo
-from pathlib import Path
 
 from common.exceptions import NoCommonAncestor
 from common.exceptions import NonMergeCommitError
@@ -89,8 +89,7 @@ class GitTool:
                     deleted_files.append(a_path)
                     changed_or_new_files.append(self.repo_path / git_index.b_path)
             return changed_or_new_files, deleted_files
-        else:
-            return self._categorize_changed_files(to_commit.stats.files)
+        return self._categorize_changed_files(to_commit.stats.files)
 
     def _categorize_changed_files(self, files_stats):
         changed_or_new_files = []
@@ -102,7 +101,6 @@ class GitTool:
                     changed_or_new_files.append(full_file_path)
                 else:
                     deleted_files.append(full_file_path)
-                pass
             else:
                 changed_or_new_files.append(full_file_path)
         return changed_or_new_files, deleted_files
@@ -154,7 +152,7 @@ class GitTool:
             top_commit = self.repo.commit(top_commit_sha)
             return self.repo.is_ancestor(ancestor_commit, top_commit)
         except ValueError as ex:
-            logger.debug(f"Ancestor commit could not be found. Error: {str(ex)}")
+            logger.debug("Ancestor commit could not be found. Error: %s", ex)
             return False
 
     def print_pretty_log(self):
@@ -170,7 +168,7 @@ class GitTool:
             "-n",
             "7",
         )
-        logger.debug(f"\n{git_logs}")
+        logger.debug("\n%s", git_logs)
 
     def feature_branch_top_commit_sha_of_a_merge_commit(self, commit_sha):
         """

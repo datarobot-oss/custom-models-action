@@ -15,9 +15,9 @@ import logging
 import os
 import sys
 
-from custom_inference_model import CustomInferenceModel
-from custom_inference_deployment import CustomInferenceDeployment
 from common.exceptions import GenericException
+from custom_inference_deployment import CustomInferenceDeployment
+from custom_inference_model import CustomInferenceModel
 
 logger = logging.getLogger()
 
@@ -68,7 +68,7 @@ def argparse_options(args=None):
     )
 
     options = parser.parse_args(args)
-    logger.debug(f"Command line args: {options}")
+    logger.debug("Command line args: %s", options)
 
     return options
 
@@ -110,16 +110,15 @@ def main(args=None):
                 "::set-output name=message::"
                 "Custom inference model GitHub action completed with success.\n"
             )
-    except GenericException as e:
+    except GenericException as ex:
         # Avoid printing the stacktrace
-        logger.error(str(e))
-        print(f"::set-output name=message::{str(e)}")
+        logger.error(str(ex))
+        print(f"::set-output name=message::{str(ex)}")
         if args:
             # It was called from the functional tests
-            raise e
-        else:
-            # It was called from the GitHub action
-            sys.exit(e.code)
+            raise ex
+        # It was called from the GitHub action
+        sys.exit(ex.code)
 
 
 if __name__ == "__main__":

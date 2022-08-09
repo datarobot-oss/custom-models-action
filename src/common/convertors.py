@@ -10,6 +10,7 @@ import re
 from common.exceptions import InvalidMemoryValue
 
 
+# pylint: disable=too-few-public-methods
 class MemoryConvertor:
     """A memory convertor."""
 

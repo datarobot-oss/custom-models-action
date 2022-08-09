@@ -1,2 +1,9 @@
 [tool.black]
 line-length = 100
+
+[tool.isort]
+profile = "black"
+force_single_line = "True"
+
+[tool.pylint.BASIC]
+good-names = ["ex", "fd"]

@@ -10,7 +10,7 @@ import requests
 from common.string_util import StringUtil
 
 
-class HttpRequester(object):
+class HttpRequester:
     """
     A class that contains high level methods to carry out HTTP calls. It supports TLS and
     setup authorization credentials in the form of a token.
@@ -31,8 +31,7 @@ class HttpRequester(object):
     def _url(self, endpoint_sub_url):
         if "?" in endpoint_sub_url:
             return f"{self._base_url}{endpoint_sub_url}"
-        else:
-            return f"{self._base_url}{StringUtil.slash_suffix(endpoint_sub_url)}"
+        return f"{self._base_url}{StringUtil.slash_suffix(endpoint_sub_url)}"
 
     def get(self, endpoint_sub_url, raw=False, **kwargs):
         """
