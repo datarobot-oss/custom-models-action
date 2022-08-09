@@ -5,6 +5,7 @@ from collections import namedtuple
 
 from requests_toolbelt import MultipartEncoder
 
+from common import constants
 from common.exceptions import DataRobotClientError
 from common.exceptions import HttpRequesterException
 from common.exceptions import IllegalModelDeletion
@@ -38,6 +39,27 @@ class DrClient:
     DEPLOYMENT_MODEL_VALIDATION_ROUTE = DEPLOYMENT_MODEL_ROUTE + "validation/"
     DEPLOYMENT_MODEL_CHALLENGER_ROUTE = DEPLOYMENT_ROUTE + "challengers/"
     DEPLOYMENT_ACTUALS_UPDATE_ROUTE = DEPLOYMENT_ROUTE + "actuals/fromDataset/"
+
+    MODEL_TARGET_TYPE_MAP = {
+        ModelSchema.TARGET_TYPE_BINARY_KEY: "Binary",
+        ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY: "Binary",
+        ModelSchema.TARGET_TYPE_REGRESSION_KEY: "Regression",
+        ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY: "Regression",
+        ModelSchema.TARGET_TYPE_MULTICLASS_KEY: "Multiclass",
+        ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY: "Multiclass",
+        ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY: "Unstructured",
+    }
+
+    MODEL_SETTINGS_KEYS_MAP = {
+        ModelSchema.NAME_KEY: "name",
+        ModelSchema.DESCRIPTION_KEY: "description",
+        ModelSchema.LANGUAGE_KEY: "language",
+        ModelSchema.TARGET_NAME_KEY: "targetName",
+        ModelSchema.PREDICTION_THRESHOLD_KEY: "predictionThreshold",
+        ModelSchema.POSITIVE_CLASS_LABEL_KEY: "positiveClassLabel",
+        ModelSchema.NEGATIVE_CLASS_LABEL_KEY: "negativeClassLabel",
+        ModelSchema.CLASS_LABELS_KEY: "classLabels",
+    }
 
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
@@ -137,59 +159,49 @@ class DrClient:
         logger.debug(f"Custom model created successfully (id: {custom_model['id']})")
         return custom_model
 
-    @staticmethod
-    def _setup_payload_for_custom_model_creation(model_info):
+    @classmethod
+    def _setup_payload_for_custom_model_creation(cls, model_info):
         target_type = model_info.get_value(ModelSchema.TARGET_TYPE_KEY)
 
-        target_type_map = {
-            ModelSchema.TARGET_TYPE_BINARY_KEY: "Binary",
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY: "Binary",
-            ModelSchema.TARGET_TYPE_REGRESSION_KEY: "Regression",
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY: "Regression",
-            ModelSchema.TARGET_TYPE_MULTICLASS_KEY: "Multiclass",
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY: "Multiclass",
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY: "Unstructured",
-        }
-
         payload = {
-            "customModelType": "inference",  # Currently, there's support only for inference models
-            "targetType": target_type_map.get(target_type),
-            "targetName": model_info.get_value(ModelSchema.TARGET_NAME_KEY),
+            "customModelType": constants.CUSTOM_MODEL_TYPE,
+            "targetType": cls.MODEL_TARGET_TYPE_MAP.get(target_type),
+            "targetName": model_info.get_settings_value(ModelSchema.TARGET_NAME_KEY),
             "isUnstructuredModelKind": model_info.is_unstructured,
             "gitModelId": model_info.get_value(ModelSchema.MODEL_ID_KEY),
         }
 
-        name = model_info.get_value(ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.NAME_KEY)
+        name = model_info.get_settings_value(ModelSchema.NAME_KEY)
         if name:
             payload["name"] = name
 
-        description = model_info.get_value(
-            ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.DESCRIPTION_KEY
-        )
+        description = model_info.get_settings_value(ModelSchema.DESCRIPTION_KEY)
         if description:
             payload["description"] = description
 
-        lang = model_info.get_value(ModelSchema.LANGUAGE_KEY)
+        lang = model_info.get_settings_value(ModelSchema.LANGUAGE_KEY)
         if lang:
             payload["language"] = lang
 
         if model_info.is_regression:
-            regression_threshold = model_info.get_value(ModelSchema.PREDICTION_THRESHOLD_KEY)
+            regression_threshold = model_info.get_settings_value(
+                ModelSchema.PREDICTION_THRESHOLD_KEY
+            )
             if regression_threshold is not None:
                 payload["predictionThreshold"] = regression_threshold
         elif model_info.is_binary:
             payload.update(
                 {
-                    "positiveClassLabel": model_info.get_value(
+                    "positiveClassLabel": model_info.get_settings_value(
                         ModelSchema.POSITIVE_CLASS_LABEL_KEY
                     ),
-                    "negativeClassLabel": model_info.get_value(
+                    "negativeClassLabel": model_info.get_settings_value(
                         ModelSchema.NEGATIVE_CLASS_LABEL_KEY
                     ),
                 }
             )
         elif model_info.is_multiclass:
-            payload["classLabels"] = model_info.get_value(ModelSchema.CLASS_LABELS_KEY)
+            payload["classLabels"] = model_info.get_settings_value(ModelSchema.CLASS_LABELS_KEY)
 
         return payload
 
@@ -923,8 +935,7 @@ class DrClient:
                     f"Response body: {response.text}",
                 )
             return response.json()
-        else:
-            return None
+        return None
 
     def update_training_dataset_for_structured_models(self, datarobot_custom_model, model_info):
         """
@@ -961,14 +972,50 @@ class DrClient:
             if response.status_code != 202:
                 raise DataRobotClientError(
                     "Failed to update training dataset for structured model. "
-                    f"Git model ID: {model_info.git_model_id}, "
-                    f"DataRobot model ID: {datarobot_custom_model['id']}, "
-                    f"Response status: {response.status_code}, "
-                    f"Response body: {response.text}",
+                    f"Git model ID: {model_info.git_model_id}. "
+                    f"DataRobot model ID: {datarobot_custom_model['id']}. "
+                    f"Response status: {response.status_code}. "
+                    f"Response body: {response.text}.",
                 )
             location = response.headers["Location"]
             self._wait_for_async_resolution(location)
             response = self._http_requester.get(location, raw=True)
             return response.json()
-        else:
-            return None
+        return None
+
+    def update_model_settings(self, datarobot_custom_model, model_info):
+        """
+        Updates custom inference model settings.
+
+        Parameters
+        ----------
+        datarobot_custom_model : dict
+            DataRobot custom model.
+        model_info : ModelInfo
+            A local repository representation of custom inference model.
+
+        Returns
+        -------
+        dict or None
+            DataRobot CustomModel.
+        """
+        payload = {}
+
+        for local_key, remote_key in self.MODEL_SETTINGS_KEYS_MAP.items():
+            local_value = model_info.get_settings_value(local_key)
+            if local_value and local_value != datarobot_custom_model[remote_key]:
+                payload[remote_key] = local_value
+
+        if payload:
+            url = self.CUSTOM_MODEL_ROUTE.format(model_id=datarobot_custom_model["id"])
+            response = self._http_requester.patch(url, json=payload)
+            if response.status_code != 200:
+                raise DataRobotClientError(
+                    "Failed to update custom model settings. "
+                    f"Git model ID: {model_info.git_model_id}. "
+                    f"DataRobot model ID: {datarobot_custom_model['id']}. "
+                    f"Response status: {response.status_code}. "
+                    f"Response body: {response.text}.",
+                )
+            return response.json()
+        return None

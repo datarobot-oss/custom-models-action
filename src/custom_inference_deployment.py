@@ -252,7 +252,7 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                 f"actuals dataset ID: {desired_dataset_id}, "
             )
             model_info = self.models_info.get(deployment_info.git_model_id)
-            target_name = model_info.get_value(ModelSchema.TARGET_NAME_KEY)
+            target_name = model_info.get_settings_value(ModelSchema.TARGET_NAME_KEY)
             self._dr_client.submit_deployment_actuals(
                 target_name, desired_association_id, desired_dataset_id, deployment
             )

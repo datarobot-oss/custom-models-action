@@ -21,8 +21,10 @@ class TestModelSchemaValidator:
         return {
             ModelSchema.MODEL_ID_KEY: "abc123",
             ModelSchema.TARGET_TYPE_KEY: "Regression",
-            ModelSchema.TARGET_NAME_KEY: "target_column",
-            ModelSchema.SETTINGS_SECTION_KEY: {ModelSchema.NAME_KEY: "My Awesome Model"},
+            ModelSchema.SETTINGS_SECTION_KEY: {
+                ModelSchema.NAME_KEY: "My Awesome Model",
+                ModelSchema.TARGET_NAME_KEY: "target_column",
+            },
             ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: "627785ea562155d227c6a56c"},
         }
 
@@ -46,8 +48,8 @@ class TestModelSchemaValidator:
     def test_for_binary_model(self, binary_target_type, is_single):
         def _set_binary_keys(schema):
             schema[ModelSchema.TARGET_TYPE_KEY] = binary_target_type
-            schema[ModelSchema.POSITIVE_CLASS_LABEL_KEY] = "1"
-            schema[ModelSchema.NEGATIVE_CLASS_LABEL_KEY] = "0"
+            schema[ModelSchema.SETTINGS_SECTION_KEY][ModelSchema.POSITIVE_CLASS_LABEL_KEY] = "1"
+            schema[ModelSchema.SETTINGS_SECTION_KEY][ModelSchema.NEGATIVE_CLASS_LABEL_KEY] = "0"
 
         self._validate_for_model_type(is_single, _set_binary_keys)
 
@@ -101,7 +103,7 @@ class TestModelSchemaValidator:
         def _set_binary_keys(schema):
             schema[ModelSchema.TARGET_TYPE_KEY] = binary_target_type
             if class_label_key:
-                schema[class_label_key] = "fake"
+                schema[ModelSchema.SETTINGS_SECTION_KEY][class_label_key] = "fake"
 
         with pytest.raises(InvalidModelSchema):
             self._validate_for_model_type(is_single, _set_binary_keys)
@@ -131,7 +133,7 @@ class TestModelSchemaValidator:
     def test_for_multiclass_model(self, multiclass_target_type, is_single):
         def _set_multiclass_keys(schema):
             schema[ModelSchema.TARGET_TYPE_KEY] = multiclass_target_type
-            schema[ModelSchema.CLASS_LABELS_KEY] = ["1", "2", "3"]
+            schema[ModelSchema.SETTINGS_SECTION_KEY][ModelSchema.CLASS_LABELS_KEY] = ["1", "2", "3"]
 
         self._validate_for_model_type(is_single, _set_multiclass_keys)
 
@@ -185,12 +187,12 @@ class TestModelSchemaValidator:
                 if isinstance(element, Key):
                     # The 'type' is not really important here
                     schema[ModelSchema.TARGET_TYPE_KEY] = element.type
-                    schema[element.name] = element.value
+                    schema[ModelSchema.SETTINGS_SECTION_KEY][element.name] = element.value
                 else:
                     for key in element:
                         # The 'type' is not really important here
                         schema[ModelSchema.TARGET_TYPE_KEY] = key.type
-                        schema[key.name] = key.value
+                        schema[ModelSchema.SETTINGS_SECTION_KEY][key.name] = key.value
 
         model_schema = create_partial_model_schema(is_single, num_models=1)
         comb_keys = combinations(mutual_exclusive_keys, 2)
@@ -227,10 +229,10 @@ class TestModelSchemaValidator:
         [
             ModelSchema.MODEL_ID_KEY,
             ModelSchema.TARGET_TYPE_KEY,
-            ModelSchema.TARGET_NAME_KEY,
             ModelSchema.VERSION_KEY,
             ModelSchema.SETTINGS_SECTION_KEY,
             f"{ModelSchema.SETTINGS_SECTION_KEY}.{ModelSchema.NAME_KEY}",
+            f"{ModelSchema.SETTINGS_SECTION_KEY}.{ModelSchema.TARGET_NAME_KEY}",
             f"{ModelSchema.VERSION_KEY}.{ModelSchema.MODEL_ENV_KEY}",
         ],
     )
@@ -351,7 +353,7 @@ class TestModelSchemaGetValue:
 
 
 class TestModelSchemaSetValue:
-    @pytest.mark.parametrize("key_name", [ModelSchema.TARGET_NAME_KEY, "non-existing-key"])
+    @pytest.mark.parametrize("key_name", [ModelSchema.TARGET_TYPE_KEY, "non-existing-key"])
     def test_first_level_key(self, mock_full_binary_model_schema, key_name):
         input_metadata = copy.deepcopy(mock_full_binary_model_schema)
         name = str(ObjectId())

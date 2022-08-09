@@ -670,7 +670,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
                     custom_model = self.datarobot_models[model_info.git_model_id].model
 
                 if model_info.should_update_settings:
-                    self._update_model_settings(custom_model, model_info)
+                    self._update_settings(custom_model, model_info)
 
                 self._total_affected += 1
 
@@ -740,8 +740,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
         logger.info("Executing custom model test ...")
         self._dr_client.run_custom_model_version_testing(model_id, model_version_id, model_info)
 
-    def _update_model_settings(self, datarobot_custom_model, model_info):
+    def _update_settings(self, datarobot_custom_model, model_info):
         self._update_training_and_holdout_datasets(datarobot_custom_model, model_info)
+        self._update_model_settings(datarobot_custom_model, model_info)
 
     def _update_training_and_holdout_datasets(self, datarobot_custom_model, model_info):
         if model_info.is_unstructured:
@@ -775,6 +776,11 @@ class CustomInferenceModel(CustomInferenceModelBase):
                     f"Dataset ID: {custom_model['trainingDatasetId']}. "
                     f"Dataset version ID: {custom_model['trainingDatasetVersionId']}. "
                 )
+
+    def _update_model_settings(self, datarobot_custom_model, model_info):
+        custom_model = self._dr_client.update_model_settings(datarobot_custom_model, model_info)
+        if custom_model:
+            logger.info(f"Model settings were updated. Git model ID: {model_info.git_model_id}.")
 
     def _handle_deleted_models(self):
         if not self.options.allow_model_deletion:

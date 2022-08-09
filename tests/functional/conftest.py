@@ -49,6 +49,10 @@ def printout(msg):
     print(msg)
 
 
+def unique_str():
+    return f"{random.randint(1, 2 ** 32): 010}"
+
+
 @contextlib.contextmanager
 def github_env_set(env_key, env_value):
     does_exist = env_key in os.environ
@@ -89,12 +93,12 @@ def build_repo_for_testing(repo_root_path, git_repo):
             model_metadata = yaml.safe_load(reader)
 
         # Set model ID
-        unique_id = random.randint(1, 2**32)
-        new_model_id = f"{model_metadata[ModelSchema.MODEL_ID_KEY]}-{unique_id:010}"
+        unique_string = unique_str()
+        new_model_id = f"{model_metadata[ModelSchema.MODEL_ID_KEY]}-{unique_string}"
         ModelSchema.set_value(model_metadata, ModelSchema.MODEL_ID_KEY, value=new_model_id)
 
         # Set model name
-        new_model_name = f"My Awsome GitHub Model {unique_id} [GitHub CI/CD, Functional Tests]"
+        new_model_name = f"My Awsome GitHub Model {unique_string} [GitHub CI/CD, Functional Tests]"
         ModelSchema.set_value(
             model_metadata,
             ModelSchema.SETTINGS_SECTION_KEY,

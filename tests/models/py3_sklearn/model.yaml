@@ -1,10 +1,10 @@
 git_datarobot_model_id: my-awesome-model-id-1
 
 target_type: Regression
-target_name: Grade 2014
 
 settings:
   name: My Awsome GitHub Model 1 [GitHub CI/CD]
+  target_name: Grade 2014
 
 version:
   # Make sure this is the environment ID in your system.

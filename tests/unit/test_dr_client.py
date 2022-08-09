@@ -63,8 +63,10 @@ class TestCustomModelRoutes:
         metadata = {
             ModelSchema.MODEL_ID_KEY: "abc123",
             ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
-            ModelSchema.TARGET_NAME_KEY: "target_column",
-            ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
+            ModelSchema.SETTINGS_SECTION_KEY: {
+                ModelSchema.TARGET_NAME_KEY: "target_column",
+                ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
+            },
             ModelSchema.VERSION_KEY: {
                 ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
             },
@@ -80,12 +82,12 @@ class TestCustomModelRoutes:
         metadata = {
             ModelSchema.MODEL_ID_KEY: "abc123",
             ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
-            ModelSchema.TARGET_NAME_KEY: "target_column",
-            ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
-            ModelSchema.LANGUAGE_KEY: "Python",
             ModelSchema.SETTINGS_SECTION_KEY: {
                 ModelSchema.NAME_KEY: "Awesome Model",
+                ModelSchema.TARGET_NAME_KEY: "target_column",
                 ModelSchema.DESCRIPTION_KEY: "My awesome model",
+                ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
+                ModelSchema.LANGUAGE_KEY: "Python",
             },
             ModelSchema.VERSION_KEY: {
                 ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
@@ -277,8 +279,10 @@ class TestCustomModelVersionRoutes:
         metadata = {
             ModelSchema.MODEL_ID_KEY: "abc123",
             ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
-            ModelSchema.TARGET_NAME_KEY: "target_column",
-            ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
+            ModelSchema.SETTINGS_SECTION_KEY: {
+                ModelSchema.TARGET_NAME_KEY: "target_column",
+                ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
+            },
             ModelSchema.VERSION_KEY: {
                 ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
             },
@@ -294,8 +298,10 @@ class TestCustomModelVersionRoutes:
         metadata = {
             ModelSchema.MODEL_ID_KEY: "abc123",
             ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
-            ModelSchema.TARGET_NAME_KEY: "target_column",
-            ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
+            ModelSchema.SETTINGS_SECTION_KEY: {
+                ModelSchema.TARGET_NAME_KEY: "target_column",
+                ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
+            },
             ModelSchema.VERSION_KEY: {
                 ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
                 ModelSchema.INCLUDE_GLOB_KEY: ["./"],
