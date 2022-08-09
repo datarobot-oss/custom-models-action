@@ -1,3 +1,10 @@
+#  Copyright (c) 2022. DataRobot, Inc. and its affiliates.
+#  All rights reserved.
+#  This is proprietary source code of DataRobot, Inc. and its affiliates.
+#  Released under the terms of DataRobot Tool and Utility Agreement.
+
+"""A module that contains unit-tests for the DataRobot client module."""
+
 import json
 
 import pytest
@@ -14,17 +21,73 @@ from schema_validator import ModelSchema
 
 @pytest.fixture
 def webserver():
+    """A fixture to return a fake DataRobot webserver."""
+
     return "http://www.datarobot.dummy-app"
 
 
 @pytest.fixture
 def api_token():
+    """A fixture to return a fake API token."""
+
     return "123abc"
+
+
+@pytest.fixture
+def minimal_regression_model_info():
+    """A fixture to create a ModelInfo with a minimal regression model information."""
+    metadata = {
+        ModelSchema.MODEL_ID_KEY: "abc123",
+        ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
+        ModelSchema.SETTINGS_SECTION_KEY: {
+            ModelSchema.TARGET_NAME_KEY: "target_column",
+            ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
+        },
+        ModelSchema.VERSION_KEY: {
+            ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
+        },
+    }
+    return ModelInfo(
+        yaml_filepath="/dummy/yaml/filepath",
+        model_path="/dummy/model/path",
+        metadata=metadata,
+    )
+
+
+@pytest.fixture
+def regression_model_info():
+    """A fixture to create a local ModelInfo with information of a regression model."""
+
+    metadata = {
+        ModelSchema.MODEL_ID_KEY: "abc123",
+        ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
+        ModelSchema.SETTINGS_SECTION_KEY: {
+            ModelSchema.NAME_KEY: "Awesome Model",
+            ModelSchema.TARGET_NAME_KEY: "target_column",
+            ModelSchema.DESCRIPTION_KEY: "My awesome model",
+            ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
+            ModelSchema.LANGUAGE_KEY: "Python",
+        },
+        ModelSchema.VERSION_KEY: {
+            ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
+            ModelSchema.INCLUDE_GLOB_KEY: ["./"],
+            ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
+            ModelSchema.MEMORY_KEY: 256 * 1024 * 1024,
+            ModelSchema.REPLICAS_KEY: 3,
+        },
+    }
+    return ModelInfo(
+        yaml_filepath="/dummy/yaml/filepath",
+        model_path="/dummy/model/path",
+        metadata=metadata,
+    )
 
 
 def mock_paginated_responses(
     total_num_entities, num_entities_in_page, url_factory, entity_response_factory_fn
 ):
+    """A method to mock paginated responses from DataRobot."""
+
     def _generate_for_single_page(page_index, num_entities, has_next):
         entities_in_page = [
             entity_response_factory_fn(f"id-{page_index}-{index}") for index in range(num_entities)
@@ -58,51 +121,12 @@ def mock_paginated_responses(
 
 
 class TestCustomModelRoutes:
-    @pytest.fixture
-    def minimal_regression_model_info(self):
-        metadata = {
-            ModelSchema.MODEL_ID_KEY: "abc123",
-            ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
-            ModelSchema.SETTINGS_SECTION_KEY: {
-                ModelSchema.TARGET_NAME_KEY: "target_column",
-                ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
-            },
-            ModelSchema.VERSION_KEY: {
-                ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
-            },
-        }
-        return ModelInfo(
-            yaml_filepath="/dummy/yaml/filepath",
-            model_path="/dummy/model/path",
-            metadata=metadata,
-        )
-
-    @pytest.fixture
-    def regression_model_info(self):
-        metadata = {
-            ModelSchema.MODEL_ID_KEY: "abc123",
-            ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
-            ModelSchema.SETTINGS_SECTION_KEY: {
-                ModelSchema.NAME_KEY: "Awesome Model",
-                ModelSchema.TARGET_NAME_KEY: "target_column",
-                ModelSchema.DESCRIPTION_KEY: "My awesome model",
-                ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
-                ModelSchema.LANGUAGE_KEY: "Python",
-            },
-            ModelSchema.VERSION_KEY: {
-                ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
-                ModelSchema.INCLUDE_GLOB_KEY: ["./"],
-                ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
-            },
-        }
-        return ModelInfo(
-            yaml_filepath="/dummy/yaml/filepath",
-            model_path="/dummy/model/path",
-            metadata=metadata,
-        )
+    """Contains cases to test DataRobot custom models routes."""
 
     @pytest.fixture
     def regression_model_response_factory(self):
+        """A factory fixture to generate a regression custom model response."""
+
         def _inner(model_id):
             return {
                 "id": model_id,
@@ -119,10 +143,14 @@ class TestCustomModelRoutes:
 
     @pytest.fixture
     def regression_model_response(self, regression_model_response_factory):
+        """A fixture to mock a regression custom model response."""
+
         return regression_model_response_factory("123abc")
 
     @pytest.fixture
     def custom_models_url_factory(self, paginated_url_factory):
+        """A factory fixture to create a paginated page response, given an index."""
+
         def _inner(page=0):
             return paginated_url_factory(DrClient.CUSTOM_MODELS_ROUTE, page)
 
@@ -130,9 +158,13 @@ class TestCustomModelRoutes:
 
     @pytest.fixture
     def custom_models_url(self, custom_models_url_factory):
+        """A fixture to return a custom models URL."""
+
         return custom_models_url_factory(page=0)
 
     def test_full_payload_setup_for_custom_model_creation(self, regression_model_info):
+        """A case to test full payload setup to create a custom model."""
+
         payload = DrClient._setup_payload_for_custom_model_creation(regression_model_info)
         self._validate_mandatory_attributes_for_regression_model(payload, optional_exist=True)
 
@@ -149,6 +181,8 @@ class TestCustomModelRoutes:
         assert ("language" in payload) == optional_exist
 
     def test_minimal_payload_setup_for_custom_model_creation(self, minimal_regression_model_info):
+        """A case to test a minimal payload setup to create a custom model."""
+
         payload = DrClient._setup_payload_for_custom_model_creation(minimal_regression_model_info)
         self._validate_mandatory_attributes_for_regression_model(payload, optional_exist=False)
 
@@ -161,6 +195,8 @@ class TestCustomModelRoutes:
         custom_models_url,
         regression_model_response,
     ):
+        """A case to test a successful custom model creation."""
+
         responses.add(responses.POST, custom_models_url, json=regression_model_response, status=201)
         dr_client = DrClient(
             datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
@@ -177,6 +213,8 @@ class TestCustomModelRoutes:
         custom_models_url,
         regression_model_response,
     ):
+        """A case to test a failure in custom model creation."""
+
         status_code = 422
         responses.add(responses.POST, custom_models_url, json={}, status=status_code)
         dr_client = DrClient(
@@ -195,6 +233,8 @@ class TestCustomModelRoutes:
         custom_models_url_factory,
         regression_model_response_factory,
     ):
+        """A case to test a successful custom model deletion."""
+
         expected_model = mock_paginated_responses(
             1, 1, custom_models_url_factory, regression_model_response_factory
         )
@@ -215,6 +255,8 @@ class TestCustomModelRoutes:
         custom_models_url_factory,
         regression_model_response_factory,
     ):
+        """A case to test a failure in custom model deletion."""
+
         expected_model = mock_paginated_responses(
             1, 1, custom_models_url_factory, regression_model_response_factory
         )
@@ -249,6 +291,8 @@ class TestCustomModelRoutes:
         custom_models_url_factory,
         regression_model_response_factory,
     ):
+        """A case to test a successful custom model retrieval."""
+
         expected_models_in_all_pages = mock_paginated_responses(
             total_num_models,
             num_models_in_page,
@@ -270,72 +314,44 @@ class TestCustomModelRoutes:
 
 
 class TestCustomModelVersionRoutes:
+    """Contains cases to test DataRobot custom model version routes."""
+
     @pytest.fixture
     def custom_model_id(self):
+        """A fixture to generate a fake custom model ID."""
+
         return str(ObjectId())
 
     @pytest.fixture
-    def minimal_regression_model_info(self):
-        metadata = {
-            ModelSchema.MODEL_ID_KEY: "abc123",
-            ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
-            ModelSchema.SETTINGS_SECTION_KEY: {
-                ModelSchema.TARGET_NAME_KEY: "target_column",
-                ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
-            },
-            ModelSchema.VERSION_KEY: {
-                ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
-            },
-        }
-        return ModelInfo(
-            yaml_filepath="/dummy/yaml/filepath",
-            model_path="/dummy/model/path",
-            metadata=metadata,
-        )
-
-    @pytest.fixture
-    def regression_model_info(self):
-        metadata = {
-            ModelSchema.MODEL_ID_KEY: "abc123",
-            ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
-            ModelSchema.SETTINGS_SECTION_KEY: {
-                ModelSchema.TARGET_NAME_KEY: "target_column",
-                ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
-            },
-            ModelSchema.VERSION_KEY: {
-                ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
-                ModelSchema.INCLUDE_GLOB_KEY: ["./"],
-                ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
-                ModelSchema.MEMORY_KEY: 256 * 1024 * 1024,
-                ModelSchema.REPLICAS_KEY: 3,
-            },
-        }
-        return ModelInfo(
-            yaml_filepath="/dummy/yaml/filepath",
-            model_path="/dummy/model/path",
-            metadata=metadata,
-        )
-
-    @pytest.fixture
     def main_branch_commit_sha(self):
+        """A fixture to return a dummy main branch commit SHA."""
+
         return "4e784ec8fa76beebaaf4391f23e0a3f7f666d328"
 
     @pytest.fixture
     def pull_request_commit_sha(self):
+        """A fixture to return a dummy pull request commit SHA."""
+
         return "4e784ec8fa76beebaaf4391f23e0a3f7f666d329"
 
     @pytest.fixture
     def ref_name(self):
+        """A fixture to return a dummy Git re name."""
+
         return "feature-branch"
 
     @pytest.fixture
     def commit_url(self, pull_request_commit_sha):
+        """A fixture to return a dummy GitHub commit web URL."""
+
         return f"https://github.com/user/project/{pull_request_commit_sha}"
 
     @pytest.fixture
     def regression_model_version_response_factory(
         self, custom_model_id, ref_name, commit_url, main_branch_commit_sha, pull_request_commit_sha
     ):
+        """A factory fixture to create a Regression model version response."""
+
         def _inner(version_id):
             return {
                 "id": version_id,
@@ -372,10 +388,14 @@ class TestCustomModelVersionRoutes:
 
     @pytest.fixture
     def regression_model_version_response(self, regression_model_version_response_factory):
+        """A fixture to return a specific Regression model version with given ID."""
+
         return regression_model_version_response_factory(str(ObjectId()))
 
     @pytest.fixture
     def custom_models_version_url_factory(self, custom_model_id, paginated_url_factory):
+        """A factory fixture to create a paginated custom model version page, given an index."""
+
         def _inner(page=0):
             return paginated_url_factory(
                 f"{DrClient.CUSTOM_MODELS_VERSIONS_ROUTE}".format(model_id=custom_model_id), page
@@ -394,6 +414,8 @@ class TestCustomModelVersionRoutes:
         single_model_root_path,
         repo_root_path,
     ):
+        """A case to test a full payload setup when creating a custom model version."""
+
         file_objs = []
         try:
             regression_model_info._model_path = single_model_root_path
@@ -450,6 +472,8 @@ class TestCustomModelVersionRoutes:
         main_branch_commit_sha,
         pull_request_commit_sha,
     ):
+        """A case to test a minimal payload setup when creating a custom model version."""
+
         payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(
             minimal_regression_model_info,
             ref_name,
@@ -479,6 +503,8 @@ class TestCustomModelVersionRoutes:
         pull_request_commit_sha,
         regression_model_version_response,
     ):
+        """A case to test a successful custom model version creation."""
+
         url = custom_models_version_url_factory()
         responses.add(responses.POST, url, json=regression_model_version_response, status=201)
         dr_client = DrClient(
@@ -508,6 +534,8 @@ class TestCustomModelVersionRoutes:
         pull_request_commit_sha,
         regression_model_version_response,
     ):
+        """A case to test a failure in creating a custom model version."""
+
         status_code = 422
         url = custom_models_version_url_factory()
         responses.add(responses.POST, url, json={}, status=status_code)
@@ -546,6 +574,8 @@ class TestCustomModelVersionRoutes:
         custom_models_version_url_factory,
         regression_model_version_response_factory,
     ):
+        """A case to test a successful retrieval of custom model version."""
+
         expected_versions_in_all_pages = mock_paginated_responses(
             total_num_model_versions,
             num_model_versions_in_page,
@@ -566,17 +596,25 @@ class TestCustomModelVersionRoutes:
             assert fetched_version in total_expected_versions
 
     class TestCustomModelsTestingRoute:
+        """Contains unit-tests to test custom model testing routes."""
+
         @pytest.mark.parametrize("loaded_checks", [None, {}], ids=["none", "empty_dict"])
         def test_minimal_custom_model_testing_configuration(self, loaded_checks):
+            """A case to test minimal configuration for a custom model testing."""
+
             configuration = DrClient._build_tests_configuration(loaded_checks)
             assert configuration == {"longRunningService": "fail", "errorCheck": "fail"}
 
         @pytest.mark.parametrize("loaded_checks", [None, {}], ids=["none", "empty_dict"])
         def test_minimal_custom_model_testing_parameters(self, loaded_checks):
+            """A case to test a minimal number of parameters in custom model testing."""
+
             parameters = DrClient._build_tests_parameters(loaded_checks)
             assert not parameters
 
         def test_full_custom_model_testing_configuration(self, mock_full_custom_model_checks):
+            """A case to test a full configuration of custom model testing."""
+
             assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
             configuration = DrClient._build_tests_configuration(mock_full_custom_model_checks)
             for check in DrApiAttrs.DR_TEST_CHECK_MAP.keys():
@@ -587,6 +625,11 @@ class TestCustomModelVersionRoutes:
         def test_full_custom_model_testing_configuration_with_all_disabled_checks(
             self, mock_full_custom_model_checks
         ):
+            """
+            A case to test a full custom model testing configuration, when all the checks are
+            disabled.
+            """
+
             assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
             for check, info in mock_full_custom_model_checks.items():
                 info[ModelSchema.CHECK_ENABLED_KEY] = False
@@ -594,6 +637,8 @@ class TestCustomModelVersionRoutes:
             assert configuration == {"longRunningService": "fail", "errorCheck": "fail"}
 
         def test_full_custom_model_testing_parameters(self, mock_full_custom_model_checks):
+            """A case to test a full number of parameters in custom model testing."""
+
             assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
             parameters = DrClient._build_tests_parameters(mock_full_custom_model_checks)
             for check in {
@@ -606,6 +651,10 @@ class TestCustomModelVersionRoutes:
         def test_full_custom_model_testing_parameters_with_all_disabled_checks(
             self, mock_full_custom_model_checks
         ):
+            """
+            A case to test a full number of testing parameters, when all the checks are disabled.
+            """
+
             assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
             for check, info in mock_full_custom_model_checks.items():
                 info[ModelSchema.CHECK_ENABLED_KEY] = False
@@ -614,8 +663,12 @@ class TestCustomModelVersionRoutes:
 
 
 class TestDeploymentRoutes:
+    """Contains unit-tests to test the DataRobot deployment routes."""
+
     @pytest.fixture
     def deployment_response_factory(self):
+        """A factory fixture to create a deployment response."""
+
         def _inner(deployment_id):
             return {"id": deployment_id, "gitDeploymentId": f"git-id-{deployment_id}"}
 
@@ -623,6 +676,8 @@ class TestDeploymentRoutes:
 
     @pytest.fixture
     def deployments_url_factory(self, paginated_url_factory):
+        """A factory fixture to create a paginated deployments URLs."""
+
         def _inner(page=0):
             return paginated_url_factory(DrClient.DEPLOYMENTS_ROUTE, page)
 
@@ -649,6 +704,8 @@ class TestDeploymentRoutes:
         deployments_url_factory,
         deployment_response_factory,
     ):
+        """A case to test a successful deployments retrieval."""
+
         expected_deployments_in_all_pages = mock_paginated_responses(
             total_num_deployments,
             num_deployments_in_page,

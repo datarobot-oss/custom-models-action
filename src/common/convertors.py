@@ -1,9 +1,18 @@
+#  Copyright (c) 2022. DataRobot, Inc. and its affiliates.
+#  All rights reserved.
+#  This is proprietary source code of DataRobot, Inc. and its affiliates.
+#  Released under the terms of DataRobot Tool and Utility Agreement.
+
+"""A module that contains conversion classes."""
+
 import re
 
 from common.exceptions import InvalidMemoryValue
 
 
 class MemoryConvertor:
+    """A memory convertor."""
+
     UNIT_TO_BYTES = {
         "m": 0.001,
         "k": 10**3,
@@ -22,6 +31,22 @@ class MemoryConvertor:
 
     @classmethod
     def to_bytes(cls, memory):
+        """
+        Convert a given memory to bytes. If the input memory argument is of type int, it is assumed
+        to be converted already. Otherwise, the expected input is a string, which contains two
+        parts - a number and unit. The pattern follows the patterns in K8S.
+
+        Parameters
+        ----------
+        memory : int or str
+            The memory to be converted into bytes.
+
+        Returns
+        -------
+        int,
+            The memory in bytes.
+        """
+
         if isinstance(memory, int):
             return memory
 

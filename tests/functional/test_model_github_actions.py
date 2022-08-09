@@ -1,3 +1,14 @@
+#  Copyright (c) 2022. DataRobot, Inc. and its affiliates.
+#  All rights reserved.
+#  This is proprietary source code of DataRobot, Inc. and its affiliates.
+#  Released under the terms of DataRobot Tool and Utility Agreement.
+
+"""
+Functional tests for the custom inference model GitHub action. Functional tests are executed
+against a running DataRobot application. If DataRobot is not accessible, the functional tests
+are skipped.
+"""
+
 import contextlib
 from enum import Enum
 import os
@@ -20,6 +31,8 @@ from tests.functional.conftest import webserver_accessible
 
 @pytest.fixture
 def cleanup(dr_client, repo_root_path):
+    """A fixture to delete models in DataRobot that were created from the local source tree."""
+
     yield
 
     cleanup_models(dr_client, repo_root_path)
@@ -28,7 +41,11 @@ def cleanup(dr_client, repo_root_path):
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
 @pytest.mark.usefixtures("build_repo_for_testing", "set_model_dataset_for_testing")
 class TestModelGitHubActions:
+    """Contains an end-to-end test cases for the custom inference model GitHub action."""
+
     class Change(Enum):
+        """An enum to indicate the type of change."""
+
         INCREASE_MEMORY = 1
         ADD_FILE = 2
         REMOVE_FILE = 3
@@ -36,6 +53,8 @@ class TestModelGitHubActions:
 
     @contextlib.contextmanager
     def enable_custom_model_testing(self, model_metadata_yaml_file, model_metadata):
+        """Temporarily enables custom model testing in DataRobot."""
+
         with temporarily_replace_schema_value(
             model_metadata_yaml_file,
             ModelSchema.TEST_KEY,
@@ -56,6 +75,11 @@ class TestModelGitHubActions:
         feature_branch_name,
         merge_branch_name,
     ):
+        """
+        And end-to-end case to test the custom inference model GitHub action when it is
+        executed from a pull request branch with multiple commits.
+        """
+
         files_to_add_and_remove = [
             model_metadata_yaml_file.parent / "some_new_file_1.py",
             model_metadata_yaml_file.parent / "some_new_file_2.py",
@@ -170,10 +194,12 @@ class TestModelGitHubActions:
         merge_branch_name,
     ):
         """
-        This test first creates a PR with a simple change in order to create the model in
-        DataRobot. Afterwards, it creates a another PR to delete the model definition, which
-        should delete the model in DataRobot.
+        An end-to-end case to test model deletion by the custom inference model GitHub action
+        from a pull-request. The test first creates a PR with a simple change in order to create
+        the model in DataRobot. Afterwards, it creates another PR to delete the model definition,
+        which should delete the model in DataRobot.
         """
+
         changes = [self.Change.INCREASE_MEMORY, self.Change.DELETE_MODEL]
 
         # 1. Create a feature branch
@@ -260,6 +286,11 @@ class TestModelGitHubActions:
     def test_e2e_push_event_with_multiple_changes(
         self, repo_root_path, git_repo, model_metadata_yaml_file, main_branch_name
     ):
+        """
+        An end-to-end case to test a push event with multiple commits, by the custom
+        inference model GitHub action.
+        """
+
         # 1. Make three changes, one at a time on the main branch
         printout("Make 3 changes one at a time on the main branch ...")
         for index in range(3):
@@ -275,6 +306,8 @@ class TestModelGitHubActions:
         printout("Done")
 
     def test_is_accessible(self):
+        """A test case to check whether DataRobot webserver is accessible."""
+
         assert webserver_accessible()
 
     @pytest.mark.usefixtures("cleanup", "skip_model_testing")
@@ -287,6 +320,11 @@ class TestModelGitHubActions:
         model_metadata_yaml_file,
         main_branch_name,
     ):
+        """
+        And end-to-end case to test a training dataset assignment for structured model, by the
+        custom inference model GitHub action. The training dataset contains a holdout column.
+        """
+
         # 1. Create a model just as a preliminary requirement (use GitHub action)
         printout(
             "Create a custom model as a preliminary requirement. "
@@ -341,6 +379,11 @@ class TestModelGitHubActions:
         model_metadata_yaml_file,
         main_branch_name,
     ):
+        """
+        An end-to-end case to test training and holdout dataset assignment for unstructured
+        model by the custom inference model GitHub action.
+        """
+
         with temporarily_replace_schema_value(
             model_metadata_yaml_file,
             ModelSchema.TARGET_TYPE_KEY,
@@ -408,6 +451,11 @@ class TestModelGitHubActions:
         model_metadata_yaml_file,
         main_branch_name,
     ):
+        """
+        An end-to-end case to test changes in deployment settings by the custom inference
+        model GitHub action.
+        """
+
         git_model_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
 
         # 1. Create a model just as a preliminary requirement (use GitHub action)

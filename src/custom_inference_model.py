@@ -1,3 +1,18 @@
+#  Copyright (c) 2022. DataRobot, Inc. and its affiliates.
+#  All rights reserved.
+#  This is proprietary source code of DataRobot, Inc. and its affiliates.
+#  Released under the terms of DataRobot Tool and Utility Agreement.
+
+"""
+The implementation of the custom inference model GitHub action. In highlights, it scans
+and loads model definitions from the local source tree, performs validations and then detects
+which models were affected by the last Git action and applies the proper actions in DataRobot
+application.
+"""
+
+import logging
+import os
+import re
 from abc import ABC
 from abc import abstractmethod
 from enum import Enum
@@ -26,7 +41,17 @@ logger = logging.getLogger()
 
 
 class ModelFilePath:
+    """
+    Holds essential information about a single file that belongs to a certain
+    model.
+    """
+
     class RelativeTo(Enum):
+        """
+        An enum to indicate whether a given file path is relative to the model's root dir or
+        to the repository root dir.
+        """
+
         MODEL = 1
         ROOT = 2
 
@@ -45,6 +70,25 @@ class ModelFilePath:
 
     @classmethod
     def get_path_under_model(cls, filepath, model_root_dir, repo_root_dir):
+        """
+        Returns the relative file path of a given model's file from the model's root directory.
+
+        Parameters
+        ----------
+        filepath : pathlib.Path
+            A model's file path.
+        model_root_dir : pathlib.Path
+            The model's root directory.
+        repo_root_dir : pathlib.Path
+            The repository root directory.
+
+        Returns
+        -------
+        tuple(str, ModelFilePath.RelativeTo),
+            The relative path under the model + an enum value to indicate whether the origin
+            path is relative to the model's root dir or to the repostiroy root dir.
+        """
+
         try:
             path_under_model = cls._get_path_under_model_for_given_root(filepath, model_root_dir)
             relative_to = cls.RelativeTo.MODEL
@@ -68,26 +112,36 @@ class ModelFilePath:
 
     @property
     def filepath(self):
+        """A single file path that belongs to the model"""
         return self._filepath
 
     @property
     def name(self):
+        """The file name"""
         return self.filepath.name
 
     @property
     def resolved(self):
+        """The full absolute file path, after resolving all soft links"""
         return self.filepath.resolve()
 
     @property
     def under_model(self):
+        """The final relative file path under the model's as it is stored in DataRobot"""
         return self._under_model
 
     @property
     def relative_to(self):
+        """
+        An enum value that indicates whether the given file is relative to the model's
+        root directory or to the repository root directory.
+        """
         return self._relative_to
 
 
 class ModelInfo:
+    """Holds information about a model inf the local source tree"""
+
     _model_file_paths: Dict[Path, ModelFilePath]
 
     def __init__(self, yaml_filepath, model_path, metadata):
@@ -102,50 +156,73 @@ class ModelInfo:
 
     @property
     def yaml_filepath(self):
+        """The yaml file path from which the given model metadata definition was read from"""
         return self._yaml_filepath
 
     @property
     def model_path(self):
+        """The model's root directory"""
         return self._model_path
 
     @property
     def metadata(self):
+        """The model's metadata"""
         return self._metadata
 
     @property
     def git_model_id(self):
+        """A model's unique ID that is provided by the user and read from the model's metadata"""
         return self.metadata[ModelSchema.MODEL_ID_KEY]
 
     @property
     def model_file_paths(self):
+        """A list of file paths that associated with the given model"""
         return self._model_file_paths
 
     @property
     def is_binary(self):
+        """Whether the given model's target type is binary"""
         return ModelSchema.is_binary(self.metadata)
 
     @property
     def is_regression(self):
+        """Whether the given model's target type is regression"""
         return ModelSchema.is_regression(self.metadata)
 
     @property
     def is_unstructured(self):
+        """Whether the given model's target type is unstructured"""
         return ModelSchema.is_unstructured(self.metadata)
 
     @property
     def is_multiclass(self):
+        """Whether the given model's target type is multi-class"""
         return ModelSchema.is_multiclass(self.metadata)
 
     def main_program_filepath(self):
+        """Returns the main program file path of the given model"""
         try:
             return next(p for _, p in self.model_file_paths.items() if p.name == "custom.py")
         except StopIteration:
             return None
 
     def main_program_exists(self):
+        """Returns whether the main program file path exists or not"""
         return self.main_program_filepath() is not None
 
     def set_model_paths(self, paths, repo_root_path):
+        """
+        Builds a dictionary of the files belong to the given model. The key is a resolved
+        file path of a given file and the value is a ModelFilePath of that same file.
+
+        Parameters
+        ----------
+        paths : list
+            A list of file paths associated with the given model.
+        repo_root_path : pathlib.Path
+            The repository root directory.
+        """
+
         logger.debug(f"Model {self.git_model_id} is set with the following paths: {paths}")
         self._model_file_paths = {}
         for p in paths:
@@ -153,6 +230,20 @@ class ModelInfo:
             self._model_file_paths[model_filepath.resolved] = model_filepath
 
     def paths_under_model_by_relative(self, relative_to):
+        """
+        Returns a list (as a set) of the model's files that subjected to specific relative value.
+
+        Parameters
+        ----------
+        relative_to : ModelFilePath.RelativeTo
+            The relation value.
+
+        Returns
+        -------
+        set,
+            The list of the model's that subjected to the given input relative value.
+        """
+
         return set(
             [
                 p.under_model
@@ -163,10 +254,12 @@ class ModelInfo:
 
     @property
     def is_affected_by_commit(self):
+        """Whether the given model is affected by the last commit"""
         return self.should_create_new_version or self.should_update_settings
 
     @property
     def should_create_new_version(self):
+        """Whether a new custom inference model version should be created"""
         return (
             self.should_upload_all_files
             or self.changed_or_new_files
@@ -176,18 +269,61 @@ class ModelInfo:
 
     @property
     def should_run_test(self):
+        """
+        Querying the model's metadata and check whether a custom model testing should be executed.
+        """
         return ModelSchema.TEST_KEY in self.metadata and not self.get_value(
             ModelSchema.TEST_KEY, ModelSchema.TEST_SKIP_KEY
         )
 
-    def get_value(self, key, *args):
-        return ModelSchema.get_value(self.metadata, key, *args)
+    def get_value(self, key, *sub_keys):
+        """
+        Get a value from the model's metadata given a key and sub-keys.
+
+        Parameters
+        ----------
+        key : str
+            A key name from the ModelSchema.
+        sub_keys :
+            An optional dynamic sub-keys from the ModelSchema.
+
+        Returns
+        -------
+        Any or None,
+            The value associated with the provided key (and sub-keys) or None if not exists.
+        """
+
+        return ModelSchema.get_value(self.metadata, key, *sub_keys)
 
     def get_settings_value(self, key, *sub_keys):
+        """
+        Get a value from the model's metadata settings section, given a key and sub-keys under
+        the settings section.
+
+        Parameters
+        ----------
+        key : str
+            A key name from the ModelSchema, which is supposed to be under the
+            SharedSchema.SETTINGS_SECTION_KEY section.
+        sub_keys :
+            An optional dynamic sub-keys from the ModelSchema, which are under the
+            SharedSchema.SETTINGS_SECTION_KEY section.
+
+        Returns
+        -------
+        Any or None,
+            The value associated with the provided key (and sub-keys) or None if not exists.
+        """
+
         return self.get_value(ModelSchema.SETTINGS_SECTION_KEY, key, *sub_keys)
 
 
 class CustomInferenceModelBase(ABC):
+    """
+    A base class that contains attributes and methods that will be shared by the custom
+    inference model and deployment classes.
+    """
+
     _models_info: Dict[str, ModelInfo]
 
     def __init__(self, options):
@@ -210,25 +346,46 @@ class CustomInferenceModelBase(ABC):
 
     @property
     def options(self):
+        """The command line argument values"""
         return self._options
 
     @property
     def event_name(self):
+        """The event name that triggered the GitHub workflow."""
         return os.environ.get("GITHUB_EVENT_NAME")
 
     @property
     def ref_name(self):
+        """The branch or tag name that triggered the GitHub workflow run."""
         return os.environ.get("GITHUB_REF_NAME")
 
     @property
     def is_pull_request(self):
+        """Whether the event that triggered the GitHub workflow is a pull request."""
         return self.event_name == "pull_request"
 
     @property
     def is_push(self):
+        """Whether the event that triggered the GitHub workflow is a push."""
         return self.event_name == "push"
 
     def ancestor_attribute_ref(self, git_model_version):
+        """
+        The attribute name from DataRobot public API that should be taken into account, depending
+        on the event that triggered the workflow and a reference name that is associated
+        with the latest custom model version.
+
+        Parameters
+        ----------
+        git_model_version : dict
+            The GitModelVersion from a DataRobot custom inference model version entity.
+
+        Returns
+        -------
+        str,
+            The DataRobot public API attribute name.
+        """
+
         latest_custom_model_version_ref_name = git_model_version["refName"]
         if self.is_pull_request and self.ref_name == latest_custom_model_version_ref_name:
             return "pullRequestCommitSha"
@@ -236,27 +393,44 @@ class CustomInferenceModelBase(ABC):
 
     @property
     def github_sha(self):
+        """The commit SHA that triggered the GitHub workflow"""
         return os.environ.get("GITHUB_SHA")
 
     @property
     def github_repository(self):
+        """The owner and repository name from GtiHub"""
         return os.environ.get("GITHUB_REPOSITORY")
 
     @property
     def models_info(self):
+        """A list of model info entities that were loaded from the local repository"""
         return self._models_info
 
     @property
     def datarobot_models(self):
+        """A list of DataRobot model entities that were fetched from DataRobot"""
         return self._datarobot_models
 
     def datarobot_model_by_id(self, model_id):
+        """
+        A DataRobot model entity of a given model ID.
+
+        Parameters
+        ----------
+        model_id : str
+            The model ID.
+
+        Returns
+        -------
+        dict,
+            A DataRobot model entity.
+        """
+
         return self._datarobot_models_by_id.get(model_id)
 
     def run(self):
-        """
-        Executes the GitHub action logic to manage custom inference models
-        """
+        """Executes the GitHub action logic to manage custom inference models"""
+
         try:
             if not self._prerequisites():
                 return
@@ -397,6 +571,8 @@ class CustomInferenceModelBase(ABC):
 
 
 class CustomInferenceModel(CustomInferenceModelBase):
+    """A custom inference model implementation of the GitHub action"""
+
     def __init__(self, options):
         super().__init__(options)
 

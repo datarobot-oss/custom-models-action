@@ -1,3 +1,10 @@
+#  Copyright (c) 2022. DataRobot, Inc. and its affiliates.
+#  All rights reserved.
+#  This is proprietary source code of DataRobot, Inc. and its affiliates.
+#  Released under the terms of DataRobot Tool and Utility Agreement.
+
+"""A module that contains unit-tests for the custom inference model deployment GitHub action."""
+
 import contextlib
 import uuid
 
@@ -22,14 +29,20 @@ from tests.unit.conftest import write_to_file
 
 
 class TestCustomInferenceDeployment:
+    """Contains unit-test for the custom inference deployment GitHub action."""
+
     @pytest.fixture
     def no_deployments(self, common_path_with_code):
+        """A fixture to return a path without deployment definitions in it."""
+
         yield common_path_with_code
 
     @pytest.fixture
     def single_deployment_factory(
         self, repo_root_path, common_path_with_code, excluded_src_path, single_model_factory
     ):
+        """A factory fixture to create a single deployment along with a model."""
+
         def _inner(name, write_metadata=True, git_deployment_id=None, git_model_id=None):
             model_name = f"model_{name}"
             model_metadata = single_model_factory(
@@ -53,6 +66,8 @@ class TestCustomInferenceDeployment:
 
     @pytest.fixture
     def deployments_factory(self, repo_root_path, common_path_with_code, models_factory):
+        """A factory fixture to create deployments with associated models."""
+
         def _inner(num_deployments=2, is_multi=False):
             models_metadata = models_factory(num_deployments, is_multi)
 
@@ -82,11 +97,15 @@ class TestCustomInferenceDeployment:
 
     @pytest.mark.usefixtures("no_deployments")
     def test_scan_and_load_no_deployments(self, options):
+        """Test scanning and loading of deployment definitions."""
+
         custom_inference_deployment = CustomInferenceDeployment(options)
         custom_inference_deployment._scan_and_load_deployments_metadata()
         assert len(custom_inference_deployment._deployments_info) == 0
 
     def test_scan_and_load_already_exists_deployment(self, options, single_deployment_factory):
+        """Tes scanning and loading of an already existing deployments with same IDs."""
+
         same_git_deployment_id = "123"
         single_deployment_factory("deployment_1", git_deployment_id=same_git_deployment_id)
         single_deployment_factory("deployment_2", git_deployment_id=same_git_deployment_id)
@@ -98,6 +117,8 @@ class TestCustomInferenceDeployment:
     def test_scan_and_load_deployments_from_multi_separate_yaml_files(
         self, options, single_deployment_factory, num_deployments
     ):
+        """Test scanning and loading of deployments from multi separated yaml files."""
+
         for counter in range(1, num_deployments + 1):
             single_deployment_factory(str(counter), write_metadata=True)
         custom_inference_deployment = CustomInferenceDeployment(options)
@@ -108,6 +129,10 @@ class TestCustomInferenceDeployment:
     def test_scan_and_load_deployments_from_one_multi_deployments_yaml_file(
         self, options, deployments_factory, num_deployments
     ):
+        """
+        Test scanning and loading of deployments from one multi-deployment definition yaml file.
+        """
+
         deployments_factory(num_deployments, is_multi=True)
         custom_inference_deployment = CustomInferenceDeployment(options)
         custom_inference_deployment._scan_and_load_deployments_metadata()
@@ -123,6 +148,8 @@ class TestCustomInferenceDeployment:
         single_deployment_factory,
         deployments_factory,
     ):
+        """Test scanning and loading of models from both single and multi yaml files."""
+
         deployments_factory(num_multi_deployments, is_multi=True)
         for counter in range(1, num_single_deployments + 1):
             single_deployment_factory(str(counter))
@@ -135,6 +162,8 @@ class TestCustomInferenceDeployment:
 
     @pytest.fixture
     def mock_datarobot_deployments(self):
+        """A fixture to mock DataRobot deployments."""
+
         return [
             {"git_datarobot_deployment_id": "dep-id-1", "git_datarobot_model_id": "model-id-1"},
             {"git_datarobot_deployment_id": "dep-id-2", "git_datarobot_model_id": "model-id-2"},
@@ -143,6 +172,11 @@ class TestCustomInferenceDeployment:
     def test_deployments_fetching_with_no_associated_dr_model_failure(
         self, options, mock_datarobot_deployments
     ):
+        """
+        Test a failure of deployments fetching from DataRobot with no associated DataRobot
+        models.
+        """
+
         with self._mock_datarobot_deployments_with_associated_models(
             mock_datarobot_deployments, with_dr_deployments=True, with_associated_dr_models=False
         ):
@@ -223,6 +257,8 @@ class TestCustomInferenceDeployment:
     def test_deployments_fetching_with_no_dr_latest_model_version_failure(
         self, options, mock_datarobot_deployments
     ):
+        """Test a failure of deployment fetching with no associated latest model version."""
+
         with self._mock_datarobot_deployments_with_associated_models(
             mock_datarobot_deployments,
             with_dr_deployments=True,
@@ -265,6 +301,8 @@ class TestCustomInferenceDeployment:
         git_repo,
         init_repo_for_root_path_factory,
     ):
+        """Test a successful deployments' integrity validation."""
+
         with self._mock_repo_with_datarobot_models(
             deployments_factory, git_repo, init_repo_for_root_path_factory
         ):
@@ -281,6 +319,10 @@ class TestCustomInferenceDeployment:
         git_repo,
         init_repo_for_root_path_factory,
     ):
+        """
+        Test a successful deployments integrity validation with no associated DataRobot
+        deployments.
+        """
         with self._mock_repo_with_datarobot_models(
             deployments_factory,
             git_repo,
@@ -301,6 +343,10 @@ class TestCustomInferenceDeployment:
         git_repo,
         init_repo_for_root_path_factory,
     ):
+        """
+        Test a failure of deployments integrity validation with no associated models.
+        """
+
         with self._mock_repo_with_datarobot_models(
             deployments_factory,
             git_repo,
@@ -323,6 +369,8 @@ class TestCustomInferenceDeployment:
         git_repo,
         init_repo_for_root_path_factory,
     ):
+        """Test a failure of deployments integrity validation with no latest model version."""
+
         with self._mock_repo_with_datarobot_models(
             deployments_factory,
             git_repo,
@@ -346,6 +394,8 @@ class TestCustomInferenceDeployment:
         git_repo,
         init_repo_for_root_path_factory,
     ):
+        """Test a failure of deployments integrity validation with no expected main branch SHA."""
+
         with self._mock_repo_with_datarobot_models(
             deployments_factory,
             git_repo,
