@@ -1,3 +1,12 @@
+#  Copyright (c) 2022. DataRobot, Inc. and its affiliates.
+#  All rights reserved.
+#  This is proprietary source code of DataRobot, Inc. and its affiliates.
+#  Released under the terms of DataRobot Tool and Utility Agreement.
+
+"""
+A module that contains schema validators for model and deployment definitions.
+"""
+
 import logging
 
 from bson import ObjectId
@@ -8,15 +17,20 @@ from schema import Optional
 from schema import Or
 
 from common.convertors import MemoryConvertor
+from common.exceptions import EmptyKey
 from common.exceptions import InvalidModelSchema
 from common.exceptions import InvalidSchema
-from common.exceptions import TooFewKeys
 from common.exceptions import UnexpectedType
 
 logger = logging.getLogger()
 
 
 class SharedSchema:
+    """
+    A shared schema that contains attributes and methods that are shared between model and
+    deployment schemas.
+    """
+
     MODEL_ID_KEY = "git_datarobot_model_id"
     SETTINGS_SECTION_KEY = "settings"
 
@@ -105,7 +119,7 @@ class SharedSchema:
         pass
 
     @staticmethod
-    def get_value(metadata: dict, *keys):
+    def get_value(metadata: dict, key, *sub_keys):
         """
         Extract a value from the metadata, for a given key hierarchy. The assumption is that parent
         keys are always dictionaries.
@@ -114,8 +128,10 @@ class SharedSchema:
         ----------
         metadata : dict
             A model schema dictionary.
-        keys : list[str]
-            A variable number of strings, representing key hierarchy in the metadata.
+        key: str
+           A top level metadata key.
+        sub_keys : list[str]
+            Optional. A variable number of strings, representing sub-keys under the 'key' argument.
 
         Returns
         -------
@@ -127,20 +143,18 @@ class SharedSchema:
                 "Expecting first argument (metadata) to be a dict! "
                 f"type: {type(metadata)}, value: '{metadata}'"
             )
-        if len(keys) < 1:
-            raise TooFewKeys("Invalid number of keys. Expecting at least to one key")
+        if not key:
+            raise EmptyKey("An invalid empty key is provided to read a value from.")
 
-        value = metadata
-        for index, arg in enumerate(keys):
+        value = metadata.get(key)
+        for sub_key in sub_keys:
             if not isinstance(value, dict):
-                value = None
-                break
-
-            value = value.get(arg)
+                return None
+            value = value.get(sub_key)
         return value
 
     @staticmethod
-    def set_value(metadata: dict, *keys, value):
+    def set_value(metadata: dict, key, *sub_keys, value):
         """
         Set a value in the metadata. If the key(s) do not exist, they'll be added.
 
@@ -148,30 +162,45 @@ class SharedSchema:
         ----------
         metadata : dict
             The metadata.
-        keys: tuple
-            A dynamic number of hierarchical keys. Requires at least one.
+        key: str
+            A key name from the associated metadata schema.
+        sub_keys: tuple
+            Optional sub-keys, which are expected to reside under the top level key.
         value : Any
             A value to set
+
+        Returns
+        -------
+        dict,
+            The revised metadata after the value was set.
         """
+
         if not isinstance(metadata, dict):
             raise UnexpectedType(
                 "Expecting first argument (metadata) to be a dict! "
                 f"type: {type(metadata)}, value: '{metadata}'"
             )
-        if len(keys) < 1:
-            raise TooFewKeys("Invalid number of keys. Expecting at least to one key")
 
         section = metadata
-        if len(keys) > 1:  # Nested dictionaries
-            for key in keys[:-1]:
-                if key not in section:
-                    section[key] = {}
-                section = section[key]
+        keys = (key,) + sub_keys
+        for key in keys[:-1]:
+            if key not in section:
+                section[key] = {}
+            section = section[key]
+            if not isinstance(section, dict):
+                raise UnexpectedType(
+                    f"A section in a metadata is expected to be a dict. Section: {section}"
+                )
         section[keys[-1]] = value
+
         return metadata
 
 
 class ModelSchema(SharedSchema):
+    """
+    A schema definition of a custom inference model.
+    """
+
     MULTI_MODELS_KEY = "datarobot_models"
     MODEL_ENTRY_PATH_KEY = "model_path"
     MODEL_ENTRY_META_KEY = "model_metadata"
@@ -370,6 +399,20 @@ class ModelSchema(SharedSchema):
 
     @classmethod
     def is_binary(cls, metadata):
+        """
+        Whether the given model's target type is binary.
+
+        Parameters
+        ----------
+        metadata : dict
+            A single model metadata.
+
+        Returns
+        -------
+        bool,
+            Whether the model's target type is Binary.
+        """
+
         return metadata[ModelSchema.TARGET_TYPE_KEY] in [
             cls.TARGET_TYPE_BINARY_KEY,
             cls.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY,
@@ -377,6 +420,20 @@ class ModelSchema(SharedSchema):
 
     @classmethod
     def is_regression(cls, metadata):
+        """
+        Whether the given model's target type is regression.
+
+        Parameters
+        ----------
+        metadata : dict
+            A single model metadata.
+
+        Returns
+        -------
+        bool,
+            Whether the model's target type is Regression.
+        """
+
         return metadata[ModelSchema.TARGET_TYPE_KEY] in [
             cls.TARGET_TYPE_REGRESSION_KEY,
             cls.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY,
@@ -384,6 +441,20 @@ class ModelSchema(SharedSchema):
 
     @classmethod
     def is_multiclass(cls, metadata):
+        """
+        Whether the given model's target type is multi-class.
+
+        Parameters
+        ----------
+        metadata : dict
+            A single model metadata.
+
+        Returns
+        -------
+        bool,
+            Whether the model's target type is MultiClass.
+        """
+
         return metadata[ModelSchema.TARGET_TYPE_KEY] in [
             cls.TARGET_TYPE_MULTICLASS_KEY,
             cls.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
@@ -391,6 +462,20 @@ class ModelSchema(SharedSchema):
 
     @classmethod
     def is_unstructured(cls, metadata):
+        """
+        Whether the given model's target type is unstructured (vs. structured).
+
+        Parameters
+        ----------
+        metadata : dict
+            A single model metadata.
+
+        Returns
+        -------
+        bool,
+            Whether the model's target is unstructured.
+        """
+
         return metadata[ModelSchema.TARGET_TYPE_KEY] in [
             ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY,
             ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY,
@@ -400,12 +485,42 @@ class ModelSchema(SharedSchema):
 
     @classmethod
     def validate_and_transform_single(cls, model_metadata):
+        """
+        Validate a single model metadata and run transformation to fill in derived and
+        calculated attributes.
+
+        Parameters
+        ----------
+        model_metadata : dict
+            A single model metadata.
+
+        Returns
+        -------
+        dict,
+            A single model metadata.
+        """
+
         model_metadata = cls._validate_and_transform_single(cls.MODEL_SCHEMA, model_metadata)
         logger.debug(f"Model configuration is valid (id: {model_metadata[cls.MODEL_ID_KEY]}).")
         return model_metadata
 
     @classmethod
     def validate_and_transform_multi(cls, multi_models_metadata):
+        """
+        Validate and multi-model metadata and run transformation to fill in derived and
+        calculated attributes.
+
+        Parameters
+        ----------
+        multi_models_metadata : dict
+            A multi-models metadata definition.
+
+        Returns
+        -------
+        dict,
+            A mutli-model metadata.
+        """
+
         multi_model_metadata = cls._validate_and_transform_multi(
             cls.MULTI_MODELS_SCHEMA, multi_models_metadata
         )
@@ -487,6 +602,10 @@ class ModelSchema(SharedSchema):
 
 
 class DeploymentSchema(SharedSchema):
+    """
+    A schema definition of a custom inference model deployment.
+    """
+
     MULTI_DEPLOYMENTS_KEY = "datarobot_deployments"
     DEPLOYMENT_ID_KEY = "git_datarobot_deployment_id"
 
@@ -605,6 +724,21 @@ class DeploymentSchema(SharedSchema):
 
     @classmethod
     def validate_and_transform_single(cls, deployment_metadata):
+        """
+        Validate a single deployment metadata and run transformation to fill in derived and
+        calculated attributes.
+
+        Parameters
+        ----------
+        deployment_metadata : dict
+            A single deployment metadata.
+
+        Returns
+        -------
+        dict,
+            A single deployment metadata.
+
+        """
         transformed = cls._validate_and_transform_single(cls.DEPLOYMENT_SCHEMA, deployment_metadata)
         logger.debug(
             f"Deployment configuration is valid (id: {transformed[cls.DEPLOYMENT_ID_KEY]})."
@@ -613,6 +747,21 @@ class DeploymentSchema(SharedSchema):
 
     @classmethod
     def validate_and_transform_multi(cls, multi_deployments_metadata):
+        """
+        Validate a multi-deployments metadata and run transformation to fill in derived and
+        calculated attributes.
+
+        Parameters
+        ----------
+        multi_deployments_metadata : dict
+            A multi-deployments metadata.
+
+        Returns
+        -------
+        dict,
+            A multi-deployments metadata.
+
+        """
         transformed = cls._validate_and_transform_multi(
             cls.MULTI_DEPLOYMENTS_SCHEMA, multi_deployments_metadata
         )

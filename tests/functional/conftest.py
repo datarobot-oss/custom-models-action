@@ -1,3 +1,10 @@
+#  Copyright (c) 2022. DataRobot, Inc. and its affiliates.
+#  All rights reserved.
+#  This is proprietary source code of DataRobot, Inc. and its affiliates.
+#  Released under the terms of DataRobot Tool and Utility Agreement.
+
+"""A functional test configuration module."""
+
 import contextlib
 import copy
 import logging
@@ -23,6 +30,8 @@ from schema_validator import SharedSchema
 
 
 def webserver_accessible():
+    """Check if DataRobot web server is accessible."""
+
     webserver = os.environ.get("DATAROBOT_WEBSERVER")
     api_token = os.environ.get("DATAROBOT_API_TOKEN")
     if webserver and api_token:
@@ -31,6 +40,8 @@ def webserver_accessible():
 
 
 def cleanup_models(dr_client, repo_root_path):
+    """Delete models in DataRobot, which are defined in the local repository source tree."""
+
     custom_models = dr_client.fetch_custom_models()
     if custom_models:
         for model_yaml_file in repo_root_path.rglob("**/model.yaml"):
@@ -46,15 +57,30 @@ def cleanup_models(dr_client, repo_root_path):
 
 
 def printout(msg):
+    """A common print out method."""
+
     print(msg)
 
 
 def unique_str():
+    """Generate a unique 10-chars long string."""
+
     return f"{random.randint(1, 2 ** 32): 010}"
 
 
 @contextlib.contextmanager
 def github_env_set(env_key, env_value):
+    """
+    Set environment variable to simulate GitHub actions environment.
+
+    Parameters
+    ----------
+    env_key : str
+        Environment variable key.
+    env_value : str
+        Environment variable value.
+    """
+
     does_exist = env_key in os.environ
     if does_exist:
         old_value = os.environ[env_key]
@@ -66,6 +92,8 @@ def github_env_set(env_key, env_value):
 
 @pytest.fixture
 def repo_root_path():
+    """A fixture to create and return a temporary root dir to create a repository in it."""
+
     with TemporaryDirectory() as repo_tree:
         path = Path(repo_tree)
         yield path
@@ -73,6 +101,15 @@ def repo_root_path():
 
 @pytest.fixture
 def git_repo(repo_root_path):
+    """
+    A fixture to initialize a repository in a given root directory.
+
+    Parameters
+    ----------
+    repo_root_path : str
+        The root folder for the source tree.
+    """
+
     repo = Repo.init(repo_root_path)
     repo.config_writer().set_value("user", "name", "functional-test-user").release()
     repo.config_writer().set_value("user", "email", "functional-test@company.com").release()
@@ -84,6 +121,11 @@ def git_repo(repo_root_path):
 
 @pytest.fixture
 def build_repo_for_testing(repo_root_path, git_repo):
+    """
+    A fixture to build a complete source stree with model and deployment definitions in it. Then
+    commit everything into the repository that was initialized in that root dir.
+    """
+
     def _setup_model(src_model_filepath, dst_models_root_dir, model_index):
         dst_model_path = dst_models_root_dir / f"model_{model_index}"
         shutil.copytree(src_model_filepath, dst_model_path)
@@ -145,6 +187,10 @@ def build_repo_for_testing(repo_root_path, git_repo):
 
 @pytest.fixture
 def set_model_dataset_for_testing(dr_client, model_metadata, model_metadata_yaml_file):
+    """
+    A fixture to temporarily upload and set a model's dataset in a model definition and DataRobot.
+    """
+
     if ModelSchema.TEST_KEY in model_metadata:
         test_dataset_filepath = (
             Path(__file__).parent
@@ -196,12 +242,16 @@ def _temporarily_replace_schema(yaml_filepath, *keys, metadata_or_value):
 
 @contextlib.contextmanager
 def temporarily_replace_schema(yaml_filepath, new_metadata):
+    """Temporarily replace a metadata if a given yaml definition."""
+
     with _temporarily_replace_schema(yaml_filepath, metadata_or_value=new_metadata) as new_metadata:
         yield new_metadata
 
 
 @contextlib.contextmanager
 def temporarily_replace_schema_value(yaml_filepath, key, *sub_keys, new_value):
+    """Temporarily replace a value in a given metadata and yaml definition."""
+
     with _temporarily_replace_schema(
         yaml_filepath, key, *sub_keys, metadata_or_value=new_value
     ) as new_metadata:
@@ -210,6 +260,8 @@ def temporarily_replace_schema_value(yaml_filepath, key, *sub_keys, new_value):
 
 @pytest.fixture
 def skip_model_testing(model_metadata, model_metadata_yaml_file):
+    """A fixture to skip model testing in DataRobot."""
+
     origin_test_section = model_metadata.get(ModelSchema.TEST_KEY)
     model_metadata.pop(ModelSchema.TEST_KEY, None)
     with open(model_metadata_yaml_file, "w") as f:
@@ -226,6 +278,8 @@ def skip_model_testing(model_metadata, model_metadata_yaml_file):
 # but, apparently it cannot be used with fixtures.
 @pytest.fixture
 def model_metadata_yaml_file(build_repo_for_testing, repo_root_path, git_repo):
+    """A fixture to load and return the first defined model in the local source tree."""
+
     model_yaml_file = next(repo_root_path.rglob("*_1/model.yaml"))
     with open(model_yaml_file) as f:
         yaml_content = yaml.safe_load(f)
@@ -242,33 +296,45 @@ def model_metadata_yaml_file(build_repo_for_testing, repo_root_path, git_repo):
 
 @pytest.fixture
 def model_metadata(model_metadata_yaml_file):
+    """A fixture to load and return model metadata from a given yaml definition."""
+
     with open(model_metadata_yaml_file) as f:
         return yaml.safe_load(f)
 
 
 @pytest.fixture
 def main_branch_name():
+    """A fixture to return the main branch name."""
+
     return "master"
 
 
 @pytest.fixture
 def feature_branch_name():
+    """A fixture to return the feature branch name."""
+
     return "feature"
 
 
 @pytest.fixture
 def merge_branch_name():
+    """A fixture to return the merge branch name."""
+
     return "merge-feature-branch"
 
 
 @pytest.fixture
 def dr_client():
+    """A fixture to create a DataRobot client."""
+
     webserver = os.environ.get("DATAROBOT_WEBSERVER")
     api_token = os.environ.get("DATAROBOT_API_TOKEN")
     return DrClient(webserver, api_token, verify_cert=False)
 
 
 def increase_model_memory_by_1mb(model_yaml_file):
+    """A method to increase a model's memory in a model definition and save it locally."""
+
     with open(model_yaml_file) as f:
         yaml_content = yaml.safe_load(f)
         memory = ModelSchema.get_value(
@@ -294,6 +360,28 @@ def run_github_action(
     main_branch_head_sha=None,
     allow_deployment_deletion=True,
 ):
+    """
+    Execute a GitHub action. The `is_deploy` attribute determines whether it is a custom
+    inference model action or a deployment action.
+
+    Parameters
+    ----------
+    repo_root_path : str
+        The repository root directory.
+    git_repo : git.Repo
+        A tool to interact with the local Git repository.
+    main_branch_name : str
+        The main branch name.
+    event_name : str
+        The GitHub event name that triggers the workflow.
+    is_deploy : bool
+        Whether it's a deployment or a custom inference model actions.
+    main_branch_head_sha : str, optional
+        The main branch HEAD SHA.
+    allow_deployment_deletion : bool, optional
+        Whether to allow a deployment deletion in DataRobot by the executed action.
+    """
+
     main_branch_head_sha = main_branch_head_sha or git_repo.head.commit.hexsha
     ref_name = main_branch_name if event_name == "push" else "merge-branch"
     with github_env_set("GITHUB_EVENT_NAME", event_name), github_env_set(
@@ -324,6 +412,11 @@ def run_github_action(
 
 @contextlib.contextmanager
 def upload_and_update_dataset(dr_client, dataset_filepath, metadata_yaml_filepath, *settings_keys):
+    """
+    Upload and update a dataset in a settings section, then yield. Upon return, it deletes the
+    dataset from DataRobot.
+    """
+
     dataset_id = None
     try:
         dataset_id = dr_client.upload_dataset(dataset_filepath)

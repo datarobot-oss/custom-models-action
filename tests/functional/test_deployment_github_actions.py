@@ -1,3 +1,13 @@
+#  Copyright (c) 2022. DataRobot, Inc. and its affiliates.
+#  All rights reserved.
+#  This is proprietary source code of DataRobot, Inc. and its affiliates.
+#  Released under the terms of DataRobot Tool and Utility Agreement.
+
+"""
+Functional tests for the deployment GitHub action. Functional tests are executed against a running
+DataRobot application. If DataRobot is not accessible, the functional tests are skipped.
+"""
+
 import contextlib
 import copy
 import os
@@ -25,6 +35,8 @@ from tests.functional.conftest import webserver_accessible
 @pytest.fixture
 @pytest.mark.usefixtures("build_repo_for_testing")
 def deployment_metadata_yaml_file(repo_root_path, git_repo, model_metadata):
+    """A fixture to return a unique deployment from the temporary created local source tree."""
+
     deployment_yaml_file = next(repo_root_path.rglob("**/deployment.yaml"))
     with open(deployment_yaml_file) as f:
         yaml_content = yaml.safe_load(f)
@@ -42,16 +54,20 @@ def deployment_metadata_yaml_file(repo_root_path, git_repo, model_metadata):
 
 @pytest.fixture
 def deployment_metadata(deployment_metadata_yaml_file):
+    """A fixture to load and return a deployment metadata from a given yaml file definition."""
+
     with open(deployment_metadata_yaml_file) as f:
         return yaml.safe_load(f)
 
 
 @pytest.fixture
 def cleanup(dr_client, repo_root_path, deployment_metadata):
+    """A fixture to delete all deployments and models that were created from the source tree."""
+
     yield
 
     try:
-        dr_client.delete_deployment_by_user_id(
+        dr_client.delete_deployment_by_git_id(
             deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         )
     except (IllegalModelDeletion, DataRobotClientError):
@@ -64,6 +80,8 @@ def cleanup(dr_client, repo_root_path, deployment_metadata):
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
 @pytest.mark.usefixtures("build_repo_for_testing")
 class TestDeploymentGitHubActions:
+    """Contains cases to test the deployment GitHub action."""
+
     @contextlib.contextmanager
     def _upload_actuals_dataset(
         self, event_name, dr_client, deployment_metadata, deployment_metadata_yaml_file
@@ -107,6 +125,8 @@ class TestDeploymentGitHubActions:
         main_branch_name,
         event_name,
     ):
+        """An end-to-end case to test a deployment creation."""
+
         # 1. Create a model just as a preliminary requirement (use GitHub action)
         printout(
             "Create a custom model as a preliminary requirement. "
@@ -150,6 +170,8 @@ class TestDeploymentGitHubActions:
         main_branch_name,
         event_name,
     ):
+        """An end-to-end case to test a model replacement in a deployment."""
+
         # Disable challengers
         printout("Disable challengers ...")
         self._enable_challenger(deployment_metadata, deployment_metadata_yaml_file, False)
@@ -251,6 +273,8 @@ class TestDeploymentGitHubActions:
         deployment_metadata_yaml_file,
         main_branch_name,
     ):
+        """An end-to-end case to test a deployment deletion."""
+
         # 1. Create a model just as a basic requirement (use GitHub action)
         printout(
             "Create a custom model as a preliminary requirement. "
@@ -329,6 +353,8 @@ class TestDeploymentGitHubActions:
         main_branch_name,
         event_name,
     ):
+        """An end-to-end case to test challengers in a deployment."""
+
         # Enable challengers (although it is the default)
         printout("Enable challengers ...")
         self._enable_challenger(deployment_metadata, deployment_metadata_yaml_file, True)
@@ -373,6 +399,8 @@ class TestDeploymentGitHubActions:
         main_branch_name,
         event_name,
     ):
+        """An end-to-end case to test changes in deployment settings."""
+
         # 1. Create a model just as a basic requirement (use GitHub action)
         printout(
             "Create a custom model as a preliminary requirement. "

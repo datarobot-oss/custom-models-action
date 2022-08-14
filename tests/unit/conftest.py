@@ -1,3 +1,10 @@
+#  Copyright (c) 2022. DataRobot, Inc. and its affiliates.
+#  All rights reserved.
+#  This is proprietary source code of DataRobot, Inc. and its affiliates.
+#  Released under the terms of DataRobot Tool and Utility Agreement.
+
+"""A configuration test module for unit-tests."""
+
 import logging
 import os
 import uuid
@@ -18,16 +25,25 @@ from schema_validator import ModelSchema
 
 @pytest.fixture
 def repo_root_path():
+    """
+    A fixture to temporarily create and return a root folder in which a repository will be
+    initialized.
+    """
+
     with TemporaryDirectory() as repo_tree:
         yield Path(repo_tree)
 
 
 def write_to_file(file_path, content):
+    """A method to write into a file."""
+
     with open(file_path, "w") as f:
         f.write(content)
 
 
 def make_a_change_and_commit(git_repo, file_paths, index):
+    """Makes a single change in a provided Python files and commit the changes."""
+
     for file_path in file_paths:
         with open(file_path, "a") as f:
             f.write(f"\n# Automatic change ({index})")
@@ -36,6 +52,8 @@ def make_a_change_and_commit(git_repo, file_paths, index):
 
 
 def create_partial_model_schema(is_single=True, num_models=1, with_target_type=False):
+    """Creates a partial model schema in a single/multi model form definitions."""
+
     def _partial_model_schema(name):
         partial_schema = {
             ModelSchema.MODEL_ID_KEY: str(uuid.uuid4()),
@@ -65,6 +83,8 @@ def create_partial_model_schema(is_single=True, num_models=1, with_target_type=F
 
 
 def create_partial_deployment_schema(is_single=True, num_deployments=1):
+    """Creates a partial deployment schema in a single/multi form deployment definition."""
+
     def _partial_deployment_schema(name):
         return {
             DeploymentSchema.DEPLOYMENT_ID_KEY: str(uuid.uuid4()),
@@ -86,16 +106,25 @@ def create_partial_deployment_schema(is_single=True, num_deployments=1):
 
 @pytest.fixture
 def common_path(repo_root_path):
+    """A fixture that returns the common directory path from the repository root."""
+
     return repo_root_path / "common"
 
 
 @pytest.fixture
 def common_filepath(common_path):
+    """A fixture that returns the common.py file path under the common path."""
+
     return common_path / "common.py"
 
 
 @pytest.fixture
 def common_path_with_code(repo_root_path, common_path, common_filepath):
+    """
+    A fixture to create a common path under the repository root dire and occupies it with
+    source code.
+    """
+
     os.makedirs(common_path)
     write_to_file(common_filepath, "# common.py")
     write_to_file(common_path / "util.py", "# Util.py")
@@ -105,13 +134,12 @@ def common_path_with_code(repo_root_path, common_path, common_filepath):
 
 
 @pytest.fixture
-def common_package(common_dir):
-    module_name = str(common_dir).replace("/", ".")
-    return module_name
-
-
-@pytest.fixture
 def excluded_src_path(repo_root_path):
+    """
+    A fixture to create directory and file under the root repository path that will not be
+    part of any model definition.
+    """
+
     excluded_path = repo_root_path / "excluded_path"
     os.makedirs(excluded_path)
     write_to_file(excluded_path / "some_file.py", "# some_file.py")
@@ -120,6 +148,8 @@ def excluded_src_path(repo_root_path):
 
 @pytest.fixture
 def single_model_factory(repo_root_path, common_path_with_code, excluded_src_path):
+    """A factory fixture to create a single model definition."""
+
     def _inner(
         name,
         write_metadata=True,
@@ -166,6 +196,8 @@ def single_model_factory(repo_root_path, common_path_with_code, excluded_src_pat
 
 @pytest.fixture
 def models_factory(repo_root_path, common_path_with_code, single_model_factory):
+    """A fixture to create multiple model definitions."""
+
     def _inner(
         num_models=2,
         is_multi=False,
@@ -203,17 +235,23 @@ def models_factory(repo_root_path, common_path_with_code, single_model_factory):
 
 @pytest.fixture
 def single_model_root_path(repo_root_path):
+    """A fixture to return the first model root path."""
+
     return repo_root_path / "model_0"
 
 
 @pytest.fixture
 def single_model_file_paths(models_factory, single_model_root_path, repo_root_path):
+    """A fixture to return all the file paths below to a just created model."""
+
     models_factory(1)
     return list(single_model_root_path.rglob("*.*"))
 
 
 @pytest.fixture
 def options(repo_root_path):
+    """A fixture to mock a parse args namespace options."""
+
     return Namespace(
         webserver="www.dummy.com",
         api_token="abc123",
@@ -226,12 +264,16 @@ def options(repo_root_path):
 
 @pytest.fixture
 def mock_prerequisites():
+    """A fixture to mock the _prerequisites private method in te GitHub action."""
+
     with patch.object(CustomInferenceModel, "_prerequisites"):
         yield
 
 
 @pytest.fixture
 def mock_github_env_variables():
+    """A fixture to mock GitHub environment variables."""
+
     default_env_vars = {"GITHUB_EVENT_NAME": "push", "GITHUB_BASE_REF": "HEAD~1"}
     with patch.dict(os.environ, default_env_vars):
         yield
@@ -239,24 +281,32 @@ def mock_github_env_variables():
 
 @pytest.fixture
 def mock_fetch_models_from_datarobot():
+    """A fixture to patch the _fetch_models_from_datarobot private method."""
+
     with patch.object(CustomInferenceModel, "_fetch_models_from_datarobot"):
         yield
 
 
 @pytest.fixture
 def mock_model_version_exists():
+    """A fixture to patch the _model_version_exists private method."""
+
     with patch.object(CustomInferenceModel, "_model_version_exists", return_value=True):
         yield
 
 
 @pytest.fixture
 def mock_handle_deleted_models():
+    """A fixture to patch the _handle_deleted_models private method."""
+
     with patch.object(CustomInferenceModel, "_handle_deleted_models", return_value=True):
         yield
 
 
 @pytest.fixture
 def git_repo(repo_root_path):
+    """A fixture to initialize a Git repository in a given root directory."""
+
     repo = Repo.init(repo_root_path)
     repo.config_writer().set_value("user", "name", "test-user").release()
     repo.config_writer().set_value("user", "email", "test@company.com").release()
@@ -268,6 +318,8 @@ def git_repo(repo_root_path):
 
 @pytest.fixture
 def init_repo_for_root_path_factory(repo_root_path, git_repo):
+    """A fixture to commit all changes in a given repository"""
+
     def _inner():
         os.chdir(repo_root_path)
         git_repo.git.add("--all")
@@ -279,6 +331,11 @@ def init_repo_for_root_path_factory(repo_root_path, git_repo):
 
 @pytest.fixture
 def init_repo_with_models_factory(models_factory, init_repo_for_root_path_factory):
+    """
+    A fixture to create models in a given repository, commit the changes and return the
+    repository file path.
+    """
+
     def _inner(
         num_models=2,
         is_multi=False,
@@ -301,6 +358,8 @@ def init_repo_with_models_factory(models_factory, init_repo_for_root_path_factor
 
 @pytest.fixture
 def mock_full_custom_model_checks():
+    """A fixture to get a full custom model test checks."""
+
     return {
         ModelSchema.NULL_VALUE_IMPUTATION_KEY: {
             ModelSchema.CHECK_ENABLED_KEY: True,
@@ -339,6 +398,8 @@ def mock_full_custom_model_checks():
 
 @pytest.fixture
 def mock_full_binary_model_schema(mock_full_custom_model_checks):
+    """A fixture to generate a full Binary model schema."""
+
     return {
         ModelSchema.MODEL_ID_KEY: "abc123",
         ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_BINARY_KEY,
@@ -370,6 +431,8 @@ def mock_full_binary_model_schema(mock_full_custom_model_checks):
 
 @pytest.fixture
 def paginated_url_factory(webserver):
+    """A fixture to emulate a paginated web page URL."""
+
     def _inner(base_url, page=0):
         suffix = "" if page == 0 else f"/page-{page}/"
         return f"{webserver}/api/v2/{base_url}{suffix}"

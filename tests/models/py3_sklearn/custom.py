@@ -1,10 +1,11 @@
+#  Copyright (c) 2022. DataRobot, Inc. and its affiliates.
+#  All rights reserved.
+#  This is proprietary source code of DataRobot, Inc. and its affiliates.
+#  Released under the terms of DataRobot Tool and Utility Agreement.
+
 """
-Copyright 2021 DataRobot, Inc. and its affiliates.
-All rights reserved.
-This is proprietary source code of DataRobot, Inc. and its affiliates.
-Released under the terms of DataRobot Tool and Utility Agreement.
+A super simple example of custom model body with a single 'transform' hook.
 """
-import pandas as pd
 
 
 def transform(data, model):

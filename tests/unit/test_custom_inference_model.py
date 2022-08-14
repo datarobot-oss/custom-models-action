@@ -1,3 +1,10 @@
+#  Copyright (c) 2022. DataRobot, Inc. and its affiliates.
+#  All rights reserved.
+#  This is proprietary source code of DataRobot, Inc. and its affiliates.
+#  Released under the terms of DataRobot Tool and Utility Agreement.
+
+"""A module that contains unit-tests for the custom inference model GitHub action."""
+
 import contextlib
 import os
 from argparse import Namespace
@@ -24,12 +31,18 @@ from tests.unit.conftest import make_a_change_and_commit
 
 
 class TestCustomInferenceModel:
+    """Contains unit-tests for the custom inference model GitHub action."""
+
     @pytest.fixture
     def no_models(self, common_path_with_code):
+        """A fixture to return a path with not model definitions in it."""
+
         yield common_path_with_code
 
     @pytest.mark.usefixtures("no_models")
     def test_scan_and_load_no_models(self, options):
+        """Test models' scanning and loading without existing model definitions."""
+
         custom_inference_model = CustomInferenceModel(options)
         custom_inference_model._scan_and_load_models_metadata()
         assert len(custom_inference_model._models_info) == 0
@@ -38,6 +51,8 @@ class TestCustomInferenceModel:
     def test_scan_and_load_models_from_multi_separate_yaml_files(
         self, options, single_model_factory, num_models
     ):
+        """Test models' scanning and loading from multiple separated yaml files."""
+
         for counter in range(1, num_models + 1):
             single_model_factory(f"model-{counter}", write_metadata=True)
         custom_inference_model = CustomInferenceModel(options)
@@ -47,6 +62,8 @@ class TestCustomInferenceModel:
     def test_scan_and_load_models_with_same_git_model_id_failure(
         self, options, single_model_factory
     ):
+        """Test a failure of models' scanning and loading of multiple models with same ID."""
+
         git_model_id = "same-git-model-id-111"
         single_model_factory(f"model-1", write_metadata=True, git_model_id=git_model_id)
         single_model_factory(f"model-2", write_metadata=True, git_model_id=git_model_id)
@@ -58,6 +75,8 @@ class TestCustomInferenceModel:
     def test_scan_and_load_models_from_one_multi_models_yaml_file(
         self, options, models_factory, num_models
     ):
+        """Test models' scanning and load from a single multi-models yaml definition."""
+
         models_factory(num_models, is_multi=True)
         custom_inference_model = CustomInferenceModel(options)
         custom_inference_model._scan_and_load_models_metadata()
@@ -73,6 +92,8 @@ class TestCustomInferenceModel:
         single_model_factory,
         models_factory,
     ):
+        """Test models' scanning and loading from both multi and single yaml definitions."""
+
         models_factory(num_multi_models, is_multi=True)
         for counter in range(1, num_single_models + 1):
             single_model_factory(f"model-{counter}")
@@ -93,6 +114,8 @@ class TestCustomInferenceModel:
         common_filepath,
         is_multi,
     ):
+        """Test lookup affected models with a push event to the Git repository main branch."""
+
         num_models = 3
         init_repo_with_models_factory(num_models, is_multi=is_multi)
         custom_inference_model = CustomInferenceModel(options)
@@ -145,7 +168,11 @@ class TestCustomInferenceModel:
 
 
 class TestCustomInferenceModelDeletion:
+    """Contains unit-tests for model deletion."""
+
     def test_models_deletion_without_allowed_input_arg(self, options):
+        """Test a failure to delete a model when input argument does not allow it."""
+
         options.allow_model_deletion = False
         custom_inference_model = CustomInferenceModel(options)
         with patch.object(DrClient, "fetch_custom_model_deployments") as mock_fetch_deployments:
@@ -154,10 +181,14 @@ class TestCustomInferenceModelDeletion:
 
     @pytest.fixture
     def git_model_id(self):
+        """A fixture to return a fake user model ID."""
+
         return "git-model-1111"
 
     @pytest.fixture
     def model_id(self):
+        """A fixture to return a fake DataRobot model ID."""
+
         return "model-id-2222"
 
     @contextlib.contextmanager
@@ -198,6 +229,8 @@ class TestCustomInferenceModelDeletion:
     def test_models_deletion_for_pull_request_event_without_deployment(
         self, options, git_model_id, model_id
     ):
+        """Test an undeployed model deletion during a pull request event."""
+
         options.allow_model_deletion = True
         custom_inference_model = CustomInferenceModel(options)
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request"}), self._mock_local_models(
@@ -212,6 +245,8 @@ class TestCustomInferenceModelDeletion:
     def test_models_deletion_for_pull_request_event_with_deployment(
         self, options, git_model_id, model_id
     ):
+        """Test a failure to delete a deployed model during a pull request event."""
+
         options.allow_model_deletion = True
         custom_inference_model = CustomInferenceModel(options)
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request"}), self._mock_local_models(
@@ -227,6 +262,10 @@ class TestCustomInferenceModelDeletion:
     def test_models_deletion_for_push_event_and_no_deployments(
         self, options, git_model_id, model_id
     ):
+        """
+        Test a successful deletion of a model without existing deployments during push event.
+        """
+
         options.allow_model_deletion = True
         custom_inference_model = CustomInferenceModel(options)
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.object(
@@ -242,6 +281,11 @@ class TestCustomInferenceModelDeletion:
             mock_dr_client_delete_cm.assert_called_once()
 
     def test_models_deletion_for_push_event_and_deployment(self, options, git_model_id, model_id):
+        """
+        Test a successful deletion of an undeployed model with other existing deployments during
+        a push event.
+        """
+
         options.allow_model_deletion = True
         custom_inference_model = CustomInferenceModel(options)
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.object(
@@ -261,6 +305,8 @@ class TestCustomInferenceModelDeletion:
     "mock_prerequisites", "mock_fetch_models_from_datarobot", "mock_handle_deleted_models"
 )
 class TestGlobPatterns:
+    """Contains unit-test for glob patters."""
+
     @pytest.mark.parametrize("num_models", [1, 2, 3])
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
     @pytest.mark.parametrize(
@@ -285,6 +331,8 @@ class TestGlobPatterns:
         with_include_glob,
         with_exclude_glob,
     ):
+        """Test include Glob patterns and defaults in a given model definition."""
+
         models_factory(num_models, is_multi, with_include_glob, with_exclude_glob)
         custom_inference_model = CustomInferenceModel(options)
 
@@ -331,6 +379,8 @@ class TestGlobPatterns:
         ],
     )
     def test_filtered_model_paths(self, included_paths, excluded_paths, expected_num_model_files):
+        """Test excluded Glob patterns in a given model definition."""
+
         model_info = ModelInfo("yaml-path", "/m", None)
         with patch("common.git_tool.Repo.init"), patch("custom_inference_model.DrClient"), patch(
             "custom_inference_model.ModelInfo.git_model_id", new_callable=PropertyMock("123")
@@ -344,6 +394,8 @@ class TestGlobPatterns:
 
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
     def test_missing_main_program(self, models_factory, common_path_with_code, options, is_multi):
+        """Test missing main program in a given model."""
+
         models_factory(1, is_multi, include_main_prog=False)
         custom_inference_model = CustomInferenceModel(options)
         with pytest.raises(ModelMainEntryPointNotFound):
@@ -375,6 +427,8 @@ class TestGlobPatterns:
         ],
     )
     def test_local_and_shared_collisions(self, local_paths, shared_paths, collision_expected):
+        """Test collisions between local and shared file paths in a given model definition."""
+
         options = Namespace(
             webserver="www.dummy.com",
             api_token="abc",
