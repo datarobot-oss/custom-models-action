@@ -8,11 +8,12 @@ A module that contains general string operations.
 """
 
 
+# pylint: disable=too-few-public-methods
 class StringUtil:
     """A string utility class."""
 
     @staticmethod
-    def slash_suffix(s):
+    def slash_suffix(url_str):
         """Add a suffix slash if not exists."""
 
-        return s if s.endswith("/") else f"{s}/"
+        return url_str if url_str.endswith("/") else f"{url_str}/"

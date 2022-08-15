@@ -7,16 +7,16 @@
 
 import copy
 from collections import namedtuple
+from itertools import combinations
 
 import pytest
 from bson import ObjectId
 
 from common.exceptions import InvalidModelSchema
-from itertools import combinations
-
 from common.exceptions import InvalidSchema
 from common.exceptions import UnexpectedType
-from schema_validator import ModelSchema, DeploymentSchema
+from schema_validator import DeploymentSchema
+from schema_validator import ModelSchema
 from tests.unit.conftest import create_partial_deployment_schema
 from tests.unit.conftest import create_partial_model_schema
 
@@ -285,10 +285,10 @@ class TestModelSchemaValidator:
         if not is_single:
             regression_model_schema = self._wrap_multi(regression_model_schema)
 
-        with pytest.raises(InvalidSchema) as e:
+        with pytest.raises(InvalidSchema) as ex:
             self._validate_schema(is_single, regression_model_schema)
 
-        assert f"Missing key: '{sub_key if sub_key else key}'" in str(e)
+        assert f"Missing key: '{sub_key if sub_key else key}'" in str(ex)
 
     @staticmethod
     def _wrap_multi(model_schema):
@@ -319,9 +319,9 @@ class TestModelSchemaValidator:
         regression_model_schema[forbidden_key] = "Non allowed extra key"
         if not is_single:
             regression_model_schema = self._wrap_multi(regression_model_schema)
-        with pytest.raises(InvalidSchema) as e:
+        with pytest.raises(InvalidSchema) as ex:
             self._validate_schema(is_single, regression_model_schema)
-        assert f"Wrong key '{forbidden_key}'" in str(e)
+        assert f"Wrong key '{forbidden_key}'" in str(ex)
 
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
     def test_dependent_stability_test_check_keys(self, is_single, regression_model_schema):
@@ -340,11 +340,11 @@ class TestModelSchemaValidator:
         }
         if not is_single:
             regression_model_schema = self._wrap_multi(regression_model_schema)
-        with pytest.raises(InvalidModelSchema) as e:
+        with pytest.raises(InvalidModelSchema) as ex:
             self._validate_schema(is_single, regression_model_schema)
         assert (
             "Stability test check minimum payload size (100) is higher than the maximum (50)"
-            in str(e)
+            in str(ex)
         )
 
 
@@ -395,7 +395,7 @@ class TestModelSchemaGetValue:
         )
         assert returned_value is None
 
-    def test_invalid_metadata_argument(self, mock_full_binary_model_schema):
+    def test_invalid_metadata_argument(self):
         """A case to test an invalid call with a wrong type of the first argument."""
 
         with pytest.raises(UnexpectedType):

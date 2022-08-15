@@ -3,15 +3,18 @@
 #  This is proprietary source code of DataRobot, Inc. and its affiliates.
 #  Released under the terms of DataRobot Tool and Utility Agreement.
 
+# pylint: disable=protected-access
+# pylint: disable=too-many-arguments
+
 """A functional test configuration module."""
 
 import contextlib
 import copy
 import logging
 import os
+import random
 import shutil
 from pathlib import Path
-import random
 from tempfile import TemporaryDirectory
 
 import pytest
@@ -39,17 +42,17 @@ def webserver_accessible():
     return False
 
 
-def cleanup_models(dr_client, repo_root_path):
+def cleanup_models(dr_client_tool, repo_root_path):
     """Delete models in DataRobot, which are defined in the local repository source tree."""
 
-    custom_models = dr_client.fetch_custom_models()
+    custom_models = dr_client_tool.fetch_custom_models()
     if custom_models:
         for model_yaml_file in repo_root_path.rglob("**/model.yaml"):
-            with open(model_yaml_file) as f:
-                model_metadata = yaml.safe_load(f)
+            with open(model_yaml_file, encoding="utf-8") as fd:
+                model_metadata = yaml.safe_load(fd)
 
             try:
-                dr_client.delete_custom_model_by_git_model_id(
+                dr_client_tool.delete_custom_model_by_git_model_id(
                     model_metadata[ModelSchema.MODEL_ID_KEY]
                 )
             except (IllegalModelDeletion, DataRobotClientError):
@@ -90,8 +93,8 @@ def github_env_set(env_key, env_value):
         os.environ[env_key] = old_value
 
 
-@pytest.fixture
-def repo_root_path():
+@pytest.fixture(name="repo_root_path")
+def fixture_repo_root_path():
     """A fixture to create and return a temporary root dir to create a repository in it."""
 
     with TemporaryDirectory() as repo_tree:
@@ -99,8 +102,8 @@ def repo_root_path():
         yield path
 
 
-@pytest.fixture
-def git_repo(repo_root_path):
+@pytest.fixture(name="git_repo")
+def fixture_git_repo(repo_root_path):
     """
     A fixture to initialize a repository in a given root directory.
 
@@ -119,8 +122,8 @@ def git_repo(repo_root_path):
     return repo
 
 
-@pytest.fixture
-def build_repo_for_testing(repo_root_path, git_repo):
+@pytest.fixture(name="build_repo_for_testing")
+def fixture_build_repo_for_testing(repo_root_path, git_repo):
     """
     A fixture to build a complete source stree with model and deployment definitions in it. Then
     commit everything into the repository that was initialized in that root dir.
@@ -131,7 +134,7 @@ def build_repo_for_testing(repo_root_path, git_repo):
         shutil.copytree(src_model_filepath, dst_model_path)
 
         model_metadata_yaml_filepath = next(dst_model_path.rglob("**/model.yaml"))
-        with open(model_metadata_yaml_filepath, "r") as reader:
+        with open(model_metadata_yaml_filepath, encoding="utf-8") as reader:
             model_metadata = yaml.safe_load(reader)
 
         # Set model ID
@@ -148,7 +151,7 @@ def build_repo_for_testing(repo_root_path, git_repo):
             value=new_model_name,
         )
 
-        with open(model_metadata_yaml_filepath, "w") as writer:
+        with open(model_metadata_yaml_filepath, "w", encoding="utf-8") as writer:
             yaml.safe_dump(model_metadata, writer)
 
         return model_metadata
@@ -169,15 +172,15 @@ def build_repo_for_testing(repo_root_path, git_repo):
     shutil.copytree(deployments_src_root_dir, dst_deployments_dir)
 
     deployment_yaml_filepath = next(dst_deployments_dir.glob("deployment.yaml"))
-    with open(deployment_yaml_filepath, "r") as f:
-        deployment_metadata = yaml.safe_load(f)
+    with open(deployment_yaml_filepath, encoding="utf-8") as fd:
+        deployment_metadata = yaml.safe_load(fd)
     DeploymentSchema.set_value(
         deployment_metadata,
         DeploymentSchema.MODEL_ID_KEY,
         value=first_model_metadata[ModelSchema.MODEL_ID_KEY],
     )
-    with open(deployment_yaml_filepath, "w") as f:
-        yaml.safe_dump(deployment_metadata, f)
+    with open(deployment_yaml_filepath, "w", encoding="utf-8") as fd:
+        yaml.safe_dump(deployment_metadata, fd)
 
     # 8. Add files to repo
     os.chdir(repo_root_path)
@@ -220,8 +223,8 @@ def set_model_dataset_for_testing(dr_client, model_metadata, model_metadata_yaml
 def _temporarily_replace_schema(yaml_filepath, *keys, metadata_or_value):
     try:
         origin_metadata = None
-        with open(yaml_filepath) as f:
-            origin_metadata = yaml.safe_load(f)
+        with open(yaml_filepath, encoding="utf-8") as fd:
+            origin_metadata = yaml.safe_load(fd)
 
         if keys:  # Assuming a value replacement
             new_metadata = copy.deepcopy(origin_metadata)
@@ -229,23 +232,23 @@ def _temporarily_replace_schema(yaml_filepath, *keys, metadata_or_value):
         else:  # Assuming a metadata replacement
             new_metadata = metadata_or_value
 
-        with open(yaml_filepath, "w") as f:
-            yaml.safe_dump(new_metadata, f)
+        with open(yaml_filepath, "w", encoding="utf-8") as fd:
+            yaml.safe_dump(new_metadata, fd)
 
         yield new_metadata
 
     finally:
         if origin_metadata:
-            with open(yaml_filepath, "w") as f:
-                yaml.safe_dump(origin_metadata, f)
+            with open(yaml_filepath, "w", encoding="utf-8") as fd:
+                yaml.safe_dump(origin_metadata, fd)
 
 
 @contextlib.contextmanager
 def temporarily_replace_schema(yaml_filepath, new_metadata):
     """Temporarily replace a metadata if a given yaml definition."""
 
-    with _temporarily_replace_schema(yaml_filepath, metadata_or_value=new_metadata) as new_metadata:
-        yield new_metadata
+    with _temporarily_replace_schema(yaml_filepath, metadata_or_value=new_metadata) as metadata:
+        yield metadata
 
 
 @contextlib.contextmanager
@@ -254,8 +257,8 @@ def temporarily_replace_schema_value(yaml_filepath, key, *sub_keys, new_value):
 
     with _temporarily_replace_schema(
         yaml_filepath, key, *sub_keys, metadata_or_value=new_value
-    ) as new_metadata:
-        yield new_metadata
+    ) as metadata:
+        yield metadata
 
 
 @pytest.fixture
@@ -264,29 +267,31 @@ def skip_model_testing(model_metadata, model_metadata_yaml_file):
 
     origin_test_section = model_metadata.get(ModelSchema.TEST_KEY)
     model_metadata.pop(ModelSchema.TEST_KEY, None)
-    with open(model_metadata_yaml_file, "w") as f:
-        yaml.safe_dump(model_metadata, f)
+    with open(model_metadata_yaml_file, "w", encoding="utf-8") as fd:
+        yaml.safe_dump(model_metadata, fd)
 
     yield
 
     model_metadata[ModelSchema.TEST_KEY] = origin_test_section
-    with open(model_metadata_yaml_file, "w") as f:
-        yaml.safe_dump(model_metadata, f)
+    with open(model_metadata_yaml_file, "w", encoding="utf-8") as fd:
+        yaml.safe_dump(model_metadata, fd)
 
 
 # NOTE: it was rather better to use the pytest.mark.usefixture for 'build_repo_for_testing'
 # but, apparently it cannot be used with fixtures.
-@pytest.fixture
-def model_metadata_yaml_file(build_repo_for_testing, repo_root_path, git_repo):
+@pytest.fixture(name="model_metadata_yaml_file")
+def fixture_model_metadata_yaml_file(build_repo_for_testing, repo_root_path, git_repo):
     """A fixture to load and return the first defined model in the local source tree."""
 
+    # pylint: disable=unused-argument
+
     model_yaml_file = next(repo_root_path.rglob("*_1/model.yaml"))
-    with open(model_yaml_file) as f:
-        yaml_content = yaml.safe_load(f)
+    with open(model_yaml_file, encoding="utf-8") as fd:
+        yaml_content = yaml.safe_load(fd)
         yaml_content[ModelSchema.MODEL_ID_KEY] = f"my-awesome-model-{str(ObjectId())}"
 
-    with open(model_yaml_file, "w") as f:
-        yaml.safe_dump(yaml_content, f)
+    with open(model_yaml_file, "w", encoding="utf-8") as fd:
+        yaml.safe_dump(yaml_content, fd)
 
     git_repo.git.add(model_yaml_file)
     git_repo.git.commit("--amend", "--no-edit")
@@ -294,16 +299,16 @@ def model_metadata_yaml_file(build_repo_for_testing, repo_root_path, git_repo):
     return model_yaml_file
 
 
-@pytest.fixture
-def model_metadata(model_metadata_yaml_file):
+@pytest.fixture(name="model_metadata")
+def fixture_model_metadata(model_metadata_yaml_file):
     """A fixture to load and return model metadata from a given yaml definition."""
 
-    with open(model_metadata_yaml_file) as f:
-        return yaml.safe_load(f)
+    with open(model_metadata_yaml_file, encoding="utf-8") as fd:
+        return yaml.safe_load(fd)
 
 
-@pytest.fixture
-def main_branch_name():
+@pytest.fixture(name="main_branch_name")
+def fixture_main_branch_name():
     """A fixture to return the main branch name."""
 
     return "master"
@@ -323,8 +328,8 @@ def merge_branch_name():
     return "merge-feature-branch"
 
 
-@pytest.fixture
-def dr_client():
+@pytest.fixture(name="dr_client")
+def fixture_dr_client():
     """A fixture to create a DataRobot client."""
 
     webserver = os.environ.get("DATAROBOT_WEBSERVER")
@@ -335,8 +340,8 @@ def dr_client():
 def increase_model_memory_by_1mb(model_yaml_file):
     """A method to increase a model's memory in a model definition and save it locally."""
 
-    with open(model_yaml_file) as f:
-        yaml_content = yaml.safe_load(f)
+    with open(model_yaml_file, encoding="utf-8") as fd:
+        yaml_content = yaml.safe_load(fd)
         memory = ModelSchema.get_value(
             yaml_content, ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY
         )
@@ -345,8 +350,8 @@ def increase_model_memory_by_1mb(model_yaml_file):
         new_memory = f"{num_part+1}{unit}"
         yaml_content[ModelSchema.VERSION_KEY][ModelSchema.MEMORY_KEY] = new_memory
 
-    with open(model_yaml_file, "w") as f:
-        yaml.safe_dump(yaml_content, f)
+    with open(model_yaml_file, "w", encoding="utf-8") as fd:
+        yaml.safe_dump(yaml_content, fd)
 
     return new_memory
 
@@ -430,3 +435,33 @@ def upload_and_update_dataset(dr_client, dataset_filepath, metadata_yaml_filepat
     finally:
         if dataset_id:
             dr_client.delete_dataset(dataset_id)
+
+
+@contextlib.contextmanager
+def temporarily_upload_training_dataset_for_structured_model(
+    dr_client, model_metadata_yaml_file, event_name="pull_request"
+):
+    """A method to temporarily upload a training dataset for a structured model."""
+
+    if event_name == "pull_request":
+        yield None, None
+    else:
+        printout("Upload training with holdout dataset for structured model.")
+        datasets_root = Path(__file__).parent / ".." / "datasets"
+        training_and_holdout_dataset_filepath = (
+            datasets_root / "juniors_3_year_stats_regression_structured_training_with_holdout.csv"
+        )
+        with upload_and_update_dataset(
+            dr_client,
+            training_and_holdout_dataset_filepath,
+            model_metadata_yaml_file,
+            ModelSchema.TRAINING_DATASET_KEY,
+        ) as training_dataset_id:
+            partition_column = "partitioning"
+            with temporarily_replace_schema_value(
+                model_metadata_yaml_file,
+                ModelSchema.SETTINGS_SECTION_KEY,
+                ModelSchema.PARTITIONING_COLUMN_KEY,
+                new_value=partition_column,
+            ):
+                yield training_dataset_id, partition_column

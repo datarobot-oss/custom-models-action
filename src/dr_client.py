@@ -3,6 +3,10 @@
 #  This is proprietary source code of DataRobot, Inc. and its affiliates.
 #  Released under the terms of DataRobot Tool and Utility Agreement.
 
+# pylint: disable=too-many-lines
+# pylint: disable=too-many-public-methods
+# pylint: disable=consider-using-with
+
 """
 A lightweight client that provides an interface to interact with DataRobot application. It
 communicates with DataRobot via the published public API.
@@ -168,7 +172,7 @@ class DrClient:
             _next_page = response_json["next"]
             _returned_models = response_json["data"]
             logger.debug(
-                f"Total: {_total_count}, page count: {_page_count}, Next page: {_next_page}"
+                "Total: %d, page count: %d, Next page: %d", _total_count, _page_count, _next_page
             )
             return _returned_models, _next_page
 
@@ -206,7 +210,7 @@ class DrClient:
             )
 
         custom_model = response.json()
-        logger.debug(f"Custom model created successfully (id: {custom_model['id']})")
+        logger.debug("Custom model created successfully (id: %s)", custom_model["id"])
         return custom_model
 
     @classmethod
@@ -272,7 +276,7 @@ class DrClient:
             A list of DataRobot custom model versions.
         """
 
-        logger.debug(f"Fetching custom model versions for model '{custom_model_id}' ...")
+        logger.debug("Fetching custom model versions for model '%s'", custom_model_id)
         return self._paginated_fetch(
             self.CUSTOM_MODELS_VERSIONS_ROUTE.format(model_id=custom_model_id), **kwargs
         )
@@ -295,8 +299,9 @@ class DrClient:
         """
 
         logger.debug(
-            f"Fetching custom model version '{custom_model_version_id}' "
-            f"for model '{custom_model_id}' ..."
+            "Fetching custom model version '%s' for model '%s'",
+            custom_model_version_id,
+            custom_model_id,
         )
         url = self.CUSTOM_MODELS_VERSION_ROUTE.format(
             model_id=custom_model_id, model_ver_id=custom_model_version_id
@@ -327,7 +332,7 @@ class DrClient:
             A DataRobot custom model version if found, otherwise None.
         """
 
-        logger.debug(f"Fetching custom model versions for git model '{git_model_id}' ...")
+        logger.debug("Fetching custom model versions for git model '%s' ...", git_model_id)
 
         custom_model = self.fetch_custom_model_by_git_id(git_model_id)
         if not custom_model:
@@ -339,6 +344,8 @@ class DrClient:
 
         return cm_versions[0]
 
+    # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-locals
     def create_custom_model_version(
         self,
         custom_model_id,
@@ -395,14 +402,14 @@ class DrClient:
                 file_ids_to_delete=file_ids_to_delete,
                 base_env_id=base_env_id,
             )
-            mp = MultipartEncoder(fields=payload)
-            headers = {"Content-Type": mp.content_type}
+            mp_encoder = MultipartEncoder(fields=payload)
+            headers = {"Content-Type": mp_encoder.content_type}
 
             url = self.CUSTOM_MODELS_VERSIONS_ROUTE.format(model_id=custom_model_id)
             if from_latest:
-                response = self._http_requester.patch(url, data=mp, headers=headers)
+                response = self._http_requester.patch(url, data=mp_encoder, headers=headers)
             else:
-                response = self._http_requester.post(url, data=mp, headers=headers)
+                response = self._http_requester.post(url, data=mp_encoder, headers=headers)
         finally:
             for file_obj in file_objs:
                 file_obj.close()
@@ -417,7 +424,7 @@ class DrClient:
             )
 
         version_id = response.json()["id"]
-        logger.info(f"Custom model version created successfully (id: {version_id})")
+        logger.info("Custom model version created successfully (id: %s)", version_id)
         return version_id
 
     @classmethod
@@ -448,7 +455,7 @@ class DrClient:
 
         file_objs = cls._setup_model_version_files(changed_file_paths, file_ids_to_delete, payload)
 
-        is_major = True if changed_file_paths or file_ids_to_delete or base_env_id else False
+        is_major = bool(changed_file_paths or file_ids_to_delete or base_env_id)
         payload.append(("isMajorUpdate", str(is_major)))
 
         if base_env_id:
@@ -543,7 +550,7 @@ class DrClient:
                         f"\nMessage: {result['message']}"
                     )
         logger.debug(
-            f"Custom model testing pass with success. Git model id: {model_info.git_model_id}"
+            "Custom model testing pass with success. Git model id: %s", model_info.git_model_id
         )
 
     def _post_custom_model_test_request(self, model_id, model_version_id, model_info):
@@ -598,8 +605,8 @@ class DrClient:
                 )
         return configuration
 
-    @staticmethod
-    def _build_tests_parameters(loaded_checks):
+    @classmethod
+    def _build_tests_parameters(cls, loaded_checks):
         parameters = {}
         if loaded_checks:
             for check, info in loaded_checks.items():
@@ -608,47 +615,71 @@ class DrClient:
 
                 check_params = {}
                 if check == ModelSchema.PREDICTION_VERIFICATION_KEY:
-                    check_params = {
-                        "datasetId": info[ModelSchema.OUTPUT_DATASET_KEY],
-                        "predictionsColumn": info[ModelSchema.PREDICTIONS_COLUMN],
-                    }
-                    if ModelSchema.MATCH_THRESHOLD_KEY in info:
-                        check_params["matchingRate"] = (
-                            info[ModelSchema.PASSING_MATCH_RATE_KEY] / 100
-                        )
-                    if ModelSchema.PASSING_MATCH_RATE_KEY in info:
-                        check_params["comparisonPrecision"] = info[ModelSchema.MATCH_THRESHOLD_KEY]
+                    check_params.update(cls._get_prediction_verification_check_params(info))
                 elif check == ModelSchema.PERFORMANCE_KEY:
-                    if ModelSchema.MAXIMUM_RESPONSE_TIME_KEY in info:
-                        check_params["maxResponseTime"] = info[
-                            ModelSchema.MAXIMUM_RESPONSE_TIME_KEY
-                        ]
-                    if ModelSchema.MAXIMUM_EXECUTION_TIME in info:
-                        check_params["maxExecutionTime"] = info[ModelSchema.MAXIMUM_EXECUTION_TIME]
-                    if ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY in info:
-                        check_params["numParallelUsers"] = info[
-                            ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY
-                        ]
+                    check_params.update(cls._get_performance_check_params(info))
                 elif check == ModelSchema.STABILITY_KEY:
-                    if ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY in info:
-                        check_params["numPredictions"] = info[
-                            ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY
-                        ]
-                    if ModelSchema.PASSING_RATE_KEY in info:
-                        check_params["passingRate"] = info[ModelSchema.PASSING_RATE_KEY]
-                    if ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY in info:
-                        check_params["numParallelUsers"] = info[
-                            ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY
-                        ]
-                    if ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY in info:
-                        check_params["minPayloadSize"] = info[ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY]
-                    if ModelSchema.MAXIMUM_PAYLOAD_SIZE_KEY in info:
-                        check_params["maxPayloadSize"] = info[ModelSchema.MAXIMUM_PAYLOAD_SIZE_KEY]
+                    check_params.update(cls._get_stability_check_params(info))
 
                 if check_params:
                     dr_check_name = DrApiAttrs.to_dr_test_check(check)
                     parameters[dr_check_name] = check_params
         return parameters
+
+    @staticmethod
+    def _get_prediction_verification_check_params(info):
+        check_params = {
+            "datasetId": info[ModelSchema.OUTPUT_DATASET_KEY],
+            "predictionsColumn": info[ModelSchema.PREDICTIONS_COLUMN],
+        }
+        if ModelSchema.MATCH_THRESHOLD_KEY in info:
+            check_params["matchingRate"] = info[ModelSchema.PASSING_MATCH_RATE_KEY] / 100
+        if ModelSchema.PASSING_MATCH_RATE_KEY in info:
+            check_params["comparisonPrecision"] = info[ModelSchema.MATCH_THRESHOLD_KEY]
+
+        return check_params
+
+    @staticmethod
+    def _get_performance_check_params(info):
+        check_params = {}
+        if ModelSchema.MAXIMUM_RESPONSE_TIME_KEY in info:
+            check_params["maxResponseTime"] = info[ModelSchema.MAXIMUM_RESPONSE_TIME_KEY]
+        if ModelSchema.MAXIMUM_EXECUTION_TIME in info:
+            check_params["maxExecutionTime"] = info[ModelSchema.MAXIMUM_EXECUTION_TIME]
+        if ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY in info:
+            check_params["numParallelUsers"] = info[ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY]
+
+        return check_params
+
+    @staticmethod
+    def _get_stability_check_params(info):
+        check_params = {}
+        if ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY in info:
+            check_params["numPredictions"] = info[ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY]
+        if ModelSchema.PASSING_RATE_KEY in info:
+            check_params["passingRate"] = info[ModelSchema.PASSING_RATE_KEY]
+        if ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY in info:
+            check_params["numParallelUsers"] = info[ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY]
+        if ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY in info:
+            check_params["minPayloadSize"] = info[ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY]
+        if ModelSchema.MAXIMUM_PAYLOAD_SIZE_KEY in info:
+            check_params["maxPayloadSize"] = info[ModelSchema.MAXIMUM_PAYLOAD_SIZE_KEY]
+
+        return check_params
+
+    def fetch_custom_model_tests(self, custom_model_id):
+        """
+        Retrieve custom model tests from DataRobot.
+
+        Returns
+        -------
+        list[dict],
+            A list of DataRobot custom model tests.
+        """
+
+        logger.debug("Fetching custom model tests for DataRobot model ID %s", custom_model_id)
+        params = {"customModelId": custom_model_id}
+        return self._paginated_fetch(self.CUSTOM_MODELS_TEST_ROUTE, params=params)
 
     def upload_dataset(self, dataset_filepath):
         """
@@ -667,17 +698,17 @@ class DrClient:
 
         with open(dataset_filepath, "rb") as dataset_file:
             data = {"file": (str(dataset_filepath), dataset_file)}
-            mp = MultipartEncoder(fields=data)
-            headers = {"Content-Type": mp.content_type}
+            mp_encoder = MultipartEncoder(fields=data)
+            headers = {"Content-Type": mp_encoder.content_type}
             response = self._http_requester.post(
-                self.DATASET_UPLOAD_ROUTE, data=mp, headers=headers
+                self.DATASET_UPLOAD_ROUTE, data=mp_encoder, headers=headers
             )
             if response.status_code != 202:
                 raise DataRobotClientError(f"Failed uploading dataset. Response: {response.text}")
         location = response.headers["Location"]
         resource = self._wait_for_async_resolution(location)
         dataset_id = resource.split("/")[-2]
-        logger.debug(f"Dataset uploaded successfully (id: {dataset_id})")
+        logger.debug("Dataset uploaded successfully (id: %s)", dataset_id)
         return dataset_id
 
     def delete_dataset(self, dataset_id):
@@ -709,7 +740,7 @@ class DrClient:
             A list of DataRobot deployments.
         """
 
-        logger.debug(f"Fetching custom model deployments for model ids: '{model_ids}' ...")
+        logger.debug("Fetching custom model deployments for model ids: '%s'", model_ids)
 
         return self._paginated_fetch(
             self.CUSTOM_MODEL_DEPLOYMENTS_ROUTE, json={"customModelIds": model_ids}
@@ -725,7 +756,7 @@ class DrClient:
             A list of DataRobot deployments.
         """
 
-        logger.debug("Fetching deployments...")
+        logger.debug("Fetching deployments.")
         return self._paginated_fetch(self.DEPLOYMENTS_ROUTE)
 
     def fetch_deployment_by_git_id(self, git_deployment_id):
@@ -916,19 +947,14 @@ class DrClient:
         response = self._http_requester.get(location, raw=True)
         return response.json()
 
-    @staticmethod
-    def _setup_association_payload(deployment_info, actual_settings):
+    @classmethod
+    def _setup_association_payload(cls, deployment_info, actual_settings):
         association_payload = {}
-        desired_association_pred_id = deployment_info.get_settings_value(
-            DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_PRED_ID_KEY
-        )
-        if desired_association_pred_id is not None:
-            actuals_cols = (
-                actual_settings["associationId"]["columnNames"] if actual_settings else None
+        if cls.should_submit_new_actuals(deployment_info, actual_settings):
+            association_col_name = deployment_info.get_settings_value(
+                DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_PRED_ID_KEY
             )
-            desired_association_pred_id = [desired_association_pred_id]
-            if desired_association_pred_id != actuals_cols:
-                association_payload["columnNames"] = desired_association_pred_id
+            association_payload["columnNames"] = [association_col_name]
 
         desired_required = deployment_info.get_settings_value(
             DeploymentSchema.ASSOCIATION_KEY,
@@ -945,6 +971,35 @@ class DrClient:
                 association_payload["requiredInPredictionRequests"] = desired_required
 
         return association_payload
+
+    @staticmethod
+    def should_submit_new_actuals(deployment_info, actual_settings):
+        """
+        New actuals are assumed to be submitted only if the association ID was changed.
+
+        Parameters
+        ----------
+        deployment_info : DeploymentInfo
+            The deployment info.
+        actual_settings : dict
+            The actual deployment settings from DataRobot.
+
+        Returns
+        -------
+        bool,
+            Whether the actuals should be submitted or not
+        """
+
+        desired_association_pred_id = deployment_info.get_settings_value(
+            DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_PRED_ID_KEY
+        )
+        if desired_association_pred_id is not None:
+            actuals_cols = (
+                actual_settings["associationId"]["columnNames"] if actual_settings else None
+            )
+            desired_association_pred_id = [desired_association_pred_id]
+            return desired_association_pred_id != actuals_cols
+        return False
 
     @staticmethod
     def _setup_segmented_analysis(deployment_info, actual_settings):
@@ -1092,10 +1147,10 @@ class DrClient:
             test_deployment = next(
                 d for d in deployments if d.get("gitDeploymentId") == git_deployment_id
             )
-        except StopIteration:
+        except StopIteration as ex:
             raise IllegalModelDeletion(
                 f"Given deployment does not exist. git_deployment_id: {git_deployment_id}."
-            )
+            ) from ex
         self.delete_deployment_by_id(test_deployment["id"])
 
     def _fetch_prediction_environments(self, name=None):
@@ -1148,7 +1203,8 @@ class DrClient:
         validation_message = validation_response["message"]
         if validation_status == "failing":
             raise DataRobotClientError(validation_message)
-        elif validation_status == "warning":
+
+        if validation_status == "warning":
             logger.warning(validation_message)
         else:
             logger.info(validation_message)

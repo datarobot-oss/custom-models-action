@@ -15,12 +15,9 @@ import os
 import re
 from abc import ABC
 from abc import abstractmethod
-from enum import Enum
+from dataclasses import dataclass
 from glob import glob
 from pathlib import Path
-import logging
-import os
-import re
 from typing import Dict
 
 import yaml
@@ -30,292 +27,15 @@ from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
 from common.exceptions import ModelMainEntryPointNotFound
 from common.exceptions import ModelMetadataAlreadyExists
-from common.exceptions import PathOutsideTheRepository
 from common.exceptions import SharedAndLocalPathCollision
 from common.exceptions import UnexpectedResult
 from common.git_tool import GitTool
 from dr_client import DrClient
+from model_file_path import ModelFilePath
+from model_info import ModelInfo
 from schema_validator import ModelSchema
 
 logger = logging.getLogger()
-
-
-class ModelFilePath:
-    """
-    Holds essential information about a single file that belongs to a certain
-    model.
-    """
-
-    class RelativeTo(Enum):
-        """
-        An enum to indicate whether a given file path is relative to the model's root dir or
-        to the repository root dir.
-        """
-
-        MODEL = 1
-        ROOT = 2
-
-    def __init__(self, raw_file_path, model_root_dir, repo_root_dir):
-        self._raw_file_path = raw_file_path
-        self._filepath = Path(raw_file_path)
-        # It is important to have an indication about the path origin and the relation to
-        # the model, means whether the given path was originally under the model's root dir
-        # or it is supposed to be copied into it. This will help us to detect collisions
-        # between paths that exist under the model versus those that are supposed to be copied.
-        path_under_model, relative_to = self.get_path_under_model(
-            self._filepath, model_root_dir, repo_root_dir
-        )
-        self._under_model = path_under_model
-        self._relative_to = relative_to
-
-    @classmethod
-    def get_path_under_model(cls, filepath, model_root_dir, repo_root_dir):
-        """
-        Returns the relative file path of a given model's file from the model's root directory.
-
-        Parameters
-        ----------
-        filepath : pathlib.Path
-            A model's file path.
-        model_root_dir : pathlib.Path
-            The model's root directory.
-        repo_root_dir : pathlib.Path
-            The repository root directory.
-
-        Returns
-        -------
-        tuple(str, ModelFilePath.RelativeTo),
-            The relative path under the model + an enum value to indicate whether the origin
-            path is relative to the model's root dir or to the repostiroy root dir.
-        """
-
-        try:
-            path_under_model = cls._get_path_under_model_for_given_root(filepath, model_root_dir)
-            relative_to = cls.RelativeTo.MODEL
-        except ValueError:
-            try:
-                path_under_model = cls._get_path_under_model_for_given_root(filepath, repo_root_dir)
-                relative_to = cls.RelativeTo.ROOT
-            except ValueError:
-                raise PathOutsideTheRepository(
-                    f"Model file path is outside the repository: {filepath}"
-                )
-        return path_under_model, relative_to
-
-    @staticmethod
-    def _get_path_under_model_for_given_root(filepath, root):
-        relative_path = filepath.relative_to(root)
-        return str(relative_path).replace("../", "")  # Will be copied under the model
-
-    def __str__(self):
-        return self.under_model
-
-    @property
-    def filepath(self):
-        """A single file path that belongs to the model"""
-        return self._filepath
-
-    @property
-    def name(self):
-        """The file name"""
-        return self.filepath.name
-
-    @property
-    def resolved(self):
-        """The full absolute file path, after resolving all soft links"""
-        return self.filepath.resolve()
-
-    @property
-    def under_model(self):
-        """The final relative file path under the model's as it is stored in DataRobot"""
-        return self._under_model
-
-    @property
-    def relative_to(self):
-        """
-        An enum value that indicates whether the given file is relative to the model's
-        root directory or to the repository root directory.
-        """
-        return self._relative_to
-
-
-class ModelInfo:
-    """Holds information about a model inf the local source tree"""
-
-    _model_file_paths: Dict[Path, ModelFilePath]
-
-    def __init__(self, yaml_filepath, model_path, metadata):
-        self._yaml_filepath = Path(yaml_filepath)
-        self._model_path = Path(model_path)
-        self._metadata = metadata
-        self._model_file_paths = {}
-        self.should_upload_all_files = False
-        self.changed_or_new_files = []
-        self.deleted_file_ids = []
-        self.should_update_settings = False
-
-    @property
-    def yaml_filepath(self):
-        """The yaml file path from which the given model metadata definition was read from"""
-        return self._yaml_filepath
-
-    @property
-    def model_path(self):
-        """The model's root directory"""
-        return self._model_path
-
-    @property
-    def metadata(self):
-        """The model's metadata"""
-        return self._metadata
-
-    @property
-    def git_model_id(self):
-        """A model's unique ID that is provided by the user and read from the model's metadata"""
-        return self.metadata[ModelSchema.MODEL_ID_KEY]
-
-    @property
-    def model_file_paths(self):
-        """A list of file paths that associated with the given model"""
-        return self._model_file_paths
-
-    @property
-    def is_binary(self):
-        """Whether the given model's target type is binary"""
-        return ModelSchema.is_binary(self.metadata)
-
-    @property
-    def is_regression(self):
-        """Whether the given model's target type is regression"""
-        return ModelSchema.is_regression(self.metadata)
-
-    @property
-    def is_unstructured(self):
-        """Whether the given model's target type is unstructured"""
-        return ModelSchema.is_unstructured(self.metadata)
-
-    @property
-    def is_multiclass(self):
-        """Whether the given model's target type is multi-class"""
-        return ModelSchema.is_multiclass(self.metadata)
-
-    def main_program_filepath(self):
-        """Returns the main program file path of the given model"""
-        try:
-            return next(p for _, p in self.model_file_paths.items() if p.name == "custom.py")
-        except StopIteration:
-            return None
-
-    def main_program_exists(self):
-        """Returns whether the main program file path exists or not"""
-        return self.main_program_filepath() is not None
-
-    def set_model_paths(self, paths, repo_root_path):
-        """
-        Builds a dictionary of the files belong to the given model. The key is a resolved
-        file path of a given file and the value is a ModelFilePath of that same file.
-
-        Parameters
-        ----------
-        paths : list
-            A list of file paths associated with the given model.
-        repo_root_path : pathlib.Path
-            The repository root directory.
-        """
-
-        logger.debug(f"Model {self.git_model_id} is set with the following paths: {paths}")
-        self._model_file_paths = {}
-        for p in paths:
-            model_filepath = ModelFilePath(p, self.model_path, repo_root_path)
-            self._model_file_paths[model_filepath.resolved] = model_filepath
-
-    def paths_under_model_by_relative(self, relative_to):
-        """
-        Returns a list (as a set) of the model's files that subjected to specific relative value.
-
-        Parameters
-        ----------
-        relative_to : ModelFilePath.RelativeTo
-            The relation value.
-
-        Returns
-        -------
-        set,
-            The list of the model's that subjected to the given input relative value.
-        """
-
-        return set(
-            [
-                p.under_model
-                for _, p in self.model_file_paths.items()
-                if p.relative_to == relative_to
-            ]
-        )
-
-    @property
-    def is_affected_by_commit(self):
-        """Whether the given model is affected by the last commit"""
-        return self.should_create_new_version or self.should_update_settings
-
-    @property
-    def should_create_new_version(self):
-        """Whether a new custom inference model version should be created"""
-        return (
-            self.should_upload_all_files
-            or self.changed_or_new_files
-            or self.get_value(ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY)
-            or self.get_value(ModelSchema.VERSION_KEY, ModelSchema.REPLICAS_KEY)
-        )
-
-    @property
-    def should_run_test(self):
-        """
-        Querying the model's metadata and check whether a custom model testing should be executed.
-        """
-        return ModelSchema.TEST_KEY in self.metadata and not self.get_value(
-            ModelSchema.TEST_KEY, ModelSchema.TEST_SKIP_KEY
-        )
-
-    def get_value(self, key, *sub_keys):
-        """
-        Get a value from the model's metadata given a key and sub-keys.
-
-        Parameters
-        ----------
-        key : str
-            A key name from the ModelSchema.
-        sub_keys :
-            An optional dynamic sub-keys from the ModelSchema.
-
-        Returns
-        -------
-        Any or None,
-            The value associated with the provided key (and sub-keys) or None if not exists.
-        """
-
-        return ModelSchema.get_value(self.metadata, key, *sub_keys)
-
-    def get_settings_value(self, key, *sub_keys):
-        """
-        Get a value from the model's metadata settings section, given a key and sub-keys under
-        the settings section.
-
-        Parameters
-        ----------
-        key : str
-            A key name from the ModelSchema, which is supposed to be under the
-            SharedSchema.SETTINGS_SECTION_KEY section.
-        sub_keys :
-            An optional dynamic sub-keys from the ModelSchema, which are under the
-            SharedSchema.SETTINGS_SECTION_KEY section.
-
-        Returns
-        -------
-        Any or None,
-            The value associated with the provided key (and sub-keys) or None if not exists.
-        """
-
-        return self.get_value(ModelSchema.SETTINGS_SECTION_KEY, key, *sub_keys)
 
 
 class CustomInferenceModelBase(ABC):
@@ -325,6 +45,28 @@ class CustomInferenceModelBase(ABC):
     """
 
     _models_info: Dict[str, ModelInfo]
+
+    @dataclass
+    class Stats:
+        """Contains statistics attributes that will be exposed by the GitHub actions."""
+
+        total_affected: int = 0
+        total_created: int = 0
+        total_deleted: int = 0
+
+        def print(self, label):
+            """
+            Print the statistics to the standard output. This is how the GitHub action
+            exposes statistics to other steps in the workflow.
+            """
+
+            print(
+                f"""
+                ::set-output name=total-affected-{label}::{self.total_affected}
+                ::set-output name=total-created-{label}::{self.total_created}
+                ::set-output name=total-deleted-{label}::{self.total_deleted}
+                """
+            )
 
     def __init__(self, options):
         self._options = options
@@ -337,12 +79,14 @@ class CustomInferenceModelBase(ABC):
             self.options.api_token,
             verify_cert=not self.options.skip_cert_verification,
         )
-        self._total_affected = 0
-        self._total_created = 0
-        self._total_deleted = 0
-        logger.info(f"GITHUB_EVENT_NAME: {self.event_name}")
-        logger.info(f"GITHUB_SHA: {self.github_sha}")
-        logger.info(f"GITHUB_REPOSITORY: {self.github_repository}")
+        self._stats = self.Stats()
+        logger.info(
+            "GITHUB_EVENT_NAME: %s, GITHUB_SHA: %s, GITHUB_REPOSITORY: %s, GITHUB_REF_NAME: %s",
+            self.event_name,
+            self.github_sha,
+            self.github_repository,
+            self.ref_name,
+        )
 
     @property
     def options(self):
@@ -353,6 +97,16 @@ class CustomInferenceModelBase(ABC):
     def event_name(self):
         """The event name that triggered the GitHub workflow."""
         return os.environ.get("GITHUB_EVENT_NAME")
+
+    @property
+    def github_sha(self):
+        """The commit SHA that triggered the GitHub workflow"""
+        return os.environ.get("GITHUB_SHA")
+
+    @property
+    def github_repository(self):
+        """The owner and repository name from GtiHub"""
+        return os.environ.get("GITHUB_REPOSITORY")
 
     @property
     def ref_name(self):
@@ -392,16 +146,6 @@ class CustomInferenceModelBase(ABC):
         return "mainBranchCommitSha"
 
     @property
-    def github_sha(self):
-        """The commit SHA that triggered the GitHub workflow"""
-        return os.environ.get("GITHUB_SHA")
-
-    @property
-    def github_repository(self):
-        """The owner and repository name from GtiHub"""
-        return os.environ.get("GITHUB_REPOSITORY")
-
-    @property
     def models_info(self):
         """A list of model info entities that were loaded from the local repository"""
         return self._models_info
@@ -438,29 +182,27 @@ class CustomInferenceModelBase(ABC):
             self._scan_and_load_models_metadata()
             self._run()
         finally:
-            print(
-                f"""
-                ::set-output name=total-affected-{self._label()}::{self._total_affected}
-                ::set-output name=total-created-{self._label()}::{self._total_created}
-                ::set-output name=total-deleted-{self._label()}::{self._total_deleted}
-                """
-            )
+            self._stats.print(self._label())
 
     def _prerequisites(self):
         supported_events = ["push", "pull_request"]
         if self.event_name not in supported_events:
             logger.warning(
                 "Skip custom inference model action. It is expected to be executed only "
-                f"on {supported_events} events. Current event: {self.event_name}."
+                "on %s events. Current event: %s.",
+                supported_events,
+                self.event_name,
             )
             return False
 
         base_ref = os.environ.get("GITHUB_BASE_REF")
-        logger.info(f"GITHUB_BASE_REF: {base_ref}.")
+        logger.info("GITHUB_BASE_REF: %s.", base_ref)
         if self.is_pull_request and base_ref != self.options.branch:
             logger.info(
                 "Skip custom inference model action. It is executed only when the referenced "
-                f"branch is {self.options.branch}. Current ref branch: {base_ref}."
+                "branch is %s. Current ref branch: %s.",
+                self.options.branch,
+                base_ref,
             )
             return False
 
@@ -478,7 +220,8 @@ class CustomInferenceModelBase(ABC):
             if num_commits < 2:
                 logger.warning(
                     "Skip custom inference model action. The minimum number of commits "
-                    f"should be 2. Current number is {num_commits}."
+                    "should be 2. Current number is %d.",
+                    num_commits,
                 )
                 return False
         return True
@@ -506,8 +249,8 @@ class CustomInferenceModelBase(ABC):
         yaml_files = glob(f"{self.options.root_dir}/**/*.yaml", recursive=True)
         yaml_files.extend(glob(f"{self.options.root_dir}/**/*.yml", recursive=True))
         for yaml_path in yaml_files:
-            with open(yaml_path) as f:
-                yield yaml_path, yaml.safe_load(f)
+            with open(yaml_path, encoding="utf-8") as fd:
+                yield yaml_path, yaml.safe_load(fd)
 
     def _to_absolute(self, path, parent):
         match = re.match(r"^(/|\$ROOT/)", path)
@@ -522,12 +265,13 @@ class CustomInferenceModelBase(ABC):
         if model_info.git_model_id in self.models_info:
             raise ModelMetadataAlreadyExists(
                 f"Model {model_info.git_model_id} already exists. "
-                f"New model yaml path: {model_info.yaml_filepath}. "
+                f"New model yaml path: {model_info.yaml_filepath}."
             )
 
         logger.info(
-            f"Adding new model metadata. Git model ID: {model_info.git_model_id}. "
-            f"Model metadata yaml path: {model_info.yaml_filepath}."
+            "Adding new model metadata. Git model ID: %s. Model metadata yaml path: %s.",
+            model_info.git_model_id,
+            model_info.yaml_filepath,
         )
         self.models_info[model_info.git_model_id] = model_info
 
@@ -544,8 +288,9 @@ class CustomInferenceModelBase(ABC):
                 latest_version = model_versions[0] if model_versions else None
                 if not latest_version:
                     logger.warning(
-                        "Model exists without a version! git_model_id: "
-                        f"{git_model_id}, custom_model_id: {datarobot_model_id}"
+                        "Model exists without a version! git_model_id: %s, custom_model_id: %s",
+                        git_model_id,
+                        datarobot_model_id,
                     )
                 datarobot_model = DataRobotModel(custom_model, latest_version)
                 self.datarobot_models[git_model_id] = datarobot_model
@@ -573,9 +318,6 @@ class CustomInferenceModelBase(ABC):
 class CustomInferenceModel(CustomInferenceModelBase):
     """A custom inference model implementation of the GitHub action"""
 
-    def __init__(self, options):
-        super().__init__(options)
-
     def _label(self):
         return "models"
 
@@ -590,19 +332,10 @@ class CustomInferenceModel(CustomInferenceModelBase):
         3. Per affected model, create a new version in DataRobot and run tests.
         """
 
-        try:
-            self._collect_datarobot_model_files()
-            self._fetch_models_from_datarobot()
-            self._lookup_affected_models_by_the_current_action()
-            self._apply_datarobot_actions_for_affected_models()
-        finally:
-            print(
-                f"""
-                ::set-output name=total-affected-models::{self._total_affected}
-                ::set-output name=total-created-models::{self._total_created}
-                ::set-output name=total-deleted-models::{self._total_deleted}
-                """
-            )
+        self._collect_datarobot_model_files()
+        self._fetch_models_from_datarobot()
+        self._lookup_affected_models_by_the_current_action()
+        self._apply_datarobot_actions_for_affected_models()
 
     def _collect_datarobot_model_files(self):
         logger.info("Collecting DataRobot model files ...")
@@ -638,7 +371,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
                 model_info, included_paths, excluded_paths, self.options.root_dir
             )
             self._validate_model_integrity(model_info)
-            logger.info(f"Model {model_info.model_path} detected and verified.")
+            logger.info("Model %s detected and verified.", model_info.model_path)
 
     @classmethod
     def _set_filtered_model_paths(cls, model_info, included_paths, excluded_paths, repo_root_dir):
@@ -675,9 +408,8 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def _validate_model_integrity(self, model_info):
         if not model_info.main_program_exists():
             raise ModelMainEntryPointNotFound(
-                f"Model (Id: {model_info.git_model_id}) main entry point "
-                f"not found (custom.py).\n"
-                f"Existing files: {model_info.model_file_paths}"
+                f"Model (Id: {model_info.git_model_id}) main entry point not found ("
+                f"custom.py).\nExisting files: {model_info.model_file_paths}"
             )
 
         self._validate_collision_between_local_and_shared(model_info)
@@ -693,7 +425,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
         collisions = paths_relative_to_model & paths_relative_to_root
         if collisions:
             raise SharedAndLocalPathCollision(
-                f"Invalid file tree. Shared file(s)/package(s) collide with local model's "
+                "Invalid file tree. Shared file(s)/package(s) collide with local model's "
                 f"file(s)/package(s). Collisions: {collisions}."
             )
 
@@ -701,33 +433,22 @@ class CustomInferenceModel(CustomInferenceModelBase):
         logger.info("Lookup affected models by the current commit ...")
 
         for _, model_info in self.models_info.items():
-            model_info.should_upload_all_files = self._should_upload_all_files(model_info)
-            model_info.should_update_settings = model_info.should_upload_all_files
+            should_upload_all_files = self._should_upload_all_files(model_info)
+            model_info.flags = model_info.Flags(
+                should_upload_all_files=should_upload_all_files,
+                should_update_settings=should_upload_all_files,
+            )
 
         self._lookup_affected_models()
 
     def _should_upload_all_files(self, model_info):
-        return (
-            not self._model_version_exists(model_info)
-            or self._is_dirty(model_info)
-            or not self._valid_ancestor(model_info)
-        )
+        return not self._model_version_exists(model_info) or not self._valid_ancestor(model_info)
 
     def _model_version_exists(self, model_info):
         return (
             model_info.git_model_id in self.datarobot_models
             and self.datarobot_models[model_info.git_model_id].latest_version
         )
-
-    @staticmethod
-    def _is_dirty(model_info):
-        # TODO: Add support for 'dirty' in DataRobot for any action that was done by a non GitHub
-        #       action client
-        logger.warning(
-            f"Add support to check 'dirty' marker for custom model version. "
-            f"git_model_id: {model_info.git_model_id}"
-        )
-        return False
 
     def _valid_ancestor(self, model_info):
         ancestor_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
@@ -737,8 +458,11 @@ class CustomInferenceModel(CustomInferenceModelBase):
         # Users may have few local commits between remote pushes
         is_ancestor = self._repo.is_ancestor_of(ancestor_sha, self.github_sha)
         logger.debug(
-            f"Is the latest model version's git commit sha ({ancestor_sha}) "
-            f"ancestor of the current commit ({self.github_sha})? Answer: {is_ancestor}"
+            "Is the latest model version's git commit sha (%s) "
+            "ancestor of the current commit (%s)? Answer: %s",
+            ancestor_sha,
+            self.github_sha,
+            is_ancestor,
         )
         return is_ancestor
 
@@ -748,28 +472,29 @@ class CustomInferenceModel(CustomInferenceModelBase):
             self._repo.print_pretty_log()
 
         for _, model_info in self.models_info.items():
-            model_info.changed_or_new_files = []
-            model_info.deleted_file_ids = []
+            model_info.file_changes = ModelInfo.FileChanges()
 
             logger.debug(
-                f"Searching model {model_info.git_model_id} changes since its last DR version."
+                "Searching model %s changes since its last DR version.", model_info.git_model_id
             )
-            if model_info.should_upload_all_files:
-                logger.debug(f"Model {model_info.git_model_id} will upload all its files.")
+            if model_info.flags.should_upload_all_files:
+                logger.debug("Model %s will upload all its files.", model_info.git_model_id)
                 continue
 
             from_commit_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
             if not from_commit_sha:
                 raise UnexpectedResult(
-                    f"Unexpected None ancestor commit sha, "
-                    f"model_git_id: {model_info.git_model_id}"
+                    f"Unexpected None ancestor commit sha, model_git_id: {model_info.git_model_id}"
                 )
             changed_files, deleted_files = self._repo.find_changed_files(
                 self.github_sha, from_commit_sha
             )
             logger.debug(
-                f"Model {model_info.git_model_id} changes since commit {from_commit_sha}. "
-                f"Changed files: {changed_files}. Deleted files: {deleted_files}."
+                "Model %s changes since commit %s. Changed files: %s. Deleted files: %s.",
+                model_info.git_model_id,
+                from_commit_sha,
+                changed_files,
+                deleted_files,
             )
             self._handle_changed_or_new_files(model_info, changed_files)
             self._handle_deleted_files(model_info, deleted_files)
@@ -780,15 +505,16 @@ class CustomInferenceModel(CustomInferenceModelBase):
             changed_model_filepath = model_info.model_file_paths.get(changed_file)
             if changed_model_filepath:
                 logger.debug(
-                    f"Changed/new file '{changed_file}' affects model "
-                    f"'{model_info.model_path.name}'"
+                    "Changed/new file '%s' affects model '%s'",
+                    changed_file,
+                    model_info.model_path.name,
                 )
-                model_info.changed_or_new_files.append(changed_model_filepath)
+                model_info.file_changes.add_changed(changed_model_filepath)
 
             # A change could happen in the model's definition (yaml), which is not necessarily
             # included by the glob patterns
             if model_info.yaml_filepath.samefile(changed_file):
-                model_info.should_update_settings = True
+                model_info.flags.should_update_settings = True
 
     def _handle_deleted_files(self, model_info, deleted_files):
         for deleted_file in deleted_files:
@@ -799,13 +525,13 @@ class CustomInferenceModel(CustomInferenceModelBase):
                 if latest_version:
                     model_root_dir = model_info.model_path
                     repo_root_dir = self.options.root_dir
-                    path_under_model, relative_to = ModelFilePath.get_path_under_model(
+                    path_under_model, _ = ModelFilePath.get_path_under_model(
                         deleted_file, model_root_dir, repo_root_dir
                     )
                     if not path_under_model:
                         raise UnexpectedResult(f"The path '{deleted_file}' is outside the repo.")
 
-                    model_info.deleted_file_ids.extend(
+                    model_info.file_changes.extend_deleted(
                         [
                             item["id"]
                             for item in latest_version["items"]
@@ -813,8 +539,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
                         ]
                     )
                     logger.debug(
-                        f"File path {deleted_file} will be deleted from model "
-                        f"{model_info.git_model_id}."
+                        "File path %s will be deleted from model %s.",
+                        deleted_file,
+                        model_info.git_model_id,
                     )
 
     def _apply_datarobot_actions_for_affected_models(self):
@@ -825,12 +552,12 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def _handle_model_changes(self):
         for git_model_id, model_info in self.models_info.items():
             if model_info.is_affected_by_commit:
-                logger.info(f"Model '{model_info.model_path}' is affected by commit.")
+                logger.info("Model '%s' is affected by commit.", model_info.model_path)
 
                 if model_info.should_create_new_version:
                     custom_model, already_existed = self._get_or_create_custom_model(model_info)
                     if not already_existed:
-                        self._total_created += 1
+                        self._stats.total_created += 1
 
                     custom_model_id = custom_model["id"]
                     version_id = self._create_custom_model_version(custom_model_id, model_info)
@@ -839,16 +566,18 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
                     logger.info(
                         "Custom inference model version was successfully created. "
-                        f"git_model_id: {git_model_id}, model_id: {custom_model_id}, "
-                        f"version_id: {version_id}"
+                        "git_model_id: %s, model_id: %s, version_id: %s.",
+                        git_model_id,
+                        custom_model_id,
+                        version_id,
                     )
                 else:
                     custom_model = self.datarobot_models[model_info.git_model_id].model
 
-                if model_info.should_update_settings:
+                if model_info.flags.should_update_settings:
                     self._update_settings(custom_model, model_info)
 
-                self._total_affected += 1
+                self._stats.total_affected += 1
 
     def _get_or_create_custom_model(self, model_info):
         already_exists = model_info.git_model_id in self.datarobot_models
@@ -856,22 +585,24 @@ class CustomInferenceModel(CustomInferenceModelBase):
             custom_model = self.datarobot_models[model_info.git_model_id].model
         else:
             custom_model = self._dr_client.create_custom_model(model_info)
-            logger.info(f"Custom inference model was created: {custom_model['id']}")
+            logger.info("Custom inference model was created: %s", custom_model["id"])
         return custom_model, already_exists
 
     def _create_custom_model_version(self, custom_model_id, model_info):
-        if model_info.should_upload_all_files:
+        if model_info.flags.should_upload_all_files:
             changed_file_paths = list(model_info.model_file_paths.values())
         else:
-            changed_file_paths = model_info.changed_or_new_files
+            changed_file_paths = model_info.file_changes.changed_or_new_files
 
         logger.info(
-            "Create custom inference model version. git_model_id: "
-            f" {model_info.git_model_id}, from_latest: {model_info.should_upload_all_files}"
+            "Create custom inference model version. git_model_id:  %s, from_latest: %s",
+            model_info.git_model_id,
+            model_info.flags.should_upload_all_files,
         )
         logger.debug(
-            f"Files to be uploaded: {[p.under_model for p in changed_file_paths]}, "
-            f"git_model_id: {model_info.git_model_id}"
+            "Files to be uploaded: %s, git_model_id: %s",
+            [p.under_model for p in changed_file_paths],
+            model_info.git_model_id,
         )
 
         if self.is_pull_request:
@@ -895,9 +626,12 @@ class CustomInferenceModel(CustomInferenceModelBase):
                 user_and_project=self.github_repository, sha=main_branch_commit_sha
             )
         logger.info(
-            f"GitHub version info. Ref name: {self.ref_name}, commit URL: {commit_url}, "
-            f"main branch commit sha: {main_branch_commit_sha}, "
-            f"pull request commit sha: {pull_request_commit_sha}"
+            "GitHub version info. Ref name: %s, commit URL: %s, main branch commit sha: %s, "
+            "pull request commit sha: %s",
+            self.ref_name,
+            commit_url,
+            main_branch_commit_sha,
+            pull_request_commit_sha,
         )
 
         return self._dr_client.create_custom_model_version(
@@ -908,8 +642,8 @@ class CustomInferenceModel(CustomInferenceModelBase):
             main_branch_commit_sha,
             pull_request_commit_sha,
             changed_file_paths,
-            model_info.deleted_file_ids,
-            from_latest=not model_info.should_upload_all_files,
+            model_info.file_changes.deleted_file_ids,
+            from_latest=not model_info.flags.should_upload_all_files,
         )
 
     def _test_custom_model_version(self, model_id, model_version_id, model_info):
@@ -930,15 +664,13 @@ class CustomInferenceModel(CustomInferenceModelBase):
             if custom_model:
                 logger.info(
                     "Training / holdout dataset were updated for unstructured model. "
-                    f"Git model ID: {model_info.git_model_id}. "
-                    "Training dataset name: "
-                    f" {custom_model['externalMlopsStatsConfig']['trainingDatasetName']}. "
-                    "Training dataset ID: "
-                    f" {custom_model['externalMlopsStatsConfig']['trainingDatasetId']}. "
-                    "Holdout dataset name: "
-                    f" {custom_model['externalMlopsStatsConfig']['holdoutDatasetName']}. "
-                    "Holdout dataset ID: "
-                    f" {custom_model['externalMlopsStatsConfig']['holdoutDatasetId']}. "
+                    "Git model ID: %s. Training dataset name: %s. Training dataset ID: %s. "
+                    "Holdout dataset name: %s. Holdout dataset ID: %s",
+                    model_info.git_model_id,
+                    custom_model["externalMlopsStatsConfig"]["trainingDatasetName"],
+                    custom_model["externalMlopsStatsConfig"]["trainingDatasetId"],
+                    custom_model["externalMlopsStatsConfig"]["holdoutDatasetName"],
+                    custom_model["externalMlopsStatsConfig"]["holdoutDatasetId"],
                 )
         else:
             custom_model = self._dr_client.update_training_dataset_for_structured_models(
@@ -946,17 +678,18 @@ class CustomInferenceModel(CustomInferenceModelBase):
             )
             if custom_model:
                 logger.info(
-                    "Training dataset was updated for structured model. "
-                    f"Git model ID: {model_info.git_model_id}. "
-                    f"Dataset name: {custom_model['trainingDataFileName']}. "
-                    f"Dataset ID: {custom_model['trainingDatasetId']}. "
-                    f"Dataset version ID: {custom_model['trainingDatasetVersionId']}. "
+                    "Training dataset was updated for structured model. Git model ID: %s. "
+                    "Dataset name: %s. Dataset ID: %s. Dataset version ID: %s.",
+                    model_info.git_model_id,
+                    custom_model["trainingDataFileName"],
+                    custom_model["trainingDatasetId"],
+                    custom_model["trainingDatasetVersionId"],
                 )
 
     def _update_model_settings(self, datarobot_custom_model, model_info):
         custom_model = self._dr_client.update_model_settings(datarobot_custom_model, model_info)
         if custom_model:
-            logger.info(f"Model settings were updated. Git model ID: {model_info.git_model_id}.")
+            logger.info("Model settings were updated. Git model ID: %s.", model_info.git_model_id)
 
     def _handle_deleted_models(self):
         if not self.options.allow_model_deletion:
@@ -988,8 +721,6 @@ class CustomInferenceModel(CustomInferenceModelBase):
         # report a failure.
         logger.info("Detecting that deployed models are not deleted ...")
         if deployments:
-            # TODO: do not raise an error for 'dirty' models, because anyway these should not be
-            #  deleted.
             msg = ""
             for deployment in deployments:
                 model_id = deployment["customModel"]["id"]
@@ -1006,20 +737,22 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def _actually_delete_models(self, missing_locally_id_to_git_id, deployments):
         logger.info("Deleting models ...")
         for model_id, git_model_id in missing_locally_id_to_git_id.items():
-            # TODO: skip deletion of 'dirty' models. Only show a warning.
             if any(model_id == deployment["customModel"]["id"] for deployment in deployments):
                 logger.warning(
-                    f"Skipping model deletion because it is deployed. "
-                    f"git_model_id: {git_model_id}, model_id: {model_id}"
+                    "Skipping model deletion because it is deployed. git_model_id: %s, "
+                    "model_id: %s",
+                    git_model_id,
+                    model_id,
                 )
                 continue
             try:
                 self._dr_client.delete_custom_model_by_model_id(model_id)
-                self._total_deleted += 1
-                self._total_affected += 1
+                self._stats.total_deleted += 1
+                self._stats.total_affected += 1
                 logger.info(
-                    f"Model was deleted with success. git_model_id: {git_model_id}, "
-                    f"model_id: {model_id}"
+                    "Model was deleted with success. git_model_id: %s, model_id: %s",
+                    git_model_id,
+                    model_id,
                 )
             except DataRobotClientError as ex:
                 logger.error(str(ex))

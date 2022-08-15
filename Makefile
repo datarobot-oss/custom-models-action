@@ -5,6 +5,10 @@ validate-env-%:
 	  exit 1; \
 	fi
 
+reqs:
+	pip install -r tests/requirements.txt
+.PHONY: reqs
+
 test: test-unit
 .PHONY: test
 
@@ -20,13 +24,17 @@ test-functional: validate-env-DATAROBOT_WEBSERVER validate-env-DATAROBOT_API_TOK
 .PHONY: test
 
 black:
+	@isort --profile black .
 	@black .
 .PHONY: black
 
 black-check:
 	@black --check .
+
 .PHONY: black-check
 
 lint: black-check
-	@pycodestyle .
+	@flake8 .
+	@isort --check-only .
+	@pylint --recursive=y .
 .PHONY: lint
