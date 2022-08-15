@@ -169,15 +169,6 @@ class TestCustomInferenceModel:
 class TestCustomInferenceModelDeletion:
     """Contains unit-tests for model deletion."""
 
-    def test_models_deletion_without_allowed_input_arg(self, options):
-        """Test a failure to delete a model when input argument does not allow it."""
-
-        options.allow_model_deletion = False
-        custom_inference_model = CustomInferenceModel(options)
-        with patch.object(DrClient, "fetch_custom_model_deployments") as mock_fetch_deployments:
-            custom_inference_model._handle_deleted_models()
-            mock_fetch_deployments.assert_not_called()
-
     @pytest.fixture
     def git_model_id(self):
         """A fixture to return a fake user model ID."""
@@ -209,7 +200,7 @@ class TestCustomInferenceModelDeletion:
             CustomInferenceModel, "datarobot_models", new_callable=PropertyMock
         ) as datarobot_models:
             # Ensure it does not match to the local model definition
-            non_existing_git_model_id = f"a{git_model_id}"
+            non_existing_git_model_id = f"from-dr-{git_model_id}"
             datarobot_models.return_value = {
                 non_existing_git_model_id: DataRobotModel(
                     model={"id": model_id}, latest_version=None
@@ -224,6 +215,26 @@ class TestCustomInferenceModelDeletion:
                 [{"id": "dddd", "customModel": {"id": model_id}}] if has_deployment else []
             )
             yield
+
+    @pytest.mark.parametrize("event_name", ["pull_request", "push"])
+    def test_models_deletion_without_allowed_input_arg(
+        self, options, git_model_id, model_id, event_name
+    ):
+        """Test a failure to delete a model when input argument does not allow it."""
+
+        options.allow_model_deletion = False
+        custom_inference_model = CustomInferenceModel(options)
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": event_name}), self._mock_local_models(
+            git_model_id
+        ), self._mock_fetched_models_that_do_not_exist_locally(
+            git_model_id, model_id
+        ), self._mock_fetched_deployments(
+            model_id, has_deployment=False
+        ):
+            with pytest.raises(IllegalModelDeletion) as ex:
+                custom_inference_model._handle_deleted_models()
+            exception_msg = str(ex)
+            assert "Model deletion was configured as not being allowed" in exception_msg
 
     def test_models_deletion_for_pull_request_event_without_deployment(
         self, options, git_model_id, model_id

@@ -98,6 +98,7 @@ def main(args=None):
     args : list or None
         An optional list of command line arguments.
     """
+
     setup_log_configuration()
     options = argparse_options(args)
 

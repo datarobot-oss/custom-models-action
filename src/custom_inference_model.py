@@ -692,16 +692,19 @@ class CustomInferenceModel(CustomInferenceModelBase):
             logger.info("Model settings were updated. Git model ID: %s.", model_info.git_model_id)
 
     def _handle_deleted_models(self):
-        if not self.options.allow_model_deletion:
-            logger.info("Skip handling models deletion because it is not enabled.")
-            return
-
         missing_locally_id_to_git_id = {}
         for git_model_id, datarobot_model in self.datarobot_models.items():
             if git_model_id not in self.models_info:
                 missing_locally_id_to_git_id[datarobot_model.model["id"]] = git_model_id
 
         if missing_locally_id_to_git_id:
+            if not self.options.allow_model_deletion:
+                missing_git_model_ids = list(missing_locally_id_to_git_id.values())
+                raise IllegalModelDeletion(
+                    "Model deletion was configured as not being allowed. "
+                    f"The missing models in the local source tree are: {missing_git_model_ids}"
+                )
+
             model_ids_to_fetch = list(missing_locally_id_to_git_id.keys())
             deployments = self._dr_client.fetch_custom_model_deployments(model_ids_to_fetch)
             if self.is_pull_request:
