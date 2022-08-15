@@ -21,6 +21,7 @@ import pytest
 from common.convertors import MemoryConvertor
 from dr_client import DrClient
 from schema_validator import ModelSchema
+from tests.conftest import unique_str
 from tests.functional.conftest import cleanup_models
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import printout
@@ -29,7 +30,6 @@ from tests.functional.conftest import temporarily_replace_schema_value
 from tests.functional.conftest import (
     temporarily_upload_training_dataset_for_structured_model,
 )
-from tests.functional.conftest import unique_str
 from tests.functional.conftest import upload_and_update_dataset
 from tests.functional.conftest import webserver_accessible
 

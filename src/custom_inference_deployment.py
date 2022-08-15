@@ -308,15 +308,22 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             if not datarobot_deployment:
                 self._create_deployment(deployment_info)
             else:
-                datarobot_model = self.datarobot_models.get(deployment_info.git_model_id)
-                if self._there_is_a_new_model_version(datarobot_model, datarobot_deployment):
+                active_datarobot_model_id = datarobot_deployment.model_version["customModelId"]
+                desired_datarobot_model = self.datarobot_models.get(deployment_info.git_model_id)
+                if self._user_replaced_the_model_in_a_deployment(
+                    desired_datarobot_model, active_datarobot_model_id
+                ) or self._there_is_a_new_model_version(
+                    desired_datarobot_model, datarobot_deployment
+                ):
                     if deployment_info.is_challenger_enabled:
                         self._create_challenger_in_deployment(
-                            datarobot_model.latest_version, datarobot_deployment, deployment_info
+                            desired_datarobot_model.latest_version,
+                            datarobot_deployment,
+                            deployment_info,
                         )
                     else:
                         self._replace_model_version_in_deployment(
-                            datarobot_model.latest_version, datarobot_deployment
+                            desired_datarobot_model.latest_version, datarobot_deployment
                         )
 
                 self._handle_deployment_changes(deployment_info, datarobot_deployment)
@@ -361,6 +368,12 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             self._dr_client.submit_deployment_actuals(
                 target_name, desired_association_id, desired_dataset_id, deployment
             )
+
+    @staticmethod
+    def _user_replaced_the_model_in_a_deployment(
+        desired_datarobot_model, active_datarobot_model_id
+    ):
+        return desired_datarobot_model.model["id"] != active_datarobot_model_id
 
     @staticmethod
     def _there_is_a_new_model_version(datarobot_model, datarobot_deployment):
