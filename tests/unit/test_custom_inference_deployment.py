@@ -17,18 +17,45 @@ from bson import ObjectId
 from mock import PropertyMock
 from mock import patch
 
+from common.data_types import DataRobotDeployment
 from common.data_types import DataRobotModel
 from common.exceptions import AssociatedModelNotFound
 from common.exceptions import AssociatedModelVersionNotFound
 from common.exceptions import DeploymentMetadataAlreadyExists
 from common.exceptions import NoValidAncestor
 from custom_inference_deployment import CustomInferenceDeployment
+from custom_inference_deployment import DeploymentInfo
 from custom_inference_model import CustomInferenceModelBase
 from dr_client import DrClient
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 from schema_validator import SharedSchema
+from tests.conftest import unique_str
 from tests.unit.conftest import write_to_file
+
+
+@pytest.fixture(name="single_deployment_factory")
+def fixture_single_deployment_factory(repo_root_path, single_model_factory):
+    """A factory fixture to create a single deployment along with a model."""
+
+    def _inner(name, write_metadata=True, git_deployment_id=None, git_model_id=None):
+        model_name = f"model_{name}"
+        model_metadata = single_model_factory(model_name, write_metadata, git_model_id=git_model_id)
+
+        single_deployment_metadata = {
+            DeploymentSchema.DEPLOYMENT_ID_KEY: (
+                git_deployment_id if git_deployment_id else str(uuid.uuid4())
+            ),
+            DeploymentSchema.MODEL_ID_KEY: model_metadata[SharedSchema.MODEL_ID_KEY],
+        }
+
+        if write_metadata:
+            deployment_yaml_filepath = repo_root_path / model_name / "deployment.yaml"
+            write_to_file(deployment_yaml_filepath, yaml.dump(single_deployment_metadata))
+
+        return single_deployment_metadata
+
+    yield _inner
 
 
 class TestCustomInferenceDeployment:
@@ -39,32 +66,6 @@ class TestCustomInferenceDeployment:
         """A fixture to return a path without deployment definitions in it."""
 
         yield common_path_with_code
-
-    @pytest.fixture
-    @pytest.mark.usefixtures("common_path_with_code", "excluded_src_path")
-    def single_deployment_factory(self, repo_root_path, single_model_factory):
-        """A factory fixture to create a single deployment along with a model."""
-
-        def _inner(name, write_metadata=True, git_deployment_id=None, git_model_id=None):
-            model_name = f"model_{name}"
-            model_metadata = single_model_factory(
-                model_name, write_metadata, git_model_id=git_model_id
-            )
-
-            single_deployment_metadata = {
-                DeploymentSchema.DEPLOYMENT_ID_KEY: (
-                    git_deployment_id if git_deployment_id else str(uuid.uuid4())
-                ),
-                DeploymentSchema.MODEL_ID_KEY: model_metadata[SharedSchema.MODEL_ID_KEY],
-            }
-
-            if write_metadata:
-                deployment_yaml_filepath = repo_root_path / model_name / "deployment.yaml"
-                write_to_file(deployment_yaml_filepath, yaml.dump(single_deployment_metadata))
-
-            return single_deployment_metadata
-
-        yield _inner
 
     @pytest.fixture
     @pytest.mark.usefixtures("common_path_with_code")
@@ -414,3 +415,171 @@ class TestCustomInferenceDeployment:
             custom_inference_deployment._fetch_deployments_from_datarobot()
             with pytest.raises(NoValidAncestor):
                 custom_inference_deployment._validate_deployments_integrity()
+
+
+class TestDeploymentChanges:
+    """Contains cases to test user's changes in a local deployment definition."""
+
+    @pytest.fixture
+    def _mock_datarobot_model_factory(self):
+        """A fixture to create a datarobot model class."""
+
+        def _inner(model_id=None, git_model_id=None, latest_version_id=None):
+            model_id = model_id or unique_str()
+            git_model_id = git_model_id or unique_str()
+            latest_version_id = latest_version_id or unique_str()
+            return DataRobotModel(
+                model={"id": model_id, "gitModelId": git_model_id},
+                latest_version={"id": latest_version_id, "customModelId": model_id},
+            )
+
+        return _inner
+
+    @pytest.fixture
+    def _mock_datarobot_deployment_factory(self, _mock_datarobot_model_factory):
+        """A fixture to create a datarobot deployment class."""
+
+        def _inner(
+            model_id=None, git_model_id=None, latest_version_id=None, git_deployment_id=None
+        ):
+            datarobot_model = _mock_datarobot_model_factory(
+                model_id, git_model_id, latest_version_id
+            )
+            git_deployment_id = git_deployment_id or unique_str()
+            return DataRobotDeployment(
+                deployment={"id": unique_str(), "gitDeploymentId": git_deployment_id},
+                model_version=datarobot_model.latest_version,
+            )
+
+        return _inner
+
+    @pytest.fixture
+    def _mock_deployment_info_factory(self):
+        def _inner(git_deployment_id, git_model_id=None, enable_challenger=True):
+            return DeploymentInfo(
+                yaml_path="/dummy/path.yaml",
+                deployment_metadata={
+                    "git_datarobot_deployment_id": git_deployment_id,
+                    "git_datarobot_model_id": git_model_id or unique_str(),
+                    "settings": {"enable_challenger_models": enable_challenger},
+                },
+            )
+
+        return _inner
+
+    def test_new_deployment_creation(
+        self, options, _mock_deployment_info_factory, _mock_datarobot_deployment_factory
+    ):
+        """A case to test new deployment creation."""
+
+        one_git_deployment_id = unique_str()
+        another_git_deployment_id = unique_str()
+        deployment_info = _mock_deployment_info_factory(one_git_deployment_id)
+        datarobot_deployment = _mock_datarobot_deployment_factory(another_git_deployment_id)
+
+        with patch.object(
+            CustomInferenceDeployment,
+            "deployments_info",
+            new_callable=PropertyMock(return_value={one_git_deployment_id: deployment_info}),
+        ), patch.object(
+            CustomInferenceDeployment,
+            "datarobot_deployments",
+            new_callable=PropertyMock(
+                return_value={another_git_deployment_id: datarobot_deployment}
+            ),
+        ), patch.object(
+            CustomInferenceDeployment, "_create_deployment"
+        ) as create_deployment_method:
+            custom_inference_deployment = CustomInferenceDeployment(options)
+            custom_inference_deployment._handle_deployment_changes_or_creation()
+
+            create_deployment_method.assert_called_once()
+
+    @pytest.fixture
+    def _patch_handle_deployment_changes(self):
+        with patch.object(CustomInferenceDeployment, "_handle_deployment_changes"):
+            yield
+
+    @pytest.mark.usefixtures("_patch_handle_deployment_changes")
+    def test_model_id_change_in_existing_deployment(
+        self, options, _mock_datarobot_model_factory, _mock_deployment_info_factory
+    ):
+        """A case to test a model ID change in existing active deployment."""
+
+        origin_model_id = unique_str()
+        origin_datarobot_model = _mock_datarobot_model_factory(origin_model_id)
+        new_model_id = unique_str()
+        new_datarobot_model = _mock_datarobot_model_factory(new_model_id)
+
+        git_deployment_id = unique_str()
+        datarobot_deployment = DataRobotDeployment(
+            deployment={"id": unique_str(), "gitDeploymentId": git_deployment_id},
+            model_version=origin_datarobot_model.latest_version,
+        )
+        deployment_info = _mock_deployment_info_factory(
+            git_deployment_id, new_model_id, enable_challenger=True
+        )
+
+        with patch.object(
+            CustomInferenceDeployment,
+            "deployments_info",
+            new_callable=PropertyMock(return_value={git_deployment_id: deployment_info}),
+        ), patch.object(
+            CustomInferenceDeployment,
+            "datarobot_deployments",
+            new_callable=PropertyMock(return_value={git_deployment_id: datarobot_deployment}),
+        ), patch.object(
+            CustomInferenceDeployment,
+            "datarobot_models",
+            new_callable=PropertyMock(return_value={new_model_id: new_datarobot_model}),
+        ), patch.object(
+            CustomInferenceDeployment, "_create_challenger_in_deployment"
+        ) as create_challenger_in_deployment_method:
+            custom_inference_deployment = CustomInferenceDeployment(options)
+            custom_inference_deployment._handle_deployment_changes_or_creation()
+
+            create_challenger_in_deployment_method.assert_called_once()
+
+    @pytest.mark.usefixtures("_patch_handle_deployment_changes")
+    def test_new_model_version_in_existing_deployment(
+        self, options, _mock_datarobot_model_factory, _mock_deployment_info_factory
+    ):
+        """A case to test a new model version for a model in existing active deployment."""
+
+        model_id = unique_str()
+        origin_latest_version_id = unique_str()
+        datarobot_model_with_origin_latest = _mock_datarobot_model_factory(
+            model_id, latest_version_id=origin_latest_version_id
+        )
+        new_latest_version_id = unique_str()
+        datarobot_model_with_new_latest = _mock_datarobot_model_factory(
+            model_id, latest_version_id=new_latest_version_id
+        )
+        datarobot_deployment = DataRobotDeployment(
+            deployment={"id": unique_str(), "gitDeploymentId": unique_str()},
+            model_version=datarobot_model_with_origin_latest.latest_version,
+        )
+        git_deployment_id = unique_str()
+        deployment_info = _mock_deployment_info_factory(
+            git_deployment_id, model_id, enable_challenger=True
+        )
+
+        with patch.object(
+            CustomInferenceDeployment,
+            "deployments_info",
+            new_callable=PropertyMock(return_value={git_deployment_id: deployment_info}),
+        ), patch.object(
+            CustomInferenceDeployment,
+            "datarobot_deployments",
+            new_callable=PropertyMock(return_value={git_deployment_id: datarobot_deployment}),
+        ), patch.object(
+            CustomInferenceDeployment,
+            "datarobot_models",
+            new_callable=PropertyMock(return_value={model_id: datarobot_model_with_new_latest}),
+        ), patch.object(
+            CustomInferenceDeployment, "_create_challenger_in_deployment"
+        ) as create_challenger_in_deployment_method:
+            custom_inference_deployment = CustomInferenceDeployment(options)
+            custom_inference_deployment._handle_deployment_changes_or_creation()
+
+            create_challenger_in_deployment_method.assert_called_once()
