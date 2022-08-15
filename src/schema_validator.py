@@ -606,7 +606,7 @@ class DeploymentSchema(SharedSchema):
     """
 
     MULTI_DEPLOYMENTS_KEY = "datarobot_deployments"
-    DEPLOYMENT_ID_KEY = "git_datarobot_deployment_id"
+    DEPLOYMENT_ID_KEY = "user_provided_deployment_id"
 
     PREDICTION_ENVIRONMENT_NAME_KEY = "prediction_environment_name"  # Optional
     ADDITIONAL_METADATA_KEY = "additional_metadata"  # Optional

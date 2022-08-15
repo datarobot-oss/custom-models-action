@@ -181,13 +181,15 @@ def fixture_single_model_factory(repo_root_path, common_path_with_code):
         }
         if with_include_glob:
             # noinspection PyTypeChecker
-            single_model_metadata["version"]["include_glob_pattern"] = [
+            single_model_metadata[ModelSchema.VERSION_KEY][ModelSchema.INCLUDE_GLOB_KEY] = [
                 "./**",
                 f"/{common_path_with_code.relative_to(repo_root_path)}/**",
             ]
         if with_exclude_glob:
             # noinspection PyTypeChecker
-            single_model_metadata["version"]["exclude_glob_pattern"] = ["./README.md"]
+            single_model_metadata[ModelSchema.VERSION_KEY][ModelSchema.EXCLUDE_GLOB_KEY] = [
+                "./README.md"
+            ]
 
         if write_metadata:
             write_to_file(model_path / "model.yaml", yaml.dump(single_model_metadata))

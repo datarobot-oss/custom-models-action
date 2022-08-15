@@ -667,7 +667,7 @@ class TestDeploymentRoutes:
         """A factory fixture to create a deployment response."""
 
         def _inner(deployment_id):
-            return {"id": deployment_id, "gitDeploymentId": f"git-id-{deployment_id}"}
+            return {"id": deployment_id, "userProvidedId": f"user-provided-id-{deployment_id}"}
 
         return _inner
 

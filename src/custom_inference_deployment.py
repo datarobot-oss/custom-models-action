@@ -34,7 +34,7 @@ class DeploymentInfo:
         self._metadata = deployment_metadata
 
     @property
-    def git_deployment_id(self):
+    def user_provided_id(self):
         """
         A deployment's unique ID that is provided by the user and read from the deployment's
         metadata
@@ -42,7 +42,7 @@ class DeploymentInfo:
         return self._metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
 
     @property
-    def git_model_id(self):
+    def user_provided_model_id(self):
         """
         A model's unique ID that is provided by the user and read from the deployment's
         metadata. There should be a corresponding model's definition in the source tree,
@@ -200,42 +200,42 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                 self._add_new_deployment_info(deployment_info)
 
     def _add_new_deployment_info(self, deployment_info):
-        if deployment_info.git_deployment_id in self._deployments_info:
+        if deployment_info.user_provided_id in self._deployments_info:
             raise DeploymentMetadataAlreadyExists(
-                f"Deployment {deployment_info.git_deployment_id} already exists."
+                f"Deployment {deployment_info.user_provided_id} already exists."
             )
 
         logger.info(
-            "Adding new deployment metadata. Git model id: %s. "
+            "Adding new deployment metadata. User provided id: %s. "
             "Deployment metadata yaml path: %s.",
-            deployment_info.git_deployment_id,
+            deployment_info.user_provided_id,
             deployment_info.yaml_filepath,
         )
-        self._deployments_info[deployment_info.git_deployment_id] = deployment_info
+        self._deployments_info[deployment_info.user_provided_id] = deployment_info
 
     def _fetch_deployments_from_datarobot(self):
         logger.info("Fetching deployments from DataRobot ...")
         custom_inference_deployments = self._dr_client.fetch_deployments()
         for deployment in custom_inference_deployments:
-            git_deployment_id = deployment.get("gitDeploymentId")
-            if git_deployment_id:
-                model_version = self._get_associated_model_version(git_deployment_id, deployment)
-                self.datarobot_deployments[git_deployment_id] = DataRobotDeployment(
+            user_provided_id = deployment.get("userProvidedId")
+            if user_provided_id:
+                model_version = self._get_associated_model_version(user_provided_id, deployment)
+                self.datarobot_deployments[user_provided_id] = DataRobotDeployment(
                     deployment, model_version
                 )
 
-    def _get_associated_model_version(self, git_deployment_id, datarobot_deployment):
+    def _get_associated_model_version(self, user_provided_id, datarobot_deployment):
         model_id = datarobot_deployment["model"]["customModelImage"]["customModelId"]
         associated_datarobot_model = self.datarobot_model_by_id(model_id)
         if not associated_datarobot_model:
             raise AssociatedModelNotFound(
                 "Deployment is broken due to a missing associated datarobot model.\n"
-                f"Git deployment id: {git_deployment_id}, model id: {model_id}."
+                f"User provided deployment id: {user_provided_id}, model id: {model_id}."
             )
         if not associated_datarobot_model.latest_version:
             raise AssociatedModelVersionNotFound(
                 "Deployment is broken due to a missing latest datarobot model version. "
-                f"Git deployment id: {git_deployment_id}, model id: {model_id}."
+                f"User provided deployment id: {user_provided_id}, model id: {model_id}."
             )
 
         datarobot_model_version_id = datarobot_deployment["model"]["customModelImage"][
@@ -252,29 +252,29 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
 
     def _validate_deployments_integrity(self):
         logger.info("Validating deployments integrity ...")
-        for git_deployment_id, deployment_info in self.deployments_info.items():
-            datarobot_deployment = self.datarobot_deployments.get(git_deployment_id)
+        for user_provided_id, deployment_info in self.deployments_info.items():
+            datarobot_deployment = self.datarobot_deployments.get(user_provided_id)
             if datarobot_deployment:
                 model_version = datarobot_deployment.model_version
             else:
                 # 1. Verify existing and valid local custom model that is associated with the
                 #    deployment.
-                model_info = self.models_info.get(deployment_info.git_model_id)
+                model_info = self.models_info.get(deployment_info.user_provided_model_id)
                 if not model_info:
                     raise AssociatedModelNotFound(
                         "Data integrity in local repository is broken. "
                         "There's no associated git model definition for given deployment. "
-                        f"Git deployment id: {git_deployment_id}, "
-                        f"git model id: {deployment_info.git_model_id}."
+                        f"User provided deployment id: {user_provided_id}, "
+                        f"User provided model id: {deployment_info.user_provided_model_id}."
                     )
 
                 # 2. Validate that the associated model was already created in DataRobot
-                custom_model = self.datarobot_models.get(deployment_info.git_model_id)
+                custom_model = self.datarobot_models.get(deployment_info.user_provided_model_id)
                 if not custom_model:
                     raise AssociatedModelNotFound(
                         "Unexpected missing DataRobot model. "
-                        f"Git deployment id: {git_deployment_id}, "
-                        f"git model id: {deployment_info.git_model_id}."
+                        f"User provided deployment id: {user_provided_id}, "
+                        f"User provided model id: {deployment_info.user_provided_model_id}."
                     )
 
                 # 3. Validate at least one version
@@ -282,9 +282,9 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                     raise AssociatedModelVersionNotFound(
                         "Unexpected missing DataRobot model version. A custom model with at least "
                         "a single version must be created upfront. "
-                        f"Git deployment id: {git_deployment_id}, "
-                        f"git model id: {deployment_info.git_model_id}, DataRobot "
-                        f"model id: {custom_model.model['id']}."
+                        f"User provided deployment id: {user_provided_id}, "
+                        f"User provided model id: {deployment_info.user_provided_model_id}, "
+                        f"DataRobot model id: {custom_model.model['id']}."
                     )
                 model_version = custom_model.latest_version
 
@@ -293,7 +293,7 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             if not self._repo.is_ancestor_of(git_main_branch_sha, "HEAD"):
                 raise NoValidAncestor(
                     "The associated model's version git SHA is not an ancestor in the current "
-                    f"branch. Git deployment id: {git_deployment_id}, "
+                    f"branch. User provided deployment id: {user_provided_id}, "
                     f"Pinned sha: {git_main_branch_sha}."
                 )
 
@@ -303,13 +303,15 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         self._handle_deleted_deployments()
 
     def _handle_deployment_changes_or_creation(self):
-        for git_deployment_id, deployment_info in self.deployments_info.items():
-            datarobot_deployment = self.datarobot_deployments.get(git_deployment_id)
+        for user_provided_id, deployment_info in self.deployments_info.items():
+            datarobot_deployment = self.datarobot_deployments.get(user_provided_id)
             if not datarobot_deployment:
                 self._create_deployment(deployment_info)
             else:
                 active_datarobot_model_id = datarobot_deployment.model_version["customModelId"]
-                desired_datarobot_model = self.datarobot_models.get(deployment_info.git_model_id)
+                desired_datarobot_model = self.datarobot_models.get(
+                    deployment_info.user_provided_model_id
+                )
                 if self._user_replaced_the_model_in_a_deployment(
                     desired_datarobot_model, active_datarobot_model_id
                 ) or self._there_is_a_new_model_version(
@@ -330,13 +332,13 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
 
     def _create_deployment(self, deployment_info):
         logger.info(
-            "Creating a deployment ... git_deployment_id: %s.", deployment_info.git_deployment_id
+            "Creating a deployment ... user_provided_id: %s.", deployment_info.user_provided_id
         )
-        custom_model = self.datarobot_models.get(deployment_info.git_model_id)
+        custom_model = self.datarobot_models.get(deployment_info.user_provided_model_id)
         deployment = self._dr_client.create_deployment(custom_model.latest_version, deployment_info)
         logger.info(
             "A new deployment was created, git_id: %s, id: %s.",
-            deployment_info.git_deployment_id,
+            deployment_info.user_provided_id,
             deployment["id"],
         )
 
@@ -359,11 +361,11 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             logger.info(
                 "Submitting actuals for a deployment."
                 "Git deployment ID: %s, actuals association ID: %s, actuals dataset ID: %s.",
-                deployment_info.git_deployment_id,
+                deployment_info.user_provided_id,
                 desired_association_id,
                 desired_dataset_id,
             )
-            model_info = self.models_info.get(deployment_info.git_model_id)
+            model_info = self.models_info.get(deployment_info.user_provided_model_id)
             target_name = model_info.get_settings_value(ModelSchema.TARGET_NAME_KEY)
             self._dr_client.submit_deployment_actuals(
                 target_name, desired_association_id, desired_dataset_id, deployment
@@ -380,11 +382,11 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         return datarobot_deployment.model_version["id"] != datarobot_model.latest_version["id"]
 
     def _replace_model_version_in_deployment(self, model_latest_version, datarobot_deployment):
-        git_deployment_id = datarobot_deployment.deployment["gitDeploymentId"]
+        user_provided_id = datarobot_deployment.deployment["userProvidedId"]
         logger.info(
             "Replacing a model version in a deployment ... "
-            "git_deployment_id: %s, latest_version: %s.",
-            git_deployment_id,
+            "user_provided_id: %s, latest_version: %s.",
+            user_provided_id,
             model_latest_version["id"],
         )
         deployment = self._dr_client.replace_model_deployment(
@@ -393,18 +395,19 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         self._stats.total_affected += 1
         logger.info(
             "The latest model version was successfully replaced in a deployment. "
-            "git_deployment_id: %s, deployment_id: %s.",
-            git_deployment_id,
+            "user_provided_id: %s, deployment_id: %s.",
+            user_provided_id,
             deployment["id"],
         )
 
     def _create_challenger_in_deployment(
         self, model_latest_version, datarobot_deployment, deployment_info
     ):
-        git_deployment_id = datarobot_deployment.deployment["gitDeploymentId"]
+        user_provided_id = datarobot_deployment.deployment["userProvidedId"]
         logger.info(
-            "Submitting a model challenger ... git_deployment_id: %s, latest_version: %s.",
-            git_deployment_id,
+            "Submitting a model challenger ... user provided deployment id: %s, "
+            "model latest version id: %s.",
+            user_provided_id,
             model_latest_version["id"],
         )
         challenger = self._dr_client.create_challenger(
@@ -412,8 +415,8 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         )
         logger.info(
             "A challenger was successfully created and it is waiting for approval. "
-            "git_deployment_id: %s, challenger_id: %s.",
-            git_deployment_id,
+            "user provided deployment id: %s, challenger id: %s.",
+            user_provided_id,
             challenger["id"],
         )
 
@@ -447,8 +450,8 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             return
 
         logger.info("Deleting deployments (if any) ...")
-        for git_deployment_id, datarobot_deployment in self.datarobot_deployments.items():
-            if git_deployment_id not in self.deployments_info:
+        for user_provided_id, datarobot_deployment in self.datarobot_deployments.items():
+            if user_provided_id not in self.deployments_info:
                 deployment_id = datarobot_deployment.deployment["id"]
                 try:
                     self._dr_client.delete_deployment_by_id(deployment_id)
@@ -456,8 +459,8 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                     self._stats.total_affected += 1
                     logger.info(
                         "A deployment was deleted with success. "
-                        "git_deployment_id: %s, deployment_id: %s.",
-                        git_deployment_id,
+                        "user_provided_id: %s, deployment_id: %s.",
+                        user_provided_id,
                         deployment_id,
                     )
                 except DataRobotClientError as ex:

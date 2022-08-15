@@ -759,13 +759,13 @@ class DrClient:
         logger.debug("Fetching deployments.")
         return self._paginated_fetch(self.DEPLOYMENTS_ROUTE)
 
-    def fetch_deployment_by_git_id(self, git_deployment_id):
+    def fetch_deployment_by_git_id(self, user_provided_id):
         """
         Retrieve a deployment from DataRobot, given Git deployment ID.
 
         Parameters
         ----------
-        git_deployment_id : str
+        user_provided_id : str
             A unique ID that is defined by the user.
 
         Returns
@@ -776,7 +776,7 @@ class DrClient:
 
         deployments = self.fetch_deployments()
         try:
-            return next(d for d in deployments if d.get("gitDeploymentId") == git_deployment_id)
+            return next(d for d in deployments if d.get("userProvidedId") == user_provided_id)
         except StopIteration:
             return None
 
@@ -823,7 +823,7 @@ class DrClient:
             label = f"{model_package['target']['name']} Predictions [GitHub CI/CD]"
 
         payload = {
-            "gitDeploymentId": deployment_info.git_deployment_id,
+            "userProvidedId": deployment_info.user_provided_id,
             "modelPackageId": model_package["id"],
             "label": label,
             "predictionEnvironmentId": self._get_prediction_environment_id(
@@ -839,7 +839,7 @@ class DrClient:
         if response.status_code != 202:
             raise DataRobotClientError(
                 "Failed creating a deployment from model package."
-                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"User provided deployment id: {deployment_info.user_provided_id}, "
                 f"Model package id: {model_package['id']}, "
                 f"Response status: {response.status_code}, "
                 f"Response body: {response.text}",
@@ -856,7 +856,7 @@ class DrClient:
             raise DataRobotClientError(
                 "Prediction environment is missing. "
                 "Make sure to setup at least one valid prediction environment. "
-                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"User provided deployment id: {deployment_info.user_provided_id}, "
                 f"Model package id: {model_package['id']}."
             )
         return prediction_envs[0]["id"]
@@ -937,7 +937,7 @@ class DrClient:
         if response.status_code != 202:
             raise DataRobotClientError(
                 "Failed to update deployment settings."
-                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"User provided deployment id: {deployment_info.user_provided_id}, "
                 f"Deployment id: {deployment_id}, "
                 f"Response status: {response.status_code} "
                 f"Response body: {response.text}",
@@ -1051,7 +1051,7 @@ class DrClient:
         if response.status_code != 200:
             raise DataRobotClientError(
                 "Failed to fetch deployment settings."
-                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"User provided deployment id: {deployment_info.user_provided_id}, "
                 f"Deployment id: {deployment_id}, "
                 f"Response status: {response.status_code} "
                 f"Response body: {response.text}",
@@ -1132,24 +1132,24 @@ class DrClient:
                 code=response.status_code,
             )
 
-    def delete_deployment_by_git_id(self, git_deployment_id):
+    def delete_deployment_by_git_id(self, user_provided_id):
         """
         Delete a deployment from DataRobot, given a Git deployment ID.
 
         Parameters
         ----------
-        git_deployment_id : str
+        user_provided_id : str
             A unique ID that is defined by the user.
         """
 
         deployments = self.fetch_deployments()
         try:
             test_deployment = next(
-                d for d in deployments if d.get("gitDeploymentId") == git_deployment_id
+                d for d in deployments if d.get("userProvidedId") == user_provided_id
             )
         except StopIteration as ex:
             raise IllegalModelDeletion(
-                f"Given deployment does not exist. git_deployment_id: {git_deployment_id}."
+                f"Given deployment does not exist. user_provided_id: {user_provided_id}."
             ) from ex
         self.delete_deployment_by_id(test_deployment["id"])
 

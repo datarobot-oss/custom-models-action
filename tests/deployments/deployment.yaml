@@ -1,4 +1,4 @@
-git_datarobot_deployment_id: my-awesome-deployment-id
+user_provided_deployment_id: my-awesome-deployment-id
 git_datarobot_model_id: my-awesome-model-id-1
 
 settings:
