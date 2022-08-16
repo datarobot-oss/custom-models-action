@@ -47,7 +47,7 @@ def fixture_minimal_regression_model_info():
             ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
         },
         ModelSchema.VERSION_KEY: {
-            ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
+            ModelSchema.MODEL_ENV_ID_KEY: "627790db5621558eedc4c7fa",
         },
     }
     return ModelInfo(
@@ -72,7 +72,7 @@ def fixture_regression_model_info():
             ModelSchema.LANGUAGE_KEY: "Python",
         },
         ModelSchema.VERSION_KEY: {
-            ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
+            ModelSchema.MODEL_ENV_ID_KEY: "627790db5621558eedc4c7fa",
             ModelSchema.INCLUDE_GLOB_KEY: ["./"],
             ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
             ModelSchema.MEMORY_KEY: 256 * 1024 * 1024,

@@ -35,7 +35,7 @@ class TestModelSchemaValidator:
                 ModelSchema.NAME_KEY: "My Awesome Model",
                 ModelSchema.TARGET_NAME_KEY: "target_column",
             },
-            ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: "627785ea562155d227c6a56c"},
+            ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_ID_KEY: "627785ea562155d227c6a56c"},
         }
 
     def test_is_single_models_schema(self):
@@ -243,7 +243,7 @@ class TestModelSchemaValidator:
             if is_single
             else model_metadata[ModelSchema.MULTI_MODELS_KEY][0][ModelSchema.MODEL_ENTRY_META_KEY]
         )
-        edit_metadata[ModelSchema.SETTINGS_SECTION_KEY][ModelSchema.HOLDOUT_DATASET_KEY] = str(
+        edit_metadata[ModelSchema.SETTINGS_SECTION_KEY][ModelSchema.HOLDOUT_DATASET_ID_KEY] = str(
             ObjectId()
         )
         edit_metadata[ModelSchema.SETTINGS_SECTION_KEY][
@@ -266,7 +266,7 @@ class TestModelSchemaValidator:
             ModelSchema.SETTINGS_SECTION_KEY,
             f"{ModelSchema.SETTINGS_SECTION_KEY}.{ModelSchema.NAME_KEY}",
             f"{ModelSchema.SETTINGS_SECTION_KEY}.{ModelSchema.TARGET_NAME_KEY}",
-            f"{ModelSchema.VERSION_KEY}.{ModelSchema.MODEL_ENV_KEY}",
+            f"{ModelSchema.VERSION_KEY}.{ModelSchema.MODEL_ENV_ID_KEY}",
         ],
     )
     def test_missing_mandatory_keys(
@@ -328,7 +328,7 @@ class TestModelSchemaValidator:
         """A case to test dependent keys in a custom model stability test check."""
 
         regression_model_schema[ModelSchema.TEST_KEY] = {
-            ModelSchema.TEST_DATA_KEY: "62779bef562155562769f932",
+            ModelSchema.TEST_DATA_ID_KEY: "62779bef562155562769f932",
             ModelSchema.CHECKS_KEY: {
                 ModelSchema.STABILITY_KEY: {
                     ModelSchema.CHECK_ENABLED_KEY: True,

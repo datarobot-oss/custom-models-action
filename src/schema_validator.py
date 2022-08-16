@@ -232,12 +232,12 @@ class ModelSchema(SharedSchema):
 
     # The 'PARTITIONING_COLUMN_KEY' is relevant for structured models only and is optional.
     PARTITIONING_COLUMN_KEY = "partitioning_column"
-    TRAINING_DATASET_KEY = "training_dataset"
-    # The 'HOLDOUT_DATASET' is relevant for unstructured models only and is optional.
-    HOLDOUT_DATASET_KEY = "holdout_dataset"
+    TRAINING_DATASET_ID_KEY = "training_dataset_id"
+    # The 'HOLDOUT_DATASET_ID_KEY' is relevant for unstructured models only and is optional.
+    HOLDOUT_DATASET_ID_KEY = "holdout_dataset_id"
 
     VERSION_KEY = "version"
-    MODEL_ENV_KEY = "model_environment"
+    MODEL_ENV_ID_KEY = "model_environment_id"
     INCLUDE_GLOB_KEY = "include_glob_pattern"
     EXCLUDE_GLOB_KEY = "exclude_glob_pattern"
     MEMORY_KEY = "memory"
@@ -245,7 +245,7 @@ class ModelSchema(SharedSchema):
 
     TEST_KEY = "test"
     TEST_SKIP_KEY = "skip"
-    TEST_DATA_KEY = "test_data"
+    TEST_DATA_ID_KEY = "test_data_id"
 
     CHECKS_KEY = "checks"
     NULL_VALUE_IMPUTATION_KEY = "null_value_imputation"
@@ -253,7 +253,7 @@ class ModelSchema(SharedSchema):
     BLOCK_DEPLOYMENT_IF_FAILS_KEY = "block_deployment_if_fails"
     SIDE_EFFECTS_KEY = "side_effects"
     PREDICTION_VERIFICATION_KEY = "prediction_verification"
-    OUTPUT_DATASET_KEY = "output_dataset"
+    OUTPUT_DATASET_ID_KEY = "output_dataset_id"
     PREDICTIONS_COLUMN = "predictions_column"
     MATCH_THRESHOLD_KEY = "match_threshold"
     PASSING_MATCH_RATE_KEY = "passing_match_rate"
@@ -291,11 +291,11 @@ class ModelSchema(SharedSchema):
                 Optional(NEGATIVE_CLASS_LABEL_KEY): And(str, len),
                 Optional(CLASS_LABELS_KEY): list,
                 Optional(PARTITIONING_COLUMN_KEY): And(str, len),
-                Optional(TRAINING_DATASET_KEY): And(str, ObjectId.is_valid),
-                Optional(HOLDOUT_DATASET_KEY): And(str, ObjectId.is_valid),
+                Optional(TRAINING_DATASET_ID_KEY): And(str, ObjectId.is_valid),
+                Optional(HOLDOUT_DATASET_ID_KEY): And(str, ObjectId.is_valid),
             },
             VERSION_KEY: {
-                MODEL_ENV_KEY: And(str, ObjectId.is_valid),
+                MODEL_ENV_ID_KEY: And(str, ObjectId.is_valid),
                 Optional(INCLUDE_GLOB_KEY, default=[]): And(
                     list, lambda l: all(isinstance(e, str) and len(e) > 0 for e in l)
                 ),
@@ -309,7 +309,7 @@ class ModelSchema(SharedSchema):
                 # The skip attribute allows users to have the test section in their yaml file
                 # and still disable testing
                 Optional(TEST_SKIP_KEY, default=False): bool,
-                Optional(TEST_DATA_KEY): And(str, ObjectId.is_valid),
+                Optional(TEST_DATA_ID_KEY): And(str, ObjectId.is_valid),
                 Optional(MEMORY_KEY): Use(MemoryConvertor.to_bytes),
                 Optional(CHECKS_KEY): {
                     Optional(NULL_VALUE_IMPUTATION_KEY): {
@@ -323,7 +323,7 @@ class ModelSchema(SharedSchema):
                     Optional(PREDICTION_VERIFICATION_KEY): {
                         CHECK_ENABLED_KEY: bool,
                         BLOCK_DEPLOYMENT_IF_FAILS_KEY: bool,
-                        OUTPUT_DATASET_KEY: And(str, ObjectId.is_valid),
+                        OUTPUT_DATASET_ID_KEY: And(str, ObjectId.is_valid),
                         PREDICTIONS_COLUMN: And(str, len),
                         Optional(MATCH_THRESHOLD_KEY): And(float, lambda v: 0 <= v <= 1),
                         Optional(PASSING_MATCH_RATE_KEY): And(int, lambda v: 0 <= v <= 100),
@@ -543,7 +543,7 @@ class ModelSchema(SharedSchema):
             if len(mutual_exclusive_keys & settings_section.keys()) > 1:
                 raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")
 
-        mutual_exclusive_keys = {cls.PARTITIONING_COLUMN_KEY, cls.HOLDOUT_DATASET_KEY}
+        mutual_exclusive_keys = {cls.PARTITIONING_COLUMN_KEY, cls.HOLDOUT_DATASET_ID_KEY}
         if len(mutual_exclusive_keys & settings_section.keys()) > 1:
             raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")
 
@@ -588,7 +588,7 @@ class ModelSchema(SharedSchema):
                 single_transformed_metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_SKIP_KEY
             )
             test_dataset_value = cls.get_value(
-                single_transformed_metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_DATA_KEY
+                single_transformed_metadata, ModelSchema.TEST_KEY, ModelSchema.TEST_DATA_ID_KEY
             )
             if (
                 not skip_test_value
