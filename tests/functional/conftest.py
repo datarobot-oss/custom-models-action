@@ -52,7 +52,7 @@ def cleanup_models(dr_client_tool, repo_root_path):
                 model_metadata = yaml.safe_load(fd)
 
             try:
-                dr_client_tool.delete_custom_model_by_git_model_id(
+                dr_client_tool.delete_custom_model_by_user_provided_id(
                     model_metadata[ModelSchema.MODEL_ID_KEY]
                 )
             except (IllegalModelDeletion, DataRobotClientError):

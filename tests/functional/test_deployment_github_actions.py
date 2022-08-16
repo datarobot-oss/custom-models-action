@@ -250,9 +250,9 @@ class TestDeploymentGitHubActions:
         latest_deployment_model_version_id = the_deployment["model"]["customModelImage"][
             "customModelVersionId"
         ]
-        local_git_model_id = deployment_metadata[DeploymentSchema.MODEL_ID_KEY]
-        latest_model_version = dr_client.fetch_custom_model_latest_version_by_git_model_id(
-            local_git_model_id
+        local_user_provided_id = deployment_metadata[DeploymentSchema.MODEL_ID_KEY]
+        latest_model_version = dr_client.fetch_custom_model_latest_version_by_user_provided_id(
+            local_user_provided_id
         )
         return the_deployment, latest_deployment_model_version_id, latest_model_version
 

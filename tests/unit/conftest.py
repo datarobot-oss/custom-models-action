@@ -159,7 +159,7 @@ def fixture_single_model_factory(repo_root_path, common_path_with_code):
         with_include_glob=True,
         with_exclude_glob=True,
         include_main_prog=True,
-        git_model_id=None,
+        user_provided_id=None,
     ):
         model_path = repo_root_path / name
         os.makedirs(model_path)
@@ -171,7 +171,7 @@ def fixture_single_model_factory(repo_root_path, common_path_with_code):
         write_to_file(model_path / "score" / "score.py", "# score.py")
 
         single_model_metadata = {
-            ModelSchema.MODEL_ID_KEY: git_model_id if git_model_id else str(uuid.uuid4()),
+            ModelSchema.MODEL_ID_KEY: user_provided_id or str(uuid.uuid4()),
             ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
             ModelSchema.SETTINGS_SECTION_KEY: {
                 ModelSchema.NAME_KEY: name,

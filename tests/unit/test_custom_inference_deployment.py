@@ -38,14 +38,12 @@ from tests.unit.conftest import write_to_file
 def fixture_single_deployment_factory(repo_root_path, single_model_factory):
     """A factory fixture to create a single deployment along with a model."""
 
-    def _inner(name, write_metadata=True, user_provided_id=None, git_model_id=None):
+    def _inner(name, write_metadata=True, user_provided_id=None):
         model_name = f"model_{name}"
-        model_metadata = single_model_factory(model_name, write_metadata, git_model_id=git_model_id)
+        model_metadata = single_model_factory(model_name, write_metadata)
 
         single_deployment_metadata = {
-            DeploymentSchema.DEPLOYMENT_ID_KEY: (
-                user_provided_id if user_provided_id else str(uuid.uuid4())
-            ),
+            DeploymentSchema.DEPLOYMENT_ID_KEY: user_provided_id or str(uuid.uuid4()),
             DeploymentSchema.MODEL_ID_KEY: model_metadata[SharedSchema.MODEL_ID_KEY],
         }
 
@@ -258,9 +256,9 @@ class TestCustomInferenceDeployment:
     @staticmethod
     def _setup_datarobot_models_by_model_id(datarobot_models):
         datarobot_models_by_model_id = {}
-        for git_model_id, datarobot_model in datarobot_models.items():
+        for user_provided_id, datarobot_model in datarobot_models.items():
             datarobot_model_id = datarobot_model.model["id"]
-            datarobot_models_by_model_id[datarobot_model_id] = datarobot_models[git_model_id]
+            datarobot_models_by_model_id[datarobot_model_id] = datarobot_models[user_provided_id]
         return datarobot_models_by_model_id
 
     @staticmethod
@@ -432,12 +430,12 @@ class TestDeploymentChanges:
     def _mock_datarobot_model_factory(self):
         """A fixture to create a datarobot model class."""
 
-        def _inner(model_id=None, git_model_id=None, latest_version_id=None):
+        def _inner(model_id=None, user_provided_id=None, latest_version_id=None):
             model_id = model_id or unique_str()
-            git_model_id = git_model_id or unique_str()
+            user_provided_id = user_provided_id or unique_str()
             latest_version_id = latest_version_id or unique_str()
             return DataRobotModel(
-                model={"id": model_id, "gitModelId": git_model_id},
+                model={"id": model_id, "userProvidedId": user_provided_id},
                 latest_version={"id": latest_version_id, "customModelId": model_id},
             )
 
@@ -447,13 +445,18 @@ class TestDeploymentChanges:
     def _mock_datarobot_deployment_factory(self, _mock_datarobot_model_factory):
         """A fixture to create a datarobot deployment class."""
 
-        def _inner(model_id=None, git_model_id=None, latest_version_id=None, user_provided_id=None):
+        def _inner(
+            model_id=None,
+            user_provided_model_id=None,
+            latest_version_id=None,
+            user_provided_deployment_id=None,
+        ):
             datarobot_model = _mock_datarobot_model_factory(
-                model_id, git_model_id, latest_version_id
+                model_id, user_provided_model_id, latest_version_id
             )
-            user_provided_id = user_provided_id or unique_str()
+            user_provided_deployment_id = user_provided_deployment_id or unique_str()
             return DataRobotDeployment(
-                deployment={"id": unique_str(), "userProvidedId": user_provided_id},
+                deployment={"id": unique_str(), "userProvidedId": user_provided_deployment_id},
                 model_version=datarobot_model.latest_version,
             )
 
@@ -461,12 +464,12 @@ class TestDeploymentChanges:
 
     @pytest.fixture
     def _mock_deployment_info_factory(self):
-        def _inner(user_provided_id, git_model_id=None, enable_challenger=True):
+        def _inner(user_provided_id, user_provided_model_id=None, enable_challenger=True):
             return DeploymentInfo(
                 yaml_path="/dummy/path.yaml",
                 deployment_metadata={
                     DeploymentSchema.DEPLOYMENT_ID_KEY: user_provided_id,
-                    DeploymentSchema.MODEL_ID_KEY: git_model_id or unique_str(),
+                    DeploymentSchema.MODEL_ID_KEY: user_provided_model_id or unique_str(),
                     DeploymentSchema.SETTINGS_SECTION_KEY: {
                         DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY: enable_challenger
                     },

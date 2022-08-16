@@ -166,7 +166,7 @@ class TestModelGitHubActions:
         yield
 
         printout("Validate the increase memory check")
-        cm_version = dr_client.fetch_custom_model_latest_version_by_git_model_id(
+        cm_version = dr_client.fetch_custom_model_latest_version_by_user_provided_id(
             model_metadata[ModelSchema.MODEL_ID_KEY]
         )
 
@@ -212,7 +212,7 @@ class TestModelGitHubActions:
         yield
 
         printout("Validate the increase memory check")
-        cm_version = dr_client.fetch_custom_model_latest_version_by_git_model_id(
+        cm_version = dr_client.fetch_custom_model_latest_version_by_user_provided_id(
             model_metadata[ModelSchema.MODEL_ID_KEY]
         )
         cm_version_files = [item["filePath"] for item in cm_version["items"]]
@@ -295,7 +295,7 @@ class TestModelGitHubActions:
         models = dr_client.fetch_custom_models()
         if models:
             assert all(
-                model.get("gitModelId") != model_metadata[ModelSchema.MODEL_ID_KEY]
+                model.get("userProvidedId") != model_metadata[ModelSchema.MODEL_ID_KEY]
                 for model in models
             )
         printout("Done")
@@ -373,8 +373,8 @@ class TestModelGitHubActions:
                 )
 
                 # Validate
-                git_model_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
-                custom_model = dr_client.fetch_custom_model_by_git_id(git_model_id)
+                user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
+                custom_model = dr_client.fetch_custom_model_by_git_id(user_provided_id)
                 assert custom_model["trainingDatasetId"] == training_dataset_id
                 assert custom_model["trainingDataPartitionColumn"] == partition_column
             finally:
@@ -409,7 +409,7 @@ class TestModelGitHubActions:
             )
             run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
 
-            git_model_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
+            user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
 
             printout("Upload training and holdout datasets for unstructured model.")
             datasets_root = Path(__file__).parent / ".." / "datasets"
@@ -440,7 +440,7 @@ class TestModelGitHubActions:
                     )
 
                     # Validation
-                    custom_model = dr_client.fetch_custom_model_by_git_id(git_model_id)
+                    custom_model = dr_client.fetch_custom_model_by_git_id(user_provided_id)
                     assert (
                         custom_model["externalMlopsStatsConfig"]["trainingDatasetId"]
                         == training_dataset_id
@@ -469,7 +469,7 @@ class TestModelGitHubActions:
         model GitHub action.
         """
 
-        git_model_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
+        user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
 
         # 1. Create a model just as a preliminary requirement (use GitHub action)
         printout(
@@ -486,7 +486,7 @@ class TestModelGitHubActions:
             (ModelSchema.TARGET_NAME_KEY, "XBH/AB_jr"),  # Taken from the associated dataset
             (ModelSchema.PREDICTION_THRESHOLD_KEY, 0.2),  # Assuming the model type is regression
         ]:
-            custom_model = dr_client.fetch_custom_model_by_git_id(git_model_id)
+            custom_model = dr_client.fetch_custom_model_by_git_id(user_provided_id)
             actual_settings_value = custom_model[DrClient.MODEL_SETTINGS_KEYS_MAP[settings_key]]
             assert desired_settings_value != actual_settings_value, (
                 f"Desired settings value '{desired_settings_value}' should be differ than the "
@@ -508,7 +508,7 @@ class TestModelGitHubActions:
                 )
 
                 # Validate
-                custom_model = dr_client.fetch_custom_model_by_git_id(git_model_id)
+                custom_model = dr_client.fetch_custom_model_by_git_id(user_provided_id)
                 actual_settings_value = custom_model[DrClient.MODEL_SETTINGS_KEYS_MAP[settings_key]]
                 assert desired_settings_value == actual_settings_value, (
                     f"Desired settings value '{desired_settings_value}' should be equal to the "

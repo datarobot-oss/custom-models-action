@@ -32,7 +32,7 @@ class SharedSchema:
     deployment schemas.
     """
 
-    MODEL_ID_KEY = "git_datarobot_model_id"
+    MODEL_ID_KEY = "user_provided_model_id"
     SETTINGS_SECTION_KEY = "settings"
 
     @classmethod

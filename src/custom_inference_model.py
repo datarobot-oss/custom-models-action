@@ -262,25 +262,25 @@ class CustomInferenceModelBase(ABC):
         return path
 
     def _add_new_model_info(self, model_info):
-        if model_info.git_model_id in self.models_info:
+        if model_info.user_provided_id in self.models_info:
             raise ModelMetadataAlreadyExists(
-                f"Model {model_info.git_model_id} already exists. "
+                f"Model {model_info.user_provided_id} already exists. "
                 f"New model yaml path: {model_info.yaml_filepath}."
             )
 
         logger.info(
-            "Adding new model metadata. Git model ID: %s. Model metadata yaml path: %s.",
-            model_info.git_model_id,
+            "Adding new model metadata. User provided ID: %s. Model metadata yaml path: %s.",
+            model_info.user_provided_id,
             model_info.yaml_filepath,
         )
-        self.models_info[model_info.git_model_id] = model_info
+        self.models_info[model_info.user_provided_id] = model_info
 
     def _fetch_models_from_datarobot(self):
         logger.info("Fetching models from DataRobot ...")
         custom_inference_models = self._dr_client.fetch_custom_models()
         for custom_model in custom_inference_models:
-            git_model_id = custom_model.get("gitModelId")
-            if git_model_id:
+            user_provided_id = custom_model.get("userProvidedId")
+            if user_provided_id:
                 datarobot_model_id = custom_model["id"]
                 model_versions = self._dr_client.fetch_custom_model_versions(
                     datarobot_model_id, json={"limit": 1}
@@ -288,16 +288,16 @@ class CustomInferenceModelBase(ABC):
                 latest_version = model_versions[0] if model_versions else None
                 if not latest_version:
                     logger.warning(
-                        "Model exists without a version! git_model_id: %s, custom_model_id: %s",
-                        git_model_id,
+                        "Model exists without a version! user_provided_id: %s, custom_model_id: %s",
+                        user_provided_id,
                         datarobot_model_id,
                     )
                 datarobot_model = DataRobotModel(custom_model, latest_version)
-                self.datarobot_models[git_model_id] = datarobot_model
+                self.datarobot_models[user_provided_id] = datarobot_model
                 self._datarobot_models_by_id[datarobot_model_id] = datarobot_model
 
     def _get_latest_model_version_git_commit_ancestor(self, model_info):
-        latest_version = self.datarobot_models[model_info.git_model_id].latest_version
+        latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
         git_model_version = latest_version.get("gitModelVersion")
         if not git_model_version:
             # Either the model has never provisioned of the user created a version with a non
@@ -408,7 +408,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def _validate_model_integrity(self, model_info):
         if not model_info.main_program_exists():
             raise ModelMainEntryPointNotFound(
-                f"Model (Id: {model_info.git_model_id}) main entry point not found ("
+                f"Model (Id: {model_info.user_provided_id}) main entry point not found ("
                 f"custom.py).\nExisting files: {model_info.model_file_paths}"
             )
 
@@ -446,8 +446,8 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
     def _model_version_exists(self, model_info):
         return (
-            model_info.git_model_id in self.datarobot_models
-            and self.datarobot_models[model_info.git_model_id].latest_version
+            model_info.user_provided_id in self.datarobot_models
+            and self.datarobot_models[model_info.user_provided_id].latest_version
         )
 
     def _valid_ancestor(self, model_info):
@@ -475,23 +475,24 @@ class CustomInferenceModel(CustomInferenceModelBase):
             model_info.file_changes = ModelInfo.FileChanges()
 
             logger.debug(
-                "Searching model %s changes since its last DR version.", model_info.git_model_id
+                "Searching model %s changes since its last DR version.", model_info.user_provided_id
             )
             if model_info.flags.should_upload_all_files:
-                logger.debug("Model %s will upload all its files.", model_info.git_model_id)
+                logger.debug("Model %s will upload all its files.", model_info.user_provided_id)
                 continue
 
             from_commit_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
             if not from_commit_sha:
                 raise UnexpectedResult(
-                    f"Unexpected None ancestor commit sha, model_git_id: {model_info.git_model_id}"
+                    "Unexpected None ancestor commit sha, "
+                    f"model_git_id: {model_info.user_provided_id}"
                 )
             changed_files, deleted_files = self._repo.find_changed_files(
                 self.github_sha, from_commit_sha
             )
             logger.debug(
                 "Model %s changes since commit %s. Changed files: %s. Deleted files: %s.",
-                model_info.git_model_id,
+                model_info.user_provided_id,
                 from_commit_sha,
                 changed_files,
                 deleted_files,
@@ -520,8 +521,8 @@ class CustomInferenceModel(CustomInferenceModelBase):
         for deleted_file in deleted_files:
             # Being stateless, check each deleted file against the stored custom model version
             # in DataRobot
-            if model_info.git_model_id in self.datarobot_models:
-                latest_version = self.datarobot_models[model_info.git_model_id].latest_version
+            if model_info.user_provided_id in self.datarobot_models:
+                latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
                 if latest_version:
                     model_root_dir = model_info.model_path
                     repo_root_dir = self.options.root_dir
@@ -541,7 +542,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
                     logger.debug(
                         "File path %s will be deleted from model %s.",
                         deleted_file,
-                        model_info.git_model_id,
+                        model_info.user_provided_id,
                     )
 
     def _apply_datarobot_actions_for_affected_models(self):
@@ -550,7 +551,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
         self._handle_deleted_models()
 
     def _handle_model_changes(self):
-        for git_model_id, model_info in self.models_info.items():
+        for user_provided_id, model_info in self.models_info.items():
             if model_info.is_affected_by_commit:
                 logger.info("Model '%s' is affected by commit.", model_info.model_path)
 
@@ -566,13 +567,13 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
                     logger.info(
                         "Custom inference model version was successfully created. "
-                        "git_model_id: %s, model_id: %s, version_id: %s.",
-                        git_model_id,
+                        "user_provided_id: %s, model_id: %s, version_id: %s.",
+                        user_provided_id,
                         custom_model_id,
                         version_id,
                     )
                 else:
-                    custom_model = self.datarobot_models[model_info.git_model_id].model
+                    custom_model = self.datarobot_models[model_info.user_provided_id].model
 
                 if model_info.flags.should_update_settings:
                     self._update_settings(custom_model, model_info)
@@ -580,9 +581,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
                 self._stats.total_affected += 1
 
     def _get_or_create_custom_model(self, model_info):
-        already_exists = model_info.git_model_id in self.datarobot_models
+        already_exists = model_info.user_provided_id in self.datarobot_models
         if already_exists:
-            custom_model = self.datarobot_models[model_info.git_model_id].model
+            custom_model = self.datarobot_models[model_info.user_provided_id].model
         else:
             custom_model = self._dr_client.create_custom_model(model_info)
             logger.info("Custom inference model was created: %s", custom_model["id"])
@@ -595,14 +596,14 @@ class CustomInferenceModel(CustomInferenceModelBase):
             changed_file_paths = model_info.file_changes.changed_or_new_files
 
         logger.info(
-            "Create custom inference model version. git_model_id:  %s, from_latest: %s",
-            model_info.git_model_id,
+            "Create custom inference model version. user_provided_id:  %s, from_latest: %s",
+            model_info.user_provided_id,
             model_info.flags.should_upload_all_files,
         )
         logger.debug(
-            "Files to be uploaded: %s, git_model_id: %s",
+            "Files to be uploaded: %s, user_provided_id: %s",
             [p.under_model for p in changed_file_paths],
-            model_info.git_model_id,
+            model_info.user_provided_id,
         )
 
         if self.is_pull_request:
@@ -664,9 +665,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
             if custom_model:
                 logger.info(
                     "Training / holdout dataset were updated for unstructured model. "
-                    "Git model ID: %s. Training dataset name: %s. Training dataset ID: %s. "
+                    "User provided ID: %s. Training dataset name: %s. Training dataset ID: %s. "
                     "Holdout dataset name: %s. Holdout dataset ID: %s",
-                    model_info.git_model_id,
+                    model_info.user_provided_id,
                     custom_model["externalMlopsStatsConfig"]["trainingDatasetName"],
                     custom_model["externalMlopsStatsConfig"]["trainingDatasetId"],
                     custom_model["externalMlopsStatsConfig"]["holdoutDatasetName"],
@@ -678,9 +679,9 @@ class CustomInferenceModel(CustomInferenceModelBase):
             )
             if custom_model:
                 logger.info(
-                    "Training dataset was updated for structured model. Git model ID: %s. "
+                    "Training dataset was updated for structured model. User provided ID: %s. "
                     "Dataset name: %s. Dataset ID: %s. Dataset version ID: %s.",
-                    model_info.git_model_id,
+                    model_info.user_provided_id,
                     custom_model["trainingDataFileName"],
                     custom_model["trainingDatasetId"],
                     custom_model["trainingDatasetVersionId"],
@@ -689,20 +690,22 @@ class CustomInferenceModel(CustomInferenceModelBase):
     def _update_model_settings(self, datarobot_custom_model, model_info):
         custom_model = self._dr_client.update_model_settings(datarobot_custom_model, model_info)
         if custom_model:
-            logger.info("Model settings were updated. Git model ID: %s.", model_info.git_model_id)
+            logger.info(
+                "Model settings were updated. User provided ID: %s.", model_info.user_provided_id
+            )
 
     def _handle_deleted_models(self):
         missing_locally_id_to_git_id = {}
-        for git_model_id, datarobot_model in self.datarobot_models.items():
-            if git_model_id not in self.models_info:
-                missing_locally_id_to_git_id[datarobot_model.model["id"]] = git_model_id
+        for user_provided_id, datarobot_model in self.datarobot_models.items():
+            if user_provided_id not in self.models_info:
+                missing_locally_id_to_git_id[datarobot_model.model["id"]] = user_provided_id
 
         if missing_locally_id_to_git_id:
             if not self.options.allow_model_deletion:
-                missing_git_model_ids = list(missing_locally_id_to_git_id.values())
+                missing_user_provided_ids = list(missing_locally_id_to_git_id.values())
                 raise IllegalModelDeletion(
                     "Model deletion was configured as not being allowed. "
-                    f"The missing models in the local source tree are: {missing_git_model_ids}"
+                    f"The missing models in the local source tree are: {missing_user_provided_ids}"
                 )
 
             model_ids_to_fetch = list(missing_locally_id_to_git_id.keys())
@@ -730,7 +733,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
                 msg += (
                     f"Deployment: {deployment['id']}, "
                     f"model_id: {model_id}, "
-                    f"git_model_id: {missing_locally_id_to_git_id[model_id]}"
+                    f"user_provided_id: {missing_locally_id_to_git_id[model_id]}"
                     "\n"
                 )
             raise IllegalModelDeletion(
@@ -739,12 +742,12 @@ class CustomInferenceModel(CustomInferenceModelBase):
 
     def _actually_delete_models(self, missing_locally_id_to_git_id, deployments):
         logger.info("Deleting models ...")
-        for model_id, git_model_id in missing_locally_id_to_git_id.items():
+        for model_id, user_provided_id in missing_locally_id_to_git_id.items():
             if any(model_id == deployment["customModel"]["id"] for deployment in deployments):
                 logger.warning(
-                    "Skipping model deletion because it is deployed. git_model_id: %s, "
+                    "Skipping model deletion because it is deployed. user_provided_id: %s, "
                     "model_id: %s",
-                    git_model_id,
+                    user_provided_id,
                     model_id,
                 )
                 continue
@@ -753,8 +756,8 @@ class CustomInferenceModel(CustomInferenceModelBase):
                 self._stats.total_deleted += 1
                 self._stats.total_affected += 1
                 logger.info(
-                    "Model was deleted with success. git_model_id: %s, model_id: %s",
-                    git_model_id,
+                    "Model was deleted with success. user_provided_id: %s, model_id: %s",
+                    user_provided_id,
                     model_id,
                 )
             except DataRobotClientError as ex:

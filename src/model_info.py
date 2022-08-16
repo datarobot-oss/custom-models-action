@@ -74,7 +74,7 @@ class ModelInfo:
         return self._metadata
 
     @property
-    def git_model_id(self):
+    def user_provided_id(self):
         """A model's unique ID that is provided by the user and read from the model's metadata"""
         return self.metadata[ModelSchema.MODEL_ID_KEY]
 
@@ -127,7 +127,7 @@ class ModelInfo:
             The repository root directory.
         """
 
-        logger.debug("Model %s is set with the following paths: %s", self.git_model_id, paths)
+        logger.debug("Model %s is set with the following paths: %s", self.user_provided_id, paths)
         self._model_file_paths = {}
         for path in paths:
             model_filepath = ModelFilePath(path, self.model_path, repo_root_path)

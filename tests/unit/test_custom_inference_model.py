@@ -58,14 +58,14 @@ class TestCustomInferenceModel:
         custom_inference_model._scan_and_load_models_metadata()
         assert len(custom_inference_model._models_info) == num_models
 
-    def test_scan_and_load_models_with_same_git_model_id_failure(
+    def test_scan_and_load_models_with_same_user_provided_id_failure(
         self, options, single_model_factory
     ):
         """Test a failure of models' scanning and loading of multiple models with same ID."""
 
-        git_model_id = "same-git-model-id-111"
-        single_model_factory("model-1", write_metadata=True, git_model_id=git_model_id)
-        single_model_factory("model-2", write_metadata=True, git_model_id=git_model_id)
+        user_provided_id = "same-user-provided-id-111"
+        single_model_factory("model-1", write_metadata=True, user_provided_id=user_provided_id)
+        single_model_factory("model-2", write_metadata=True, user_provided_id=user_provided_id)
         custom_inference_model = CustomInferenceModel(options)
         with pytest.raises(ModelMetadataAlreadyExists):
             custom_inference_model._scan_and_load_models_metadata()
@@ -170,10 +170,10 @@ class TestCustomInferenceModelDeletion:
     """Contains unit-tests for model deletion."""
 
     @pytest.fixture
-    def git_model_id(self):
+    def user_provided_id(self):
         """A fixture to return a fake user model ID."""
 
-        return "git-model-1111"
+        return "user-provided-1111"
 
     @pytest.fixture
     def model_id(self):
@@ -182,27 +182,27 @@ class TestCustomInferenceModelDeletion:
         return "model-id-2222"
 
     @contextlib.contextmanager
-    def _mock_local_models(self, git_model_id):
+    def _mock_local_models(self, user_provided_id):
         with patch.object(
             CustomInferenceModel, "models_info", new_callable=PropertyMock
         ) as models_info_property, patch.object(
-            ModelInfo, "git_model_id", new_callable=PropertyMock
-        ) as model_info_git_model_id:
+            ModelInfo, "user_provided_id", new_callable=PropertyMock
+        ) as model_info_user_provided_id:
             models_info_property.return_value = {
-                git_model_id: ModelInfo("yaml-path", "model-path", None)
+                user_provided_id: ModelInfo("yaml-path", "model-path", None)
             }
-            model_info_git_model_id.return_value = git_model_id
+            model_info_user_provided_id.return_value = user_provided_id
             yield
 
     @contextlib.contextmanager
-    def _mock_fetched_models_that_do_not_exist_locally(self, git_model_id, model_id):
+    def _mock_fetched_models_that_do_not_exist_locally(self, user_provided_id, model_id):
         with patch.object(
             CustomInferenceModel, "datarobot_models", new_callable=PropertyMock
         ) as datarobot_models:
             # Ensure it does not match to the local model definition
-            non_existing_git_model_id = f"from-dr-{git_model_id}"
+            non_existing_user_provided_id = f"from-dr-{user_provided_id}"
             datarobot_models.return_value = {
-                non_existing_git_model_id: DataRobotModel(
+                non_existing_user_provided_id: DataRobotModel(
                     model={"id": model_id}, latest_version=None
                 )
             }
@@ -218,16 +218,16 @@ class TestCustomInferenceModelDeletion:
 
     @pytest.mark.parametrize("event_name", ["pull_request", "push"])
     def test_models_deletion_without_allowed_input_arg(
-        self, options, git_model_id, model_id, event_name
+        self, options, user_provided_id, model_id, event_name
     ):
         """Test a failure to delete a model when input argument does not allow it."""
 
         options.allow_model_deletion = False
         custom_inference_model = CustomInferenceModel(options)
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": event_name}), self._mock_local_models(
-            git_model_id
+            user_provided_id
         ), self._mock_fetched_models_that_do_not_exist_locally(
-            git_model_id, model_id
+            user_provided_id, model_id
         ), self._mock_fetched_deployments(
             model_id, has_deployment=False
         ):
@@ -237,32 +237,32 @@ class TestCustomInferenceModelDeletion:
             assert "Model deletion was configured as not being allowed" in exception_msg
 
     def test_models_deletion_for_pull_request_event_without_deployment(
-        self, options, git_model_id, model_id
+        self, options, user_provided_id, model_id
     ):
         """Test an undeployed model deletion during a pull request event."""
 
         options.allow_model_deletion = True
         custom_inference_model = CustomInferenceModel(options)
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request"}), self._mock_local_models(
-            git_model_id
+            user_provided_id
         ), self._mock_fetched_models_that_do_not_exist_locally(
-            git_model_id, model_id
+            user_provided_id, model_id
         ), self._mock_fetched_deployments(
             model_id, has_deployment=False
         ):
             custom_inference_model._handle_deleted_models()
 
     def test_models_deletion_for_pull_request_event_with_deployment(
-        self, options, git_model_id, model_id
+        self, options, user_provided_id, model_id
     ):
         """Test a failure to delete a deployed model during a pull request event."""
 
         options.allow_model_deletion = True
         custom_inference_model = CustomInferenceModel(options)
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request"}), self._mock_local_models(
-            git_model_id
+            user_provided_id
         ), self._mock_fetched_models_that_do_not_exist_locally(
-            git_model_id, model_id
+            user_provided_id, model_id
         ), self._mock_fetched_deployments(
             model_id, has_deployment=True
         ):
@@ -270,7 +270,7 @@ class TestCustomInferenceModelDeletion:
                 custom_inference_model._handle_deleted_models()
 
     def test_models_deletion_for_push_event_and_no_deployments(
-        self, options, git_model_id, model_id
+        self, options, user_provided_id, model_id
     ):
         """
         Test a successful deletion of a model without existing deployments during push event.
@@ -281,16 +281,18 @@ class TestCustomInferenceModelDeletion:
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.object(
             DrClient, "delete_custom_model_by_model_id"
         ) as mock_dr_client_delete_cm, self._mock_local_models(
-            git_model_id
+            user_provided_id
         ), self._mock_fetched_models_that_do_not_exist_locally(
-            git_model_id, model_id
+            user_provided_id, model_id
         ), self._mock_fetched_deployments(
             model_id, has_deployment=False
         ):
             custom_inference_model._handle_deleted_models()
             mock_dr_client_delete_cm.assert_called_once()
 
-    def test_models_deletion_for_push_event_and_deployment(self, options, git_model_id, model_id):
+    def test_models_deletion_for_push_event_and_deployment(
+        self, options, user_provided_id, model_id
+    ):
         """
         Test a successful deletion of an undeployed model with other existing deployments during
         a push event.
@@ -301,9 +303,9 @@ class TestCustomInferenceModelDeletion:
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.object(
             DrClient, "delete_custom_model_by_model_id"
         ) as mock_dr_client_delete_cm, self._mock_local_models(
-            git_model_id
+            user_provided_id
         ), self._mock_fetched_models_that_do_not_exist_locally(
-            git_model_id, model_id
+            user_provided_id, model_id
         ), self._mock_fetched_deployments(
             model_id, has_deployment=True
         ):
@@ -393,7 +395,7 @@ class TestGlobPatterns:
 
         model_info = ModelInfo("yaml-path", "/m", None)
         with patch("common.git_tool.Repo.init"), patch("custom_inference_model.DrClient"), patch(
-            "custom_inference_model.ModelInfo.git_model_id", new_callable=PropertyMock("123")
+            "custom_inference_model.ModelInfo.user_provided_id", new_callable=PropertyMock("123")
         ):
             CustomInferenceModel._set_filtered_model_paths(
                 model_info, included_paths, excluded_paths, repo_root_dir="/"
