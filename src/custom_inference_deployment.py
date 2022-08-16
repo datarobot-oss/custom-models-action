@@ -298,7 +298,7 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
 
     def _handle_deployment_changes(self, deployment_info, datarobot_deployment):
         desired_label = deployment_info.get_settings_value(DeploymentSchema.LABEL_KEY)
-        if desired_label != datarobot_deployment.deployment["label"]:
+        if desired_label and desired_label != datarobot_deployment.deployment["label"]:
             datarobot_deployment_id = datarobot_deployment.deployment["id"]
             self._dr_client.update_deployment_label(datarobot_deployment_id, desired_label)
 
