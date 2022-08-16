@@ -47,7 +47,7 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         return self._datarobot_deployments
 
     def _label(self):
-        return "deployments"
+        return self.DEPLOYMENTS_LABEL
 
     def _run(self):
         """
