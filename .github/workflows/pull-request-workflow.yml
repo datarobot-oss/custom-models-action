@@ -147,6 +147,7 @@ jobs:
           echo "Total affected models: ${{ steps.custom-inference-model.outputs.total-affected-models }}"
           echo "Total created models: ${{ steps.custom-inference-model.outputs.total-created-models }}"
           echo "Total deleted models: ${{ steps.custom-inference-model.outputs.total-deleted-models }}"
+          echo "Total created model versions: ${{ steps.custom-inference-model.outputs.total-created-model-versions }}"
           echo "Message: ${{ steps.custom-inference-model.outputs.message }}"
 
   datarobot-custom-inference-model-deployment:
@@ -191,7 +192,7 @@ jobs:
 
       - name: DataRobot Custom Inference Model Deployment Results
         run: |
-          echo "Total affected models: ${{ steps.custom-inference-model-deployment.outputs.total-affected-deployments }}"
-          echo "Total created models: ${{ steps.custom-inference-model-deployment.outputs.total-created-deployments }}"
-          echo "Total deleted models: ${{ steps.custom-inference-model-deployment.outputs.total-deleted-deployments }}"
+          echo "Total affected deployments: ${{ steps.custom-inference-model-deployment.outputs.total-affected-deployments }}"
+          echo "Total created deployments: ${{ steps.custom-inference-model-deployment.outputs.total-created-deployments }}"
+          echo "Total deleted deployments: ${{ steps.custom-inference-model-deployment.outputs.total-deleted-deployments }}"
           echo "Message: ${{ steps.custom-inference-model-deployment.outputs.message }}"

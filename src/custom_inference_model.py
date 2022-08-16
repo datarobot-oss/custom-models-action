@@ -44,6 +44,9 @@ class CustomInferenceModelBase(ABC):
     inference model and deployment classes.
     """
 
+    MODELS_LABEL = "models"
+    DEPLOYMENTS_LABEL = "deployments"
+
     _models_info: Dict[str, ModelInfo]
 
     @dataclass
@@ -53,6 +56,7 @@ class CustomInferenceModelBase(ABC):
         total_affected: int = 0
         total_created: int = 0
         total_deleted: int = 0
+        total_created_versions: int = 0
 
         def print(self, label):
             """
@@ -67,6 +71,10 @@ class CustomInferenceModelBase(ABC):
                 ::set-output name=total-deleted-{label}::{self.total_deleted}
                 """
             )
+            if label == CustomInferenceModelBase.MODELS_LABEL:
+                print(
+                    f"::set-output name=total-created-model-versions::{self.total_created_versions}"
+                )
 
     def __init__(self, options):
         self._options = options
@@ -319,7 +327,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
     """A custom inference model implementation of the GitHub action"""
 
     def _label(self):
-        return "models"
+        return self.MODELS_LABEL
 
     def _run(self):
         """
@@ -565,6 +573,7 @@ class CustomInferenceModel(CustomInferenceModelBase):
                     if model_info.should_run_test:
                         self._test_custom_model_version(custom_model_id, version_id, model_info)
 
+                    self._stats.total_created_versions += 1
                     logger.info(
                         "Custom inference model version was successfully created. "
                         "user_provided_id: %s, model_id: %s, version_id: %s.",

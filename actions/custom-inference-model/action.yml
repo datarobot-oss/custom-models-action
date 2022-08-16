@@ -31,6 +31,9 @@ outputs:
   total-deleted-models: # id of output
     description: 'How many models were deleted.'
     value: ${{ steps.custom-inference-model.outputs.total-deleted-models }}
+  total-created-model-versions: # id of output
+    description: 'How many new model versions were created.'
+    value: ${{ steps.custom-inference-model.outputs.total-created-model-versions }}
   message: # id of output
     description: 'The output message from the GitHub action.'
     value: ${{ steps.custom-inference-model.outputs.message }}
