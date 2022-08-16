@@ -133,7 +133,7 @@ class TestCustomModelRoutes:
         def _inner(model_id):
             return {
                 "id": model_id,
-                "gitModelId": f"git-id-{model_id}",
+                "userProvidedId": f"user-provided-id-{model_id}",
                 "customModelType": "inference",
                 "supportsBinaryClassification": False,
                 "supportsRegression": True,
@@ -177,7 +177,7 @@ class TestCustomModelRoutes:
         assert "targetType" in payload
         assert "targetName" in payload
         assert "isUnstructuredModelKind" in payload
-        assert "gitModelId" in payload
+        assert "userProvidedId" in payload
         assert "predictionThreshold" in payload
         assert ("name" in payload) == optional_exist
         assert ("description" in payload) == optional_exist
@@ -242,7 +242,7 @@ class TestCustomModelRoutes:
         dr_client = DrClient(
             datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
         )
-        dr_client.delete_custom_model_by_git_model_id(expected_model["gitModelId"])
+        dr_client.delete_custom_model_by_user_provided_id(expected_model["userProvidedId"])
 
     @responses.activate
     def test_delete_custom_model_failure(
@@ -266,7 +266,7 @@ class TestCustomModelRoutes:
             datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
         )
         with pytest.raises(DataRobotClientError) as ex:
-            dr_client.delete_custom_model_by_git_model_id(expected_model["gitModelId"])
+            dr_client.delete_custom_model_by_user_provided_id(expected_model["userProvidedId"])
         assert ex.value.code == status_code
 
     @pytest.mark.parametrize(
@@ -667,7 +667,7 @@ class TestDeploymentRoutes:
         """A factory fixture to create a deployment response."""
 
         def _inner(deployment_id):
-            return {"id": deployment_id, "gitDeploymentId": f"git-id-{deployment_id}"}
+            return {"id": deployment_id, "userProvidedId": f"user-provided-id-{deployment_id}"}
 
         return _inner
 

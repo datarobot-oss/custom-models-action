@@ -24,8 +24,8 @@ from common.exceptions import AssociatedModelVersionNotFound
 from common.exceptions import DeploymentMetadataAlreadyExists
 from common.exceptions import NoValidAncestor
 from custom_inference_deployment import CustomInferenceDeployment
-from custom_inference_deployment import DeploymentInfo
 from custom_inference_model import CustomInferenceModelBase
+from deployment_info import DeploymentInfo
 from dr_client import DrClient
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
@@ -38,14 +38,12 @@ from tests.unit.conftest import write_to_file
 def fixture_single_deployment_factory(repo_root_path, single_model_factory):
     """A factory fixture to create a single deployment along with a model."""
 
-    def _inner(name, write_metadata=True, git_deployment_id=None, git_model_id=None):
+    def _inner(name, write_metadata=True, user_provided_id=None):
         model_name = f"model_{name}"
-        model_metadata = single_model_factory(model_name, write_metadata, git_model_id=git_model_id)
+        model_metadata = single_model_factory(model_name, write_metadata)
 
         single_deployment_metadata = {
-            DeploymentSchema.DEPLOYMENT_ID_KEY: (
-                git_deployment_id if git_deployment_id else str(uuid.uuid4())
-            ),
+            DeploymentSchema.DEPLOYMENT_ID_KEY: user_provided_id or str(uuid.uuid4()),
             DeploymentSchema.MODEL_ID_KEY: model_metadata[SharedSchema.MODEL_ID_KEY],
         }
 
@@ -110,9 +108,9 @@ class TestCustomInferenceDeployment:
     def test_scan_and_load_already_exists_deployment(self, options, single_deployment_factory):
         """Tes scanning and loading of an already existing deployments with same IDs."""
 
-        same_git_deployment_id = "123"
-        single_deployment_factory("deployment_1", git_deployment_id=same_git_deployment_id)
-        single_deployment_factory("deployment_2", git_deployment_id=same_git_deployment_id)
+        same_user_provided_id = "123"
+        single_deployment_factory("deployment_1", user_provided_id=same_user_provided_id)
+        single_deployment_factory("deployment_2", user_provided_id=same_user_provided_id)
         custom_inference_deployment = CustomInferenceDeployment(options)
         with pytest.raises(DeploymentMetadataAlreadyExists):
             custom_inference_deployment._scan_and_load_deployments_metadata()
@@ -165,16 +163,22 @@ class TestCustomInferenceDeployment:
         )
 
     @pytest.fixture
-    def mock_datarobot_deployments(self):
-        """A fixture to mock DataRobot deployments."""
+    def mock_deployments_metadata(self):
+        """A fixture to mock local deployments metadata."""
 
         return [
-            {"git_datarobot_deployment_id": "dep-id-1", "git_datarobot_model_id": "model-id-1"},
-            {"git_datarobot_deployment_id": "dep-id-2", "git_datarobot_model_id": "model-id-2"},
+            {
+                DeploymentSchema.DEPLOYMENT_ID_KEY: "dep-id-1",
+                DeploymentSchema.MODEL_ID_KEY: "model-id-1",
+            },
+            {
+                DeploymentSchema.DEPLOYMENT_ID_KEY: "dep-id-2",
+                DeploymentSchema.MODEL_ID_KEY: "model-id-2",
+            },
         ]
 
     def test_deployments_fetching_with_no_associated_dr_model_failure(
-        self, options, mock_datarobot_deployments
+        self, options, mock_deployments_metadata
     ):
         """
         Test a failure of deployments fetching from DataRobot with no associated DataRobot
@@ -182,7 +186,7 @@ class TestCustomInferenceDeployment:
         """
 
         with self._mock_datarobot_deployments_with_associated_models(
-            mock_datarobot_deployments, with_dr_deployments=True, with_associated_dr_models=False
+            mock_deployments_metadata, with_dr_deployments=True, with_associated_dr_models=False
         ):
             custom_inference_deployment = CustomInferenceDeployment(options)
             with pytest.raises(AssociatedModelNotFound):
@@ -243,7 +247,7 @@ class TestCustomInferenceDeployment:
                 if with_latest_dr_model_version
                 else None
             )
-            datarobot_models[deployment_metadata["git_datarobot_model_id"]] = DataRobotModel(
+            datarobot_models[deployment_metadata[DeploymentSchema.MODEL_ID_KEY]] = DataRobotModel(
                 model={"id": datarobot_model_id},
                 latest_version=latest_version,
             )
@@ -252,16 +256,18 @@ class TestCustomInferenceDeployment:
     @staticmethod
     def _setup_datarobot_models_by_model_id(datarobot_models):
         datarobot_models_by_model_id = {}
-        for git_model_id, datarobot_model in datarobot_models.items():
+        for user_provided_id, datarobot_model in datarobot_models.items():
             datarobot_model_id = datarobot_model.model["id"]
-            datarobot_models_by_model_id[datarobot_model_id] = datarobot_models[git_model_id]
+            datarobot_models_by_model_id[datarobot_model_id] = datarobot_models[user_provided_id]
         return datarobot_models_by_model_id
 
     @staticmethod
     def _setup_datarobot_deployments(deployments_metadata, datarobot_models):
         datarobot_deployments = []
         for deployment_metadata in deployments_metadata:
-            datarobot_model = datarobot_models.get(deployment_metadata["git_datarobot_model_id"])
+            datarobot_model = datarobot_models.get(
+                deployment_metadata[DeploymentSchema.MODEL_ID_KEY]
+            )
             # DataRobot Deployments
             custom_model_id = datarobot_model.model["id"] if datarobot_model else None
             custom_model_ver_id = (
@@ -271,7 +277,7 @@ class TestCustomInferenceDeployment:
             )
             datarobot_deployments.append(
                 {
-                    "gitDeploymentId": deployment_metadata["git_datarobot_deployment_id"],
+                    "userProvidedId": deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY],
                     "model": {
                         "customModelImage": {
                             "customModelId": custom_model_id,
@@ -283,12 +289,12 @@ class TestCustomInferenceDeployment:
         return datarobot_deployments
 
     def test_deployments_fetching_with_no_dr_latest_model_version_failure(
-        self, options, mock_datarobot_deployments
+        self, options, mock_deployments_metadata
     ):
         """Test a failure of deployment fetching with no associated latest model version."""
 
         with self._mock_datarobot_deployments_with_associated_models(
-            mock_datarobot_deployments,
+            mock_deployments_metadata,
             with_dr_deployments=True,
             with_associated_dr_models=True,
             with_latest_dr_model_version=False,
@@ -340,7 +346,7 @@ class TestCustomInferenceDeployment:
         self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
     ):
         """
-        Test a successful deployments integrity validation with no associated DataRobot
+        Test a successful deployments' integrity validation with no associated DataRobot
         deployments.
         """
         with self._mock_repo_with_datarobot_models(
@@ -424,12 +430,12 @@ class TestDeploymentChanges:
     def _mock_datarobot_model_factory(self):
         """A fixture to create a datarobot model class."""
 
-        def _inner(model_id=None, git_model_id=None, latest_version_id=None):
+        def _inner(model_id=None, user_provided_id=None, latest_version_id=None):
             model_id = model_id or unique_str()
-            git_model_id = git_model_id or unique_str()
+            user_provided_id = user_provided_id or unique_str()
             latest_version_id = latest_version_id or unique_str()
             return DataRobotModel(
-                model={"id": model_id, "gitModelId": git_model_id},
+                model={"id": model_id, "userProvidedId": user_provided_id},
                 latest_version={"id": latest_version_id, "customModelId": model_id},
             )
 
@@ -440,14 +446,17 @@ class TestDeploymentChanges:
         """A fixture to create a datarobot deployment class."""
 
         def _inner(
-            model_id=None, git_model_id=None, latest_version_id=None, git_deployment_id=None
+            model_id=None,
+            user_provided_model_id=None,
+            latest_version_id=None,
+            user_provided_deployment_id=None,
         ):
             datarobot_model = _mock_datarobot_model_factory(
-                model_id, git_model_id, latest_version_id
+                model_id, user_provided_model_id, latest_version_id
             )
-            git_deployment_id = git_deployment_id or unique_str()
+            user_provided_deployment_id = user_provided_deployment_id or unique_str()
             return DataRobotDeployment(
-                deployment={"id": unique_str(), "gitDeploymentId": git_deployment_id},
+                deployment={"id": unique_str(), "userProvidedId": user_provided_deployment_id},
                 model_version=datarobot_model.latest_version,
             )
 
@@ -455,13 +464,15 @@ class TestDeploymentChanges:
 
     @pytest.fixture
     def _mock_deployment_info_factory(self):
-        def _inner(git_deployment_id, git_model_id=None, enable_challenger=True):
+        def _inner(user_provided_id, user_provided_model_id=None, enable_challenger=True):
             return DeploymentInfo(
                 yaml_path="/dummy/path.yaml",
                 deployment_metadata={
-                    "git_datarobot_deployment_id": git_deployment_id,
-                    "git_datarobot_model_id": git_model_id or unique_str(),
-                    "settings": {"enable_challenger_models": enable_challenger},
+                    DeploymentSchema.DEPLOYMENT_ID_KEY: user_provided_id,
+                    DeploymentSchema.MODEL_ID_KEY: user_provided_model_id or unique_str(),
+                    DeploymentSchema.SETTINGS_SECTION_KEY: {
+                        DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY: enable_challenger
+                    },
                 },
             )
 
@@ -472,20 +483,20 @@ class TestDeploymentChanges:
     ):
         """A case to test new deployment creation."""
 
-        one_git_deployment_id = unique_str()
-        another_git_deployment_id = unique_str()
-        deployment_info = _mock_deployment_info_factory(one_git_deployment_id)
-        datarobot_deployment = _mock_datarobot_deployment_factory(another_git_deployment_id)
+        one_user_provided_id = unique_str()
+        another_user_provided_id = unique_str()
+        deployment_info = _mock_deployment_info_factory(one_user_provided_id)
+        datarobot_deployment = _mock_datarobot_deployment_factory(another_user_provided_id)
 
         with patch.object(
             CustomInferenceDeployment,
             "deployments_info",
-            new_callable=PropertyMock(return_value={one_git_deployment_id: deployment_info}),
+            new_callable=PropertyMock(return_value={one_user_provided_id: deployment_info}),
         ), patch.object(
             CustomInferenceDeployment,
             "datarobot_deployments",
             new_callable=PropertyMock(
-                return_value={another_git_deployment_id: datarobot_deployment}
+                return_value={another_user_provided_id: datarobot_deployment}
             ),
         ), patch.object(
             CustomInferenceDeployment, "_create_deployment"
@@ -511,23 +522,23 @@ class TestDeploymentChanges:
         new_model_id = unique_str()
         new_datarobot_model = _mock_datarobot_model_factory(new_model_id)
 
-        git_deployment_id = unique_str()
+        user_provided_id = unique_str()
         datarobot_deployment = DataRobotDeployment(
-            deployment={"id": unique_str(), "gitDeploymentId": git_deployment_id},
+            deployment={"id": unique_str(), "userProvidedId": user_provided_id},
             model_version=origin_datarobot_model.latest_version,
         )
         deployment_info = _mock_deployment_info_factory(
-            git_deployment_id, new_model_id, enable_challenger=True
+            user_provided_id, new_model_id, enable_challenger=True
         )
 
         with patch.object(
             CustomInferenceDeployment,
             "deployments_info",
-            new_callable=PropertyMock(return_value={git_deployment_id: deployment_info}),
+            new_callable=PropertyMock(return_value={user_provided_id: deployment_info}),
         ), patch.object(
             CustomInferenceDeployment,
             "datarobot_deployments",
-            new_callable=PropertyMock(return_value={git_deployment_id: datarobot_deployment}),
+            new_callable=PropertyMock(return_value={user_provided_id: datarobot_deployment}),
         ), patch.object(
             CustomInferenceDeployment,
             "datarobot_models",
@@ -556,22 +567,22 @@ class TestDeploymentChanges:
             model_id, latest_version_id=new_latest_version_id
         )
         datarobot_deployment = DataRobotDeployment(
-            deployment={"id": unique_str(), "gitDeploymentId": unique_str()},
+            deployment={"id": unique_str(), "userProvidedId": unique_str()},
             model_version=datarobot_model_with_origin_latest.latest_version,
         )
-        git_deployment_id = unique_str()
+        user_provided_id = unique_str()
         deployment_info = _mock_deployment_info_factory(
-            git_deployment_id, model_id, enable_challenger=True
+            user_provided_id, model_id, enable_challenger=True
         )
 
         with patch.object(
             CustomInferenceDeployment,
             "deployments_info",
-            new_callable=PropertyMock(return_value={git_deployment_id: deployment_info}),
+            new_callable=PropertyMock(return_value={user_provided_id: deployment_info}),
         ), patch.object(
             CustomInferenceDeployment,
             "datarobot_deployments",
-            new_callable=PropertyMock(return_value={git_deployment_id: datarobot_deployment}),
+            new_callable=PropertyMock(return_value={user_provided_id: datarobot_deployment}),
         ), patch.object(
             CustomInferenceDeployment,
             "datarobot_models",

@@ -134,13 +134,13 @@ class DrClient:
         logger.debug("Fetching custom models...")
         return self._paginated_fetch(self.CUSTOM_MODELS_ROUTE)
 
-    def fetch_custom_model_by_git_id(self, git_model_id):
+    def fetch_custom_model_by_git_id(self, user_provided_id):
         """
-        Retrieve a single custom model from DataRobot, given a Git model ID.
+        Retrieve a single custom model from DataRobot, given a user provided ID.
 
         Parameters
         ----------
-        git_model_id : str
+        user_provided_id : str
             A unique ID that is defined by the user.
 
         Returns
@@ -151,7 +151,7 @@ class DrClient:
 
         custom_models = self.fetch_custom_models()
         try:
-            return next(cm for cm in custom_models if cm.get("gitModelId") == git_model_id)
+            return next(cm for cm in custom_models if cm.get("userProvidedId") == user_provided_id)
         except StopIteration:
             return None
 
@@ -222,7 +222,7 @@ class DrClient:
             "targetType": cls.MODEL_TARGET_TYPE_MAP.get(target_type),
             "targetName": model_info.get_settings_value(ModelSchema.TARGET_NAME_KEY),
             "isUnstructuredModelKind": model_info.is_unstructured,
-            "gitModelId": model_info.get_value(ModelSchema.MODEL_ID_KEY),
+            "userProvidedId": model_info.get_value(ModelSchema.MODEL_ID_KEY),
         }
 
         name = model_info.get_settings_value(ModelSchema.NAME_KEY)
@@ -317,13 +317,13 @@ class DrClient:
             )
         return response.json()
 
-    def fetch_custom_model_latest_version_by_git_model_id(self, git_model_id):
+    def fetch_custom_model_latest_version_by_user_provided_id(self, user_provided_id):
         """
-        Retrieve the latest custom model version, given a Git model ID.
+        Retrieve the latest custom model version, given a user provided ID.
 
         Parameters
         ----------
-        git_model_id : str
+        user_provided_id : str
             A unique ID that is defined by the user.
 
         Returns
@@ -332,9 +332,9 @@ class DrClient:
             A DataRobot custom model version if found, otherwise None.
         """
 
-        logger.debug("Fetching custom model versions for git model '%s' ...", git_model_id)
+        logger.debug("Fetching custom model versions for git model '%s' ...", user_provided_id)
 
-        custom_model = self.fetch_custom_model_by_git_id(git_model_id)
+        custom_model = self.fetch_custom_model_by_git_id(user_provided_id)
         if not custom_model:
             return None
 
@@ -505,20 +505,20 @@ class DrClient:
                 code=response.status_code,
             )
 
-    def delete_custom_model_by_git_model_id(self, git_model_id):
+    def delete_custom_model_by_user_provided_id(self, user_provided_id):
         """
-        Delete a custom model in DataRobot, given a Git model ID.
+        Delete a custom model in DataRobot, given a user provided ID.
 
         Parameters
         ----------
-        git_model_id : str
+        user_provided_id : str
             A unique ID that is defined by the user.
         """
 
-        test_custom_model = self.fetch_custom_model_by_git_id(git_model_id)
+        test_custom_model = self.fetch_custom_model_by_git_id(user_provided_id)
         if not test_custom_model:
             raise IllegalModelDeletion(
-                f"Given custom model does not exist. git_model_id: {git_model_id}."
+                f"Given custom model does not exist. user_provided_id: {user_provided_id}."
             )
         self.delete_custom_model_by_model_id(test_custom_model["id"])
 
@@ -550,7 +550,8 @@ class DrClient:
                         f"\nMessage: {result['message']}"
                     )
         logger.debug(
-            "Custom model testing pass with success. Git model id: %s", model_info.git_model_id
+            "Custom model testing pass with success. User provided ID: %s",
+            model_info.user_provided_id,
         )
 
     def _post_custom_model_test_request(self, model_id, model_version_id, model_info):
@@ -759,13 +760,13 @@ class DrClient:
         logger.debug("Fetching deployments.")
         return self._paginated_fetch(self.DEPLOYMENTS_ROUTE)
 
-    def fetch_deployment_by_git_id(self, git_deployment_id):
+    def fetch_deployment_by_git_id(self, user_provided_id):
         """
         Retrieve a deployment from DataRobot, given Git deployment ID.
 
         Parameters
         ----------
-        git_deployment_id : str
+        user_provided_id : str
             A unique ID that is defined by the user.
 
         Returns
@@ -776,7 +777,7 @@ class DrClient:
 
         deployments = self.fetch_deployments()
         try:
-            return next(d for d in deployments if d.get("gitDeploymentId") == git_deployment_id)
+            return next(d for d in deployments if d.get("userProvidedId") == user_provided_id)
         except StopIteration:
             return None
 
@@ -823,7 +824,7 @@ class DrClient:
             label = f"{model_package['target']['name']} Predictions [GitHub CI/CD]"
 
         payload = {
-            "gitDeploymentId": deployment_info.git_deployment_id,
+            "userProvidedId": deployment_info.user_provided_id,
             "modelPackageId": model_package["id"],
             "label": label,
             "predictionEnvironmentId": self._get_prediction_environment_id(
@@ -839,7 +840,7 @@ class DrClient:
         if response.status_code != 202:
             raise DataRobotClientError(
                 "Failed creating a deployment from model package."
-                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"User provided deployment id: {deployment_info.user_provided_id}, "
                 f"Model package id: {model_package['id']}, "
                 f"Response status: {response.status_code}, "
                 f"Response body: {response.text}",
@@ -856,7 +857,7 @@ class DrClient:
             raise DataRobotClientError(
                 "Prediction environment is missing. "
                 "Make sure to setup at least one valid prediction environment. "
-                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"User provided deployment id: {deployment_info.user_provided_id}, "
                 f"Model package id: {model_package['id']}."
             )
         return prediction_envs[0]["id"]
@@ -937,7 +938,7 @@ class DrClient:
         if response.status_code != 202:
             raise DataRobotClientError(
                 "Failed to update deployment settings."
-                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"User provided deployment id: {deployment_info.user_provided_id}, "
                 f"Deployment id: {deployment_id}, "
                 f"Response status: {response.status_code} "
                 f"Response body: {response.text}",
@@ -1051,7 +1052,7 @@ class DrClient:
         if response.status_code != 200:
             raise DataRobotClientError(
                 "Failed to fetch deployment settings."
-                f"Git deployment id: {deployment_info.git_deployment_id}, "
+                f"User provided deployment id: {deployment_info.user_provided_id}, "
                 f"Deployment id: {deployment_id}, "
                 f"Response status: {response.status_code} "
                 f"Response body: {response.text}",
@@ -1132,24 +1133,24 @@ class DrClient:
                 code=response.status_code,
             )
 
-    def delete_deployment_by_git_id(self, git_deployment_id):
+    def delete_deployment_by_git_id(self, user_provided_id):
         """
         Delete a deployment from DataRobot, given a Git deployment ID.
 
         Parameters
         ----------
-        git_deployment_id : str
+        user_provided_id : str
             A unique ID that is defined by the user.
         """
 
         deployments = self.fetch_deployments()
         try:
             test_deployment = next(
-                d for d in deployments if d.get("gitDeploymentId") == git_deployment_id
+                d for d in deployments if d.get("userProvidedId") == user_provided_id
             )
         except StopIteration as ex:
             raise IllegalModelDeletion(
-                f"Given deployment does not exist. git_deployment_id: {git_deployment_id}."
+                f"Given deployment does not exist. user_provided_id: {user_provided_id}."
             ) from ex
         self.delete_deployment_by_id(test_deployment["id"])
 
@@ -1336,7 +1337,7 @@ class DrClient:
             if response.status_code != 200:
                 raise DataRobotClientError(
                     "Failed to update training / holdout datasets for unstructured model. "
-                    f"Git model ID: {model_info.git_model_id}, "
+                    f"User provided ID: {model_info.user_provided_id}, "
                     f"DataRobot model ID: {datarobot_custom_model['id']}, "
                     f"Response status: {response.status_code}, "
                     f"Response body: {response.text}",
@@ -1380,7 +1381,7 @@ class DrClient:
             if response.status_code != 202:
                 raise DataRobotClientError(
                     "Failed to update training dataset for structured model. "
-                    f"Git model ID: {model_info.git_model_id}. "
+                    f"User provided ID: {model_info.user_provided_id}. "
                     f"DataRobot model ID: {datarobot_custom_model['id']}. "
                     f"Response status: {response.status_code}. "
                     f"Response body: {response.text}.",
@@ -1421,7 +1422,7 @@ class DrClient:
             if response.status_code != 200:
                 raise DataRobotClientError(
                     "Failed to update custom model settings. "
-                    f"Git model ID: {model_info.git_model_id}. "
+                    f"User provided ID: {model_info.user_provided_id}. "
                     f"DataRobot model ID: {datarobot_custom_model['id']}. "
                     f"Response status: {response.status_code}. "
                     f"Response body: {response.text}.",

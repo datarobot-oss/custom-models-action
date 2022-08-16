@@ -159,7 +159,7 @@ def fixture_single_model_factory(repo_root_path, common_path_with_code):
         with_include_glob=True,
         with_exclude_glob=True,
         include_main_prog=True,
-        git_model_id=None,
+        user_provided_id=None,
     ):
         model_path = repo_root_path / name
         os.makedirs(model_path)
@@ -171,7 +171,7 @@ def fixture_single_model_factory(repo_root_path, common_path_with_code):
         write_to_file(model_path / "score" / "score.py", "# score.py")
 
         single_model_metadata = {
-            ModelSchema.MODEL_ID_KEY: git_model_id if git_model_id else str(uuid.uuid4()),
+            ModelSchema.MODEL_ID_KEY: user_provided_id or str(uuid.uuid4()),
             ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
             ModelSchema.SETTINGS_SECTION_KEY: {
                 ModelSchema.NAME_KEY: name,
@@ -181,13 +181,15 @@ def fixture_single_model_factory(repo_root_path, common_path_with_code):
         }
         if with_include_glob:
             # noinspection PyTypeChecker
-            single_model_metadata["version"]["include_glob_pattern"] = [
+            single_model_metadata[ModelSchema.VERSION_KEY][ModelSchema.INCLUDE_GLOB_KEY] = [
                 "./**",
                 f"/{common_path_with_code.relative_to(repo_root_path)}/**",
             ]
         if with_exclude_glob:
             # noinspection PyTypeChecker
-            single_model_metadata["version"]["exclude_glob_pattern"] = ["./README.md"]
+            single_model_metadata[ModelSchema.VERSION_KEY][ModelSchema.EXCLUDE_GLOB_KEY] = [
+                "./README.md"
+            ]
 
         if write_metadata:
             write_to_file(model_path / "model.yaml", yaml.dump(single_model_metadata))

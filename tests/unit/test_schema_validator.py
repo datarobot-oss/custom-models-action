@@ -288,7 +288,7 @@ class TestModelSchemaValidator:
         with pytest.raises(InvalidSchema) as ex:
             self._validate_schema(is_single, regression_model_schema)
 
-        assert f"Missing key: '{sub_key if sub_key else key}'" in str(ex)
+        assert f"Missing key: '{sub_key or key}'" in str(ex)
 
     @staticmethod
     def _wrap_multi(model_schema):

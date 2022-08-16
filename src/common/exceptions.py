@@ -97,7 +97,7 @@ class IllegalModelDeletion(GenericException):
 
 
 class ModelMetadataAlreadyExists(GenericException):
-    """Raised when more than one model metadata is detected with the same Git model ID."""
+    """Raised when more than one model metadata is detected with the same user provided ID."""
 
 
 class DeploymentMetadataAlreadyExists(GenericException):

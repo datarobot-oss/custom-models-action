@@ -20,7 +20,7 @@ from bson import ObjectId
 
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
-from custom_inference_deployment import DeploymentInfo
+from deployment_info import DeploymentInfo
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 from tests.functional.conftest import cleanup_models
@@ -149,11 +149,11 @@ class TestDeploymentGitHubActions:
 
         # 4. Validate
         printout("Validate ...")
-        local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         if event_name == "push":
-            assert dr_client.fetch_deployment_by_git_id(local_git_deployment_id) is not None
+            assert dr_client.fetch_deployment_by_git_id(local_user_provided_id) is not None
         elif event_name == "pull_request":
-            assert dr_client.fetch_deployment_by_git_id(local_git_deployment_id) is None
+            assert dr_client.fetch_deployment_by_git_id(local_user_provided_id) is None
         else:
             assert False, f"Unsupported GitHub event name: {event_name}"
 
@@ -224,9 +224,9 @@ class TestDeploymentGitHubActions:
         # 2. Create a deployment
         printout("Create a deployment. Run deployment GitHub action (push event) ...")
         run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=True)
-        local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         deployments = dr_client.fetch_deployments()
-        assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
+        assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
 
         # 3. Make a local change to the model and commit
         printout("Make a change to the model and run custom model GitHub action (push event) ...")
@@ -244,15 +244,15 @@ class TestDeploymentGitHubActions:
         printout("Validate ...")
         deployments = dr_client.fetch_deployments()
         the_deployment = next(
-            d for d in deployments if d.get("gitDeploymentId") == local_git_deployment_id
+            d for d in deployments if d.get("userProvidedId") == local_user_provided_id
         )
 
         latest_deployment_model_version_id = the_deployment["model"]["customModelImage"][
             "customModelVersionId"
         ]
-        local_git_model_id = deployment_metadata[DeploymentSchema.MODEL_ID_KEY]
-        latest_model_version = dr_client.fetch_custom_model_latest_version_by_git_model_id(
-            local_git_model_id
+        local_user_provided_id = deployment_metadata[DeploymentSchema.MODEL_ID_KEY]
+        latest_model_version = dr_client.fetch_custom_model_latest_version_by_user_provided_id(
+            local_user_provided_id
         )
         return the_deployment, latest_deployment_model_version_id, latest_model_version
 
@@ -287,8 +287,8 @@ class TestDeploymentGitHubActions:
         printout("Create a deployment. Runa deployment GitHub action (push event) ...")
         run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=True)
         deployments = dr_client.fetch_deployments()
-        local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
-        assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
+        local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
 
         # 3. Delete a deployment local definition yaml file
         printout("Delete deployment. Run deployment GitHub action (push event) ...")
@@ -307,8 +307,8 @@ class TestDeploymentGitHubActions:
         )
         printout("Validate ...")
         deployments = dr_client.fetch_deployments()
-        local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
-        assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
+        local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
 
         # 5. Run a deployment GitHub action for pull request with allowed deployment deletion
         printout("Run deployment GitHub action (pull request) with allowed deletion ...")
@@ -322,8 +322,8 @@ class TestDeploymentGitHubActions:
         )
         printout("Validate ...")
         deployments = dr_client.fetch_deployments()
-        local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
-        assert any(d.get("gitDeploymentId") == local_git_deployment_id for d in deployments)
+        local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
 
         # 6. Run a deployment GitHub action for push with allowed deployment deletion
         printout("Run deployment GitHub action (push) with allowed deletion ...")
@@ -337,8 +337,8 @@ class TestDeploymentGitHubActions:
         )
         printout("Validate ...")
         deployments = dr_client.fetch_deployments()
-        local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
-        assert all(d.get("gitDeploymentId") != local_git_deployment_id for d in deployments)
+        local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+        assert all(d.get("userProvidedId") != local_user_provided_id for d in deployments)
         printout("Done")
 
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
@@ -421,8 +421,8 @@ class TestDeploymentGitHubActions:
                 run_github_action(
                     repo_root_path, git_repo, main_branch_name, "push", is_deploy=True
                 )
-                local_git_deployment_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
-                deployment = dr_client.fetch_deployment_by_git_id(local_git_deployment_id)
+                local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                deployment = dr_client.fetch_deployment_by_git_id(local_user_provided_id)
                 assert deployment is not None
 
                 for check_func in [self._test_deployment_label, self._test_deployment_settings]:

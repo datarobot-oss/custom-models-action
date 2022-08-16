@@ -1,4 +1,4 @@
-git_datarobot_model_id: my-awesome-model-id-1
+user_provided_model_id: my-awesome-model-id-1
 
 target_type: Regression
 
