@@ -391,7 +391,9 @@ class DrClient:
 
         file_objs = []
         try:
-            base_env_id = model_info.get_value(ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_KEY)
+            base_env_id = model_info.get_value(
+                ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_ID_KEY
+            )
             payload, file_objs = self._setup_payload_for_custom_model_version_creation(
                 model_info,
                 ref_name,
@@ -559,7 +561,7 @@ class DrClient:
             "customModelId": model_id,
             "customModelVersionId": model_version_id,
             "environmentId": model_info.get_value(
-                ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_KEY
+                ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_ID_KEY
             ),
         }
 
@@ -572,7 +574,7 @@ class DrClient:
         if parameters:
             payload["parameters"] = parameters
 
-        test_dataset_id = model_info.get_value(ModelSchema.TEST_KEY, ModelSchema.TEST_DATA_KEY)
+        test_dataset_id = model_info.get_value(ModelSchema.TEST_KEY, ModelSchema.TEST_DATA_ID_KEY)
         if test_dataset_id:  # It may be empty only for unstructured models
             payload["datasetId"] = test_dataset_id
 
@@ -630,7 +632,7 @@ class DrClient:
     @staticmethod
     def _get_prediction_verification_check_params(info):
         check_params = {
-            "datasetId": info[ModelSchema.OUTPUT_DATASET_KEY],
+            "datasetId": info[ModelSchema.OUTPUT_DATASET_ID_KEY],
             "predictionsColumn": info[ModelSchema.PREDICTIONS_COLUMN],
         }
         if ModelSchema.MATCH_THRESHOLD_KEY in info:
@@ -1322,8 +1324,8 @@ class DrClient:
 
         DatasetParam = namedtuple("DatasetParam", ["local", "remote"])
         dataset_params = [
-            DatasetParam(ModelSchema.TRAINING_DATASET_KEY, "trainingDatasetId"),
-            DatasetParam(ModelSchema.HOLDOUT_DATASET_KEY, "holdoutDatasetId"),
+            DatasetParam(ModelSchema.TRAINING_DATASET_ID_KEY, "trainingDatasetId"),
+            DatasetParam(ModelSchema.HOLDOUT_DATASET_ID_KEY, "holdoutDatasetId"),
         ]
         for dataset_param in dataset_params:
             local_value = model_info.get_settings_value(dataset_param.local)
@@ -1367,7 +1369,7 @@ class DrClient:
 
         DatasetParam = namedtuple("DatasetParam", ["local", "remote"])
         dataset_params = [
-            DatasetParam(ModelSchema.TRAINING_DATASET_KEY, "datasetId"),
+            DatasetParam(ModelSchema.TRAINING_DATASET_ID_KEY, "datasetId"),
             DatasetParam(ModelSchema.PARTITIONING_COLUMN_KEY, "partitionColumn"),
         ]
         for dataset_param in dataset_params:

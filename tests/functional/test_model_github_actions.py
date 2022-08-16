@@ -423,12 +423,12 @@ class TestModelGitHubActions:
                 dr_client,
                 training_dataset_filepath,
                 model_metadata_yaml_file,
-                ModelSchema.TRAINING_DATASET_KEY,
+                ModelSchema.TRAINING_DATASET_ID_KEY,
             ) as training_dataset_id, upload_and_update_dataset(
                 dr_client,
                 holdout_dataset_filepath,
                 model_metadata_yaml_file,
-                ModelSchema.HOLDOUT_DATASET_KEY,
+                ModelSchema.HOLDOUT_DATASET_ID_KEY,
             ) as holdout_dataset_id:
                 try:
                     git_repo.git.add(model_metadata_yaml_file)

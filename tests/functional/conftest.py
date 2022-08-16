@@ -208,7 +208,7 @@ def set_model_dataset_for_testing(dr_client, model_metadata, model_metadata_yaml
             with temporarily_replace_schema_value(
                 model_metadata_yaml_file,
                 ModelSchema.TEST_KEY,
-                ModelSchema.TEST_DATA_KEY,
+                ModelSchema.TEST_DATA_ID_KEY,
                 new_value=dataset_id,
             ):
                 yield dataset_id
@@ -455,7 +455,7 @@ def temporarily_upload_training_dataset_for_structured_model(
             dr_client,
             training_and_holdout_dataset_filepath,
             model_metadata_yaml_file,
-            ModelSchema.TRAINING_DATASET_KEY,
+            ModelSchema.TRAINING_DATASET_ID_KEY,
         ) as training_dataset_id:
             partition_column = "partitioning"
             with temporarily_replace_schema_value(

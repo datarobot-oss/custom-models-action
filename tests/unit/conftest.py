@@ -63,7 +63,7 @@ def create_partial_model_schema(is_single=True, num_models=1, with_target_type=F
                 ModelSchema.NAME_KEY: name,
                 ModelSchema.TARGET_NAME_KEY: "target_feature_col",
             },
-            ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: str(ObjectId())},
+            ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_ID_KEY: str(ObjectId())},
         }
         if with_target_type:
             partial_schema[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_REGRESSION_KEY
@@ -177,7 +177,7 @@ def fixture_single_model_factory(repo_root_path, common_path_with_code):
                 ModelSchema.NAME_KEY: name,
                 ModelSchema.TARGET_NAME_KEY: "Grade 2014",
             },
-            ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_KEY: str(ObjectId())},
+            ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_ID_KEY: str(ObjectId())},
         }
         if with_include_glob:
             # noinspection PyTypeChecker
@@ -385,7 +385,7 @@ def fixture_mock_full_custom_model_checks():
         ModelSchema.PREDICTION_VERIFICATION_KEY: {
             ModelSchema.CHECK_ENABLED_KEY: True,
             ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: False,
-            ModelSchema.OUTPUT_DATASET_KEY: "627791f5562155d63f367b05",
+            ModelSchema.OUTPUT_DATASET_ID_KEY: "627791f5562155d63f367b05",
             ModelSchema.PREDICTIONS_COLUMN: "Grade 2014",
             ModelSchema.MATCH_THRESHOLD_KEY: 0.9,
             ModelSchema.PASSING_MATCH_RATE_KEY: 85,
@@ -423,18 +423,18 @@ def mock_full_binary_model_schema(mock_full_custom_model_checks):
             ModelSchema.POSITIVE_CLASS_LABEL_KEY: "1",
             ModelSchema.NEGATIVE_CLASS_LABEL_KEY: "0",
             ModelSchema.LANGUAGE_KEY: "Python",
-            ModelSchema.TRAINING_DATASET_KEY: "627790ba56215587b3021632",
-            ModelSchema.HOLDOUT_DATASET_KEY: "627790ca5621558b55c78d78",
+            ModelSchema.TRAINING_DATASET_ID_KEY: "627790ba56215587b3021632",
+            ModelSchema.HOLDOUT_DATASET_ID_KEY: "627790ca5621558b55c78d78",
         },
         ModelSchema.VERSION_KEY: {
-            ModelSchema.MODEL_ENV_KEY: "627790db5621558eedc4c7fa",
+            ModelSchema.MODEL_ENV_ID_KEY: "627790db5621558eedc4c7fa",
             ModelSchema.INCLUDE_GLOB_KEY: ["./"],
             ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
             ModelSchema.MEMORY_KEY: "100Mi",
             ModelSchema.REPLICAS_KEY: 3,
         },
         ModelSchema.TEST_KEY: {
-            ModelSchema.TEST_DATA_KEY: "62779143562155aa34a3d65b",
+            ModelSchema.TEST_DATA_ID_KEY: "62779143562155aa34a3d65b",
             ModelSchema.TEST_SKIP_KEY: False,
             ModelSchema.MEMORY_KEY: "100Mi",
             ModelSchema.CHECKS_KEY: mock_full_custom_model_checks,
