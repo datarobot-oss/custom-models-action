@@ -11,12 +11,15 @@ inputs:
   skip-cert-verification: # id of input
     description: 'Whether a request to an HTTPS URL will be made without a certificate verification'
     required: false
+    default: 'false'
   release-branch:  # id of input
-    description: 'The release branch for PRs to take an actions on'
+    description: |
+      The release branch for which pull request and push events will trigger the
+      action.
     required: true
   allow-deployment-deletion:
     description: |
-      Whether to detect local deleted deployment definitions and consequently delete them 
+      Whether to detect local deleted deployment definitions and consequently delete them
       in DataRobot.
     required: false
     default: 'false'
