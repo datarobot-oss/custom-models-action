@@ -345,7 +345,7 @@ def increase_model_memory_by_1mb(model_yaml_file):
         memory = ModelSchema.get_value(
             yaml_content, ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY
         )
-        memory = memory if memory else "256Mi"
+        memory = memory or "256Mi"
         num_part, unit = MemoryConvertor._extract_unit_fields(memory)
         new_memory = f"{num_part+1}{unit}"
         yaml_content[ModelSchema.VERSION_KEY][ModelSchema.MEMORY_KEY] = new_memory
