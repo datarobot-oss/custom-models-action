@@ -20,7 +20,7 @@ from bson import ObjectId
 
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
-from custom_inference_deployment import DeploymentInfo
+from deployment_info import DeploymentInfo
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 from tests.functional.conftest import cleanup_models

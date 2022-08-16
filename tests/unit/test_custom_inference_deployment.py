@@ -24,8 +24,8 @@ from common.exceptions import AssociatedModelVersionNotFound
 from common.exceptions import DeploymentMetadataAlreadyExists
 from common.exceptions import NoValidAncestor
 from custom_inference_deployment import CustomInferenceDeployment
-from custom_inference_deployment import DeploymentInfo
 from custom_inference_model import CustomInferenceModelBase
+from deployment_info import DeploymentInfo
 from dr_client import DrClient
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
