@@ -155,7 +155,7 @@ jobs:
       - name: DataRobot Custom Inference Model
         id: custom-inference-model
         if: ${{ env.INSPECT_CONTEXT == 'false' }}
-        uses: ./actions/custom-inference-model
+        uses: ./.github/actions/custom-inference-model
         with:
           api-token: $DATAROBOT_API_TOKEN
           webserver: $DATAROBOT_WEBSERVER
@@ -205,7 +205,7 @@ jobs:
       - name: DataRobot Custom Inference Model Deployment
         id: custom-inference-model-deployment
         if: ${{ env.INSPECT_CONTEXT == 'false' }}
-        uses: ./actions/custom-inference-model-deployment
+        uses: ./.github/actions/custom-inference-model-deployment
         with:
           api-token: $DATAROBOT_API_TOKEN
           webserver: $DATAROBOT_WEBSERVER
