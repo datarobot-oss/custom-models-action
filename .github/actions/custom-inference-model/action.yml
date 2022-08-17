@@ -42,7 +42,7 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - run: pip install -r ${GITHUB_ACTION_PATH}/../../src/requirements.txt
+    - run: pip install -r ${GITHUB_ACTION_PATH}/../../../src/requirements.txt
       shell: bash
     - id: custom-inference-model
       run: |
@@ -56,7 +56,7 @@ runs:
         else
           allow_model_deletion_arg=""
         fi
-        python ${GITHUB_ACTION_PATH}/../../src/main.py \
+        python ${GITHUB_ACTION_PATH}/../../../src/main.py \
           --api-token ${{ inputs.api-token }} \
           --webserver ${{ inputs.webserver }} \
           ${verify_cert_arg} \
