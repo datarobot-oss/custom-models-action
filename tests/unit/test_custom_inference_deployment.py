@@ -23,10 +23,12 @@ from common.exceptions import AssociatedModelNotFound
 from common.exceptions import AssociatedModelVersionNotFound
 from common.exceptions import DeploymentMetadataAlreadyExists
 from common.exceptions import NoValidAncestor
-from custom_inference_deployment import CustomInferenceDeployment
-from custom_inference_model import CustomInferenceModelBase
+from common.git_tool import GitTool
+from custom_inference_model import CustomInferenceModelAction
+from deployment_controller import DeploymentController
 from deployment_info import DeploymentInfo
 from dr_client import DrClient
+from model_controller import ModelController
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 from schema_validator import SharedSchema
@@ -101,9 +103,9 @@ class TestCustomInferenceDeployment:
     def test_scan_and_load_no_deployments(self, options):
         """Test scanning and loading of deployment definitions."""
 
-        custom_inference_deployment = CustomInferenceDeployment(options)
-        custom_inference_deployment._scan_and_load_deployments_metadata()
-        assert len(custom_inference_deployment._deployments_info) == 0
+        deployment_controller = DeploymentController(options, None, None)
+        deployment_controller.scan_and_load_deployments_metadata()
+        assert len(deployment_controller._deployments_info) == 0
 
     def test_scan_and_load_already_exists_deployment(self, options, single_deployment_factory):
         """Tes scanning and loading of an already existing deployments with same IDs."""
@@ -111,9 +113,9 @@ class TestCustomInferenceDeployment:
         same_user_provided_id = "123"
         single_deployment_factory("deployment_1", user_provided_id=same_user_provided_id)
         single_deployment_factory("deployment_2", user_provided_id=same_user_provided_id)
-        custom_inference_deployment = CustomInferenceDeployment(options)
+        deployment_controller = DeploymentController(options, None, None)
         with pytest.raises(DeploymentMetadataAlreadyExists):
-            custom_inference_deployment._scan_and_load_deployments_metadata()
+            deployment_controller.scan_and_load_deployments_metadata()
 
     @pytest.mark.parametrize("num_deployments", [1, 2, 3])
     def test_scan_and_load_deployments_from_multi_separate_yaml_files(
@@ -123,9 +125,9 @@ class TestCustomInferenceDeployment:
 
         for counter in range(1, num_deployments + 1):
             single_deployment_factory(str(counter), write_metadata=True)
-        custom_inference_deployment = CustomInferenceDeployment(options)
-        custom_inference_deployment._scan_and_load_deployments_metadata()
-        assert len(custom_inference_deployment._deployments_info) == num_deployments
+        deployment_controller = DeploymentController(options, None, None)
+        deployment_controller.scan_and_load_deployments_metadata()
+        assert len(deployment_controller._deployments_info) == num_deployments
 
     @pytest.mark.parametrize("num_deployments", [0, 1, 3])
     def test_scan_and_load_deployments_from_one_multi_deployments_yaml_file(
@@ -136,9 +138,9 @@ class TestCustomInferenceDeployment:
         """
 
         deployments_factory(num_deployments, is_multi=True)
-        custom_inference_deployment = CustomInferenceDeployment(options)
-        custom_inference_deployment._scan_and_load_deployments_metadata()
-        assert len(custom_inference_deployment._deployments_info) == num_deployments
+        deployment_controller = DeploymentController(options, None, None)
+        deployment_controller.scan_and_load_deployments_metadata()
+        assert len(deployment_controller._deployments_info) == num_deployments
 
     @pytest.mark.parametrize("num_single_deployments", [0, 1, 3])
     @pytest.mark.parametrize("num_multi_deployments", [0, 2])
@@ -156,9 +158,9 @@ class TestCustomInferenceDeployment:
         for counter in range(1, num_single_deployments + 1):
             single_deployment_factory(str(counter))
 
-        custom_inference_deployment = CustomInferenceDeployment(options)
-        custom_inference_deployment._scan_and_load_deployments_metadata()
-        assert len(custom_inference_deployment._deployments_info) == (
+        deployment_controller = DeploymentController(options, None, None)
+        deployment_controller.scan_and_load_deployments_metadata()
+        assert len(deployment_controller._deployments_info) == (
             num_multi_deployments + num_single_deployments
         )
 
@@ -188,9 +190,10 @@ class TestCustomInferenceDeployment:
         with self._mock_datarobot_deployments_with_associated_models(
             mock_deployments_metadata, with_dr_deployments=True, with_associated_dr_models=False
         ):
-            custom_inference_deployment = CustomInferenceDeployment(options)
+            model_controller = ModelController(options, None)
+            deployment_controller = DeploymentController(options, model_controller, None)
             with pytest.raises(AssociatedModelNotFound):
-                custom_inference_deployment._fetch_deployments_from_datarobot()
+                deployment_controller.fetch_deployments_from_datarobot()
 
     @contextlib.contextmanager
     def _mock_datarobot_deployments_with_associated_models(
@@ -218,12 +221,12 @@ class TestCustomInferenceDeployment:
                 deployments_metadata, datarobot_models
             )
 
-        with patch.object(
-            CustomInferenceModelBase,
+        with patch.object(ModelController, "handle_model_changes"), patch.object(
+            ModelController,
             "datarobot_models",
             new_callable=PropertyMock(return_value=datarobot_models),
         ), patch.object(
-            CustomInferenceModelBase,
+            ModelController,
             "datarobot_model_by_id",
             side_effect=datarobot_models_by_model_id.get,
         ), patch.object(
@@ -299,9 +302,10 @@ class TestCustomInferenceDeployment:
             with_associated_dr_models=True,
             with_latest_dr_model_version=False,
         ):
-            custom_inference_deployment = CustomInferenceDeployment(options)
+            model_controller = ModelController(options, None)
+            deployment_controller = DeploymentController(options, model_controller, None)
             with pytest.raises(AssociatedModelVersionNotFound):
-                custom_inference_deployment._fetch_deployments_from_datarobot()
+                deployment_controller.fetch_deployments_from_datarobot()
 
     @contextlib.contextmanager
     def _mock_repo_with_datarobot_models(
@@ -336,10 +340,12 @@ class TestCustomInferenceDeployment:
         with self._mock_repo_with_datarobot_models(
             deployments_factory, git_repo, init_repo_for_root_path_factory
         ):
-            custom_inference_deployment = CustomInferenceDeployment(options)
-            custom_inference_deployment._scan_and_load_deployments_metadata()
-            custom_inference_deployment._fetch_deployments_from_datarobot()
-            custom_inference_deployment._validate_deployments_integrity()
+            git_tool = GitTool(options.root_dir)
+            model_controller = ModelController(options, git_tool)
+            deployment_controller = DeploymentController(options, model_controller, git_tool)
+            deployment_controller.scan_and_load_deployments_metadata()
+            deployment_controller.fetch_deployments_from_datarobot()
+            deployment_controller.validate_deployments_integrity()
 
     @pytest.mark.usefixtures("repo_root_path")
     def test_deployments_integrity_validation_no_dr_deployments(
@@ -355,13 +361,15 @@ class TestCustomInferenceDeployment:
             init_repo_for_root_path_factory,
             with_dr_deployments=False,
         ):
-            custom_inference_deployment = CustomInferenceDeployment(options)
-            custom_inference_deployment._scan_and_load_models_metadata()
-            custom_inference_deployment._scan_and_load_deployments_metadata()
-            custom_inference_deployment._fetch_deployments_from_datarobot()
-            custom_inference_deployment._validate_deployments_integrity()
+            git_tool = GitTool(options.root_dir)
+            model_controller = ModelController(options, git_tool)
+            model_controller.scan_and_load_models_metadata()
+            deployment_controller = DeploymentController(options, model_controller, git_tool)
+            deployment_controller.scan_and_load_deployments_metadata()
+            deployment_controller.fetch_deployments_from_datarobot()
+            deployment_controller.validate_deployments_integrity()
 
-    @pytest.mark.usefixtures("repo_root_path")
+    @pytest.mark.usefixtures("repo_root_path", "mock_github_env_variables")
     def test_deployments_integrity_validation_no_associated_models(
         self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
     ):
@@ -376,12 +384,12 @@ class TestCustomInferenceDeployment:
             with_dr_deployments=False,
             with_associated_dr_models=False,
         ):
-            custom_inference_deployment = CustomInferenceDeployment(options)
-            custom_inference_deployment._scan_and_load_models_metadata()
-            custom_inference_deployment._scan_and_load_deployments_metadata()
-            custom_inference_deployment._fetch_deployments_from_datarobot()
-            with pytest.raises(AssociatedModelNotFound):
-                custom_inference_deployment._validate_deployments_integrity()
+            custom_inference_deployment = CustomInferenceModelAction(options)
+            with patch.object(CustomInferenceModelAction, "_print_statistics"), patch.object(
+                ModelController, "fetch_models_from_datarobot"
+            ):
+                with pytest.raises(AssociatedModelNotFound):
+                    custom_inference_deployment.run()
 
     @pytest.mark.usefixtures("repo_root_path")
     def test_deployments_integrity_validation_no_latest_version(
@@ -397,12 +405,14 @@ class TestCustomInferenceDeployment:
             with_associated_dr_models=True,
             with_latest_dr_model_version=False,
         ):
-            custom_inference_deployment = CustomInferenceDeployment(options)
-            custom_inference_deployment._scan_and_load_models_metadata()
-            custom_inference_deployment._scan_and_load_deployments_metadata()
-            custom_inference_deployment._fetch_deployments_from_datarobot()
+            git_tool = GitTool(options.root_dir)
+            model_controller = ModelController(options, git_tool)
+            model_controller.scan_and_load_models_metadata()
+            deployment_controller = DeploymentController(options, model_controller, git_tool)
+            deployment_controller.scan_and_load_deployments_metadata()
+            deployment_controller.fetch_deployments_from_datarobot()
             with pytest.raises(AssociatedModelVersionNotFound):
-                custom_inference_deployment._validate_deployments_integrity()
+                deployment_controller.validate_deployments_integrity()
 
     @pytest.mark.usefixtures("repo_root_path")
     def test_deployments_integrity_validation_no_main_branch_sha_failure(
@@ -416,11 +426,13 @@ class TestCustomInferenceDeployment:
             init_repo_for_root_path_factory,
             with_main_branch_sha=False,
         ):
-            custom_inference_deployment = CustomInferenceDeployment(options)
-            custom_inference_deployment._scan_and_load_deployments_metadata()
-            custom_inference_deployment._fetch_deployments_from_datarobot()
+            git_tool = GitTool(options.root_dir)
+            model_controller = ModelController(options, git_tool)
+            deployment_controller = DeploymentController(options, model_controller, git_tool)
+            deployment_controller.scan_and_load_deployments_metadata()
+            deployment_controller.fetch_deployments_from_datarobot()
             with pytest.raises(NoValidAncestor):
-                custom_inference_deployment._validate_deployments_integrity()
+                deployment_controller.validate_deployments_integrity()
 
 
 class TestDeploymentChanges:
@@ -489,26 +501,26 @@ class TestDeploymentChanges:
         datarobot_deployment = _mock_datarobot_deployment_factory(another_user_provided_id)
 
         with patch.object(
-            CustomInferenceDeployment,
+            DeploymentController,
             "deployments_info",
             new_callable=PropertyMock(return_value={one_user_provided_id: deployment_info}),
         ), patch.object(
-            CustomInferenceDeployment,
+            DeploymentController,
             "datarobot_deployments",
             new_callable=PropertyMock(
                 return_value={another_user_provided_id: datarobot_deployment}
             ),
         ), patch.object(
-            CustomInferenceDeployment, "_create_deployment"
+            DeploymentController, "_create_deployment"
         ) as create_deployment_method:
-            custom_inference_deployment = CustomInferenceDeployment(options)
-            custom_inference_deployment._handle_deployment_changes_or_creation()
+            custom_inference_deployment = DeploymentController(options, None, None)
+            custom_inference_deployment.handle_deployment_changes_or_creation()
 
             create_deployment_method.assert_called_once()
 
     @pytest.fixture
     def _patch_handle_deployment_changes(self):
-        with patch.object(CustomInferenceDeployment, "_handle_deployment_changes"):
+        with patch.object(DeploymentController, "_handle_deployment_changes"):
             yield
 
     @pytest.mark.usefixtures("_patch_handle_deployment_changes")
@@ -532,22 +544,23 @@ class TestDeploymentChanges:
         )
 
         with patch.object(
-            CustomInferenceDeployment,
+            DeploymentController,
             "deployments_info",
             new_callable=PropertyMock(return_value={user_provided_id: deployment_info}),
         ), patch.object(
-            CustomInferenceDeployment,
+            DeploymentController,
             "datarobot_deployments",
             new_callable=PropertyMock(return_value={user_provided_id: datarobot_deployment}),
         ), patch.object(
-            CustomInferenceDeployment,
+            ModelController,
             "datarobot_models",
             new_callable=PropertyMock(return_value={new_model_id: new_datarobot_model}),
         ), patch.object(
-            CustomInferenceDeployment, "_create_challenger_in_deployment"
+            DeploymentController, "_create_challenger_in_deployment"
         ) as create_challenger_in_deployment_method:
-            custom_inference_deployment = CustomInferenceDeployment(options)
-            custom_inference_deployment._handle_deployment_changes_or_creation()
+            model_controller = ModelController(options, None)
+            custom_inference_deployment = DeploymentController(options, model_controller, None)
+            custom_inference_deployment.handle_deployment_changes_or_creation()
 
             create_challenger_in_deployment_method.assert_called_once()
 
@@ -576,21 +589,22 @@ class TestDeploymentChanges:
         )
 
         with patch.object(
-            CustomInferenceDeployment,
+            DeploymentController,
             "deployments_info",
             new_callable=PropertyMock(return_value={user_provided_id: deployment_info}),
         ), patch.object(
-            CustomInferenceDeployment,
+            DeploymentController,
             "datarobot_deployments",
             new_callable=PropertyMock(return_value={user_provided_id: datarobot_deployment}),
         ), patch.object(
-            CustomInferenceDeployment,
+            ModelController,
             "datarobot_models",
             new_callable=PropertyMock(return_value={model_id: datarobot_model_with_new_latest}),
         ), patch.object(
-            CustomInferenceDeployment, "_create_challenger_in_deployment"
+            DeploymentController, "_create_challenger_in_deployment"
         ) as create_challenger_in_deployment_method:
-            custom_inference_deployment = CustomInferenceDeployment(options)
-            custom_inference_deployment._handle_deployment_changes_or_creation()
+            model_controller = ModelController(options, None)
+            deployment_controller = DeploymentController(options, model_controller, None)
+            deployment_controller.handle_deployment_changes_or_creation()
 
             create_challenger_in_deployment_method.assert_called_once()

@@ -20,7 +20,8 @@ import yaml
 from bson import ObjectId
 from git import Repo
 
-from custom_inference_model import CustomInferenceModel
+from custom_inference_model import CustomInferenceModelAction
+from custom_inference_model import ModelController
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 
@@ -264,12 +265,13 @@ def options(repo_root_path):
     """A fixture to mock a parse args namespace options."""
 
     return Namespace(
-        webserver="www.dummy.com",
+        webserver="http://www.dummy.com",
         api_token="abc123",
-        skip_cert_verification=True,
-        root_dir=repo_root_path,
         branch="master",
+        root_dir=repo_root_path,
         allow_model_deletion=True,
+        skip_cert_verification=True,
+        models_only=False,
     )
 
 
@@ -277,7 +279,7 @@ def options(repo_root_path):
 def mock_prerequisites():
     """A fixture to mock the _prerequisites private method in te GitHub action."""
 
-    with patch.object(CustomInferenceModel, "_prerequisites"):
+    with patch.object(CustomInferenceModelAction, "_prerequisites"):
         yield
 
 
@@ -294,7 +296,7 @@ def mock_github_env_variables():
 def mock_fetch_models_from_datarobot():
     """A fixture to patch the _fetch_models_from_datarobot private method."""
 
-    with patch.object(CustomInferenceModel, "_fetch_models_from_datarobot"):
+    with patch.object(ModelController, "fetch_models_from_datarobot"):
         yield
 
 
@@ -302,7 +304,7 @@ def mock_fetch_models_from_datarobot():
 def mock_model_version_exists():
     """A fixture to patch the _model_version_exists private method."""
 
-    with patch.object(CustomInferenceModel, "_model_version_exists", return_value=True):
+    with patch.object(ModelController, "_model_version_exists", return_value=True):
         yield
 
 
@@ -310,7 +312,7 @@ def mock_model_version_exists():
 def mock_handle_deleted_models():
     """A fixture to patch the _handle_deleted_models private method."""
 
-    with patch.object(CustomInferenceModel, "_handle_deleted_models", return_value=True):
+    with patch.object(ModelController, "handle_deleted_models", return_value=True):
         yield
 
 

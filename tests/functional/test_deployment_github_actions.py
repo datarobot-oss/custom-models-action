@@ -115,6 +115,40 @@ class TestDeploymentGitHubActions:
         else:
             yield None
 
+    @staticmethod
+    def _commit_changes_by_event(commit_message, event_name, git_repo):
+        """
+        For 'push' event the changes are committed into the master using a single commit. For
+        'pull_request' event, the changes are committed into a feature branch and then a merge
+        branch is created.
+        """
+
+        os.chdir(git_repo.working_dir)
+        if event_name == "push":
+            git_repo.git.commit("-a", "-m", commit_message)
+        elif event_name == "pull_request":
+            feature_branch_name = "feature-branch"
+            if feature_branch_name in git_repo.heads:
+                feature_branch = git_repo.heads[feature_branch_name]
+            else:
+                feature_branch = git_repo.create_head(feature_branch_name)
+            feature_branch.checkout()
+
+            git_repo.git.add("--all")
+            git_repo.git.commit("-m", commit_message, "--no-verify")
+
+            merge_branch_name = "merge-branch"
+            if merge_branch_name in git_repo.heads:
+                # Delete the merge branch to enable creation of another merge branch
+                git_repo.delete_head(merge_branch_name, "--force")
+
+            merge_branch = git_repo.create_head(merge_branch_name, "master")
+            git_repo.head.reference = merge_branch
+            git_repo.head.reset(index=True, working_tree=True)
+            git_repo.git.merge(feature_branch, "--no-ff")
+        else:
+            raise Exception("Unsupported git event!")
+
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
     @pytest.mark.usefixtures("cleanup", "skip_model_testing")
     def test_e2e_deployment_create(
@@ -129,20 +163,14 @@ class TestDeploymentGitHubActions:
     ):
         """An end-to-end case to test a deployment creation."""
 
-        # 1. Create a model just as a preliminary requirement (use GitHub action)
-        printout(
-            "Create a custom model as a preliminary requirement. "
-            "Run custom model GitHub action (push event) ..."
-        )
-        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
-
-        # 2. Upload actuals dataset and set the deployment metadata with the dataset ID
-        printout("Upload actuals dataset ...")
+        # Upload actuals dataset and set the deployment metadata with the dataset ID
+        printout("Upload actuals dataset")
         with self._upload_actuals_dataset(
             event_name, dr_client, deployment_metadata, deployment_metadata_yaml_file
         ):
-            printout("Run deployment GitHub action ...")
-            # 3. Run a deployment github action
+            self._commit_changes_by_event("Update actuals dataset", event_name, git_repo)
+
+            printout("Run the GitHub action to create a model and deployment")
             run_github_action(
                 repo_root_path, git_repo, main_branch_name, event_name, is_deploy=True
             )
@@ -203,8 +231,9 @@ class TestDeploymentGitHubActions:
             assert False, f"Unsupported GitHub event name: {event_name}"
         printout("Done")
 
-    @staticmethod
+    @classmethod
     def _deploy_a_model_than_run_github_action_to_replace_or_challenge(
+        cls,
         dr_client,
         git_repo,
         repo_root_path,
@@ -213,32 +242,21 @@ class TestDeploymentGitHubActions:
         model_metadata_yaml_file,
         event_name,
     ):
-
-        # 1. Create a model just as a preliminary requirement (use GitHub action)
-        printout(
-            "Create a custom model as a preliminary requirement. "
-            "Run custom model GitHub action (push event) ..."
-        )
-        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
-
-        # 2. Create a deployment
-        printout("Create a deployment. Run deployment GitHub action (push event) ...")
+        # Create a deployment
+        printout("Run the GitHub action (push event) to create a model and deployment")
         run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=True)
         local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         deployments = dr_client.fetch_deployments()
         assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
 
-        # 3. Make a local change to the model and commit
+        # Make a local change to the model and commit
         printout("Make a change to the model and run custom model GitHub action (push event) ...")
         new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
-        os.chdir(repo_root_path)
-        git_repo.git.commit("-a", "-m", f"Increase memory to {new_memory}")
 
-        # 4. Run GitHub action to create a new model version in DataRobot
-        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
+        cls._commit_changes_by_event(f"Increase memory to {new_memory}", event_name, git_repo)
 
-        # 5. Run GitHub action to replace the latest model in a deployment
-        printout(f"Run deployment GitHub action ({event_name} event) ...")
+        # Run the GitHub action to replace the latest model in a deployment
+        printout(f"Run the GitHub action ({event_name} event)")
         run_github_action(repo_root_path, git_repo, main_branch_name, event_name, is_deploy=True)
 
         printout("Validate ...")
@@ -276,27 +294,19 @@ class TestDeploymentGitHubActions:
     ):
         """An end-to-end case to test a deployment deletion."""
 
-        # 1. Create a model just as a basic requirement (use GitHub action)
-        printout(
-            "Create a custom model as a preliminary requirement. "
-            "Run custom model GitHub action (push event) ..."
-        )
-        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
-
-        # 2. Run a deployment GitHub action to create a deployment
-        printout("Create a deployment. Runa deployment GitHub action (push event) ...")
+        # Create a model and deployment. Run the GitHub action.
+        printout("Run the GitHub action (push event) to create a model and deployment")
         run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=True)
         deployments = dr_client.fetch_deployments()
         local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
 
-        # 3. Delete a deployment local definition yaml file
-        printout("Delete deployment. Run deployment GitHub action (push event) ...")
+        # Delete a deployment local definition yaml file
+        printout("Run the GitHub action (push event) to delete deployment")
         os.remove(deployment_metadata_yaml_file)
-        os.chdir(repo_root_path)
-        git_repo.git.commit("-a", "-m", "Delete the deployment definition file")
+        self._commit_changes_by_event("Delete the deployment definition file", "push", git_repo)
 
-        # 4. Run a deployment GitHub action but disallow deployment deletion
+        # Run the GitHub action but disallow deployment deletion
         run_github_action(
             repo_root_path,
             git_repo,
@@ -310,8 +320,8 @@ class TestDeploymentGitHubActions:
         local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
 
-        # 5. Run a deployment GitHub action for pull request with allowed deployment deletion
-        printout("Run deployment GitHub action (pull request) with allowed deletion ...")
+        # Run the GitHub action (pull request) with allowed deployment deletion
+        printout("Run the GitHub action (pull request) with allowed deletion")
         run_github_action(
             repo_root_path,
             git_repo,
@@ -325,8 +335,8 @@ class TestDeploymentGitHubActions:
         local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
 
-        # 6. Run a deployment GitHub action for push with allowed deployment deletion
-        printout("Run deployment GitHub action (push) with allowed deletion ...")
+        # Run the GitHub action (push) with allowed deployment deletion
+        printout("Run the GitHub action (push) with allowed deletion")
         run_github_action(
             repo_root_path,
             git_repo,
@@ -407,17 +417,8 @@ class TestDeploymentGitHubActions:
             dr_client, model_metadata_yaml_file, event_name
         ):
             try:
-                # 1. Create a model just as a basic requirement (use GitHub action)
-                printout(
-                    "Create a custom model as a preliminary requirement. "
-                    "Run custom model GitHub action (push event) ..."
-                )
-                run_github_action(
-                    repo_root_path, git_repo, main_branch_name, "push", is_deploy=False
-                )
-
-                # 2. Run a deployment GitHub action to create a deployment
-                printout("Create a deployment. Run a deployment GitHub action (push event) ...")
+                # Run the GitHub action to create a model and deployment
+                printout("Run the GitHub action (push event) to create a model and deployment")
                 run_github_action(
                     repo_root_path, git_repo, main_branch_name, "push", is_deploy=True
                 )
@@ -433,7 +434,11 @@ class TestDeploymentGitHubActions:
                         deployment_metadata_yaml_file,
                         event_name,
                     ):
-                        printout(f"Run deployment GitHub action ({event_name}")
+                        self._commit_changes_by_event(
+                            f"Update settings by {check_func.__name__}", event_name, git_repo
+                        )
+
+                        printout(f"Run the GitHub action ({event_name}")
                         run_github_action(
                             repo_root_path, git_repo, main_branch_name, event_name, is_deploy=True
                         )

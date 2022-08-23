@@ -4,9 +4,9 @@
 #  Released under the terms of DataRobot Tool and Utility Agreement.
 
 """
-The implementation of the custom inference model deploymentGitHub action. In highlights,
-it scans and loads deployment definitions from the local source tree, perform validations
-and then applies actions in DataRobot only upon pushes to the release branch.
+This module controls and coordinate between local deployment definitions and DataRobot deployments.
+In highlights, it scans and loads deployment definitions from the local source tree, perform
+validations and then applies actions in DataRobot.
 """
 
 import logging
@@ -18,21 +18,29 @@ from common.exceptions import AssociatedModelVersionNotFound
 from common.exceptions import DataRobotClientError
 from common.exceptions import DeploymentMetadataAlreadyExists
 from common.exceptions import NoValidAncestor
-from custom_inference_model import CustomInferenceModelBase
+from common.github_env import GitHubEnv
 from deployment_info import DeploymentInfo
+from model_controller import ControllerBase
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 
 logger = logging.getLogger()
 
 
-class CustomInferenceDeployment(CustomInferenceModelBase):
-    """A custom inference model deployment implementation of the GitHub action"""
+class DeploymentController(ControllerBase):
+    """
+    A deployment controller that coordinates between local deployment definitions to DataRobot
+    deployments.
+    """
 
-    def __init__(self, options):
-        super().__init__(options)
+    def __init__(self, options, model_controller, repo):
+        super().__init__(options, repo)
+        self._model_controller = model_controller
         self._deployments_info = {}
         self._datarobot_deployments = {}
+
+    def _label(self):
+        return self.DEPLOYMENTS_LABEL
 
     @property
     def deployments_info(self):
@@ -46,22 +54,9 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
 
         return self._datarobot_deployments
 
-    def _label(self):
-        return self.DEPLOYMENTS_LABEL
+    def scan_and_load_deployments_metadata(self):
+        """Scan a load deployment definition yaml files from the load source stree."""
 
-    def _run(self):
-        """
-        Executes the GitHub action logic to manage custom inference deployments
-        """
-
-        self._scan_and_load_deployments_metadata()
-        self._fetch_models_from_datarobot()
-        self._fetch_deployments_from_datarobot()
-        self._validate_deployments_integrity()
-        if self.event_name == "push":
-            self._apply_datarobot_deployment_actions()
-
-    def _scan_and_load_deployments_metadata(self):
         logger.info("Scanning and loading DataRobot deployment files ...")
         for yaml_path, yaml_content in self._next_yaml_content_in_repo():
             if DeploymentSchema.is_multi_deployments_schema(yaml_content):
@@ -89,7 +84,9 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         )
         self._deployments_info[deployment_info.user_provided_id] = deployment_info
 
-    def _fetch_deployments_from_datarobot(self):
+    def fetch_deployments_from_datarobot(self):
+        """Retrieve deployments entities from DataRobot."""
+
         logger.info("Fetching deployments from DataRobot ...")
         custom_inference_deployments = self._dr_client.fetch_deployments()
         for deployment in custom_inference_deployments:
@@ -102,7 +99,7 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
 
     def _get_associated_model_version(self, user_provided_id, datarobot_deployment):
         model_id = datarobot_deployment["model"]["customModelImage"]["customModelId"]
-        associated_datarobot_model = self.datarobot_model_by_id(model_id)
+        associated_datarobot_model = self._model_controller.datarobot_model_by_id(model_id)
         if not associated_datarobot_model:
             raise AssociatedModelNotFound(
                 "Deployment is broken due to a missing associated datarobot model.\n"
@@ -126,7 +123,9 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             )
         return datarobot_model_version
 
-    def _validate_deployments_integrity(self):
+    def validate_deployments_integrity(self):
+        """Validate deployments integrity with models."""
+
         logger.info("Validating deployments integrity ...")
         for user_provided_id, deployment_info in self.deployments_info.items():
             datarobot_deployment = self.datarobot_deployments.get(user_provided_id)
@@ -135,7 +134,9 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
             else:
                 # 1. Verify existing and valid local custom model that is associated with the
                 #    deployment.
-                model_info = self.models_info.get(deployment_info.user_provided_model_id)
+                model_info = self._model_controller.models_info.get(
+                    deployment_info.user_provided_model_id
+                )
                 if not model_info:
                     raise AssociatedModelNotFound(
                         "Data integrity in local repository is broken. "
@@ -145,7 +146,9 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                     )
 
                 # 2. Validate that the associated model was already created in DataRobot
-                custom_model = self.datarobot_models.get(deployment_info.user_provided_model_id)
+                custom_model = self._model_controller.datarobot_models.get(
+                    deployment_info.user_provided_model_id
+                )
                 if not custom_model:
                     raise AssociatedModelNotFound(
                         "Unexpected missing DataRobot model. "
@@ -173,19 +176,21 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                     f"Pinned sha: {git_main_branch_sha}."
                 )
 
-    def _apply_datarobot_deployment_actions(self):
-        logger.info("Applying DataRobot deployment actions ...")
-        self._handle_deployment_changes_or_creation()
-        self._handle_deleted_deployments()
+    def handle_deployment_changes_or_creation(self):
+        """Apply changes to deployments in DataRobot."""
 
-    def _handle_deployment_changes_or_creation(self):
         for user_provided_id, deployment_info in self.deployments_info.items():
             datarobot_deployment = self.datarobot_deployments.get(user_provided_id)
             if not datarobot_deployment:
                 self._create_deployment(deployment_info)
             else:
+                # NOTE: settings changes should be applied before a replacement or a challenger
+                # takes place, because we should first reflect the desired setting in DataRobot
+                # and only then carry out these related actions.
+                self._handle_deployment_changes(deployment_info, datarobot_deployment)
+
                 active_datarobot_model_id = datarobot_deployment.model_version["customModelId"]
-                desired_datarobot_model = self.datarobot_models.get(
+                desired_datarobot_model = self._model_controller.datarobot_models.get(
                     deployment_info.user_provided_model_id
                 )
                 if self._user_replaced_the_model_in_a_deployment(
@@ -204,13 +209,13 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                             desired_datarobot_model.latest_version, datarobot_deployment
                         )
 
-                self._handle_deployment_changes(deployment_info, datarobot_deployment)
-
     def _create_deployment(self, deployment_info):
         logger.info(
             "Creating a deployment ... user_provided_id: %s.", deployment_info.user_provided_id
         )
-        custom_model = self.datarobot_models.get(deployment_info.user_provided_model_id)
+        custom_model = self._model_controller.datarobot_models.get(
+            deployment_info.user_provided_model_id
+        )
         deployment = self._dr_client.create_deployment(custom_model.latest_version, deployment_info)
         logger.info(
             "A new deployment was created, git_id: %s, id: %s.",
@@ -220,8 +225,8 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
 
         self._handle_follow_up_deployment_settings(deployment_info, deployment)
 
-        self._stats.total_created += 1
-        self._stats.total_affected += 1
+        self.stats.total_created += 1
+        self.stats.total_affected += 1
 
     def _handle_follow_up_deployment_settings(self, deployment_info, deployment):
         self._submit_actuals(deployment_info, deployment)
@@ -241,7 +246,9 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                 desired_association_id,
                 desired_dataset_id,
             )
-            model_info = self.models_info.get(deployment_info.user_provided_model_id)
+            model_info = self._model_controller.models_info.get(
+                deployment_info.user_provided_model_id
+            )
             target_name = model_info.get_settings_value(ModelSchema.TARGET_NAME_KEY)
             self._dr_client.submit_deployment_actuals(
                 target_name, desired_association_id, desired_dataset_id, deployment
@@ -268,7 +275,7 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         deployment = self._dr_client.replace_model_deployment(
             model_latest_version, datarobot_deployment
         )
-        self._stats.total_affected += 1
+        self.stats.total_affected += 1
         logger.info(
             "The latest model version was successfully replaced in a deployment. "
             "user_provided_id: %s, deployment_id: %s.",
@@ -316,8 +323,10 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
         if self._dr_client.should_submit_new_actuals(deployment_info, actual_deployment_settings):
             self._submit_actuals(deployment_info, datarobot_deployment)
 
-    def _handle_deleted_deployments(self):
-        if not self.is_push:
+    def handle_deleted_deployments(self):
+        """Delete deployments in DataRobot. Deletion takes place only within a push GitHub event."""
+
+        if not GitHubEnv.is_push():
             logger.debug("Skip handling deployment deletion. It takes place only on push event.")
             return
 
@@ -331,8 +340,8 @@ class CustomInferenceDeployment(CustomInferenceModelBase):
                 deployment_id = datarobot_deployment.deployment["id"]
                 try:
                     self._dr_client.delete_deployment_by_id(deployment_id)
-                    self._stats.total_deleted += 1
-                    self._stats.total_affected += 1
+                    self.stats.total_deleted += 1
+                    self.stats.total_affected += 1
                     logger.info(
                         "A deployment was deleted with success. "
                         "user_provided_id: %s, deployment_id: %s.",

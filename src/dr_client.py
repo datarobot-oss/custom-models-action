@@ -172,7 +172,7 @@ class DrClient:
             _next_page = response_json["next"]
             _returned_models = response_json["data"]
             logger.debug(
-                "Total: %d, page count: %d, Next page: %d", _total_count, _page_count, _next_page
+                "Total: %d, page count: %d, Next page: %s", _total_count, _page_count, _next_page
             )
             return _returned_models, _next_page
 
@@ -385,8 +385,8 @@ class DrClient:
 
         Returns
         -------
-        str,
-            A DataRobot version ID.
+        dict,
+            A DataRobot custom model version.
         """
 
         file_objs = []
@@ -425,9 +425,9 @@ class DrClient:
                 code=response.status_code,
             )
 
-        version_id = response.json()["id"]
-        logger.info("Custom model version created successfully (id: %s)", version_id)
-        return version_id
+        model_version = response.json()
+        logger.info("Custom model version created successfully (id: %s)", model_version["id"])
+        return model_version
 
     @classmethod
     def _setup_payload_for_custom_model_version_creation(

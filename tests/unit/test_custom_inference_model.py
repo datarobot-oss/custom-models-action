@@ -14,6 +14,7 @@ from argparse import Namespace
 from pathlib import Path
 
 import pytest
+from bson import ObjectId
 from mock import patch
 from mock.mock import PropertyMock
 
@@ -22,10 +23,13 @@ from common.exceptions import IllegalModelDeletion
 from common.exceptions import ModelMainEntryPointNotFound
 from common.exceptions import ModelMetadataAlreadyExists
 from common.exceptions import SharedAndLocalPathCollision
-from custom_inference_model import CustomInferenceModel
-from custom_inference_model import ModelFilePath
-from custom_inference_model import ModelInfo
+from common.git_tool import GitTool
+from custom_inference_model import CustomInferenceModelAction
+from deployment_controller import DeploymentController
 from dr_client import DrClient
+from model_controller import ModelController
+from model_file_path import ModelFilePath
+from model_info import ModelInfo
 from tests.unit.conftest import make_a_change_and_commit
 
 
@@ -42,9 +46,9 @@ class TestCustomInferenceModel:
     def test_scan_and_load_no_models(self, options):
         """Test models' scanning and loading without existing model definitions."""
 
-        custom_inference_model = CustomInferenceModel(options)
-        custom_inference_model._scan_and_load_models_metadata()
-        assert len(custom_inference_model._models_info) == 0
+        model_controller = ModelController(options, None)
+        model_controller.scan_and_load_models_metadata()
+        assert len(model_controller.models_info) == 0
 
     @pytest.mark.parametrize("num_models", [1, 2, 3])
     def test_scan_and_load_models_from_multi_separate_yaml_files(
@@ -54,9 +58,9 @@ class TestCustomInferenceModel:
 
         for counter in range(1, num_models + 1):
             single_model_factory(f"model-{counter}", write_metadata=True)
-        custom_inference_model = CustomInferenceModel(options)
-        custom_inference_model._scan_and_load_models_metadata()
-        assert len(custom_inference_model._models_info) == num_models
+        model_controller = ModelController(options, None)
+        model_controller.scan_and_load_models_metadata()
+        assert len(model_controller.models_info) == num_models
 
     def test_scan_and_load_models_with_same_user_provided_id_failure(
         self, options, single_model_factory
@@ -66,9 +70,9 @@ class TestCustomInferenceModel:
         user_provided_id = "same-user-provided-id-111"
         single_model_factory("model-1", write_metadata=True, user_provided_id=user_provided_id)
         single_model_factory("model-2", write_metadata=True, user_provided_id=user_provided_id)
-        custom_inference_model = CustomInferenceModel(options)
+        model_controller = ModelController(options, None)
         with pytest.raises(ModelMetadataAlreadyExists):
-            custom_inference_model._scan_and_load_models_metadata()
+            model_controller.scan_and_load_models_metadata()
 
     @pytest.mark.parametrize("num_models", [0, 1, 3])
     def test_scan_and_load_models_from_one_multi_models_yaml_file(
@@ -77,9 +81,9 @@ class TestCustomInferenceModel:
         """Test models' scanning and load from a single multi-models yaml definition."""
 
         models_factory(num_models, is_multi=True)
-        custom_inference_model = CustomInferenceModel(options)
-        custom_inference_model._scan_and_load_models_metadata()
-        assert len(custom_inference_model._models_info) == num_models
+        model_controller = ModelController(options, None)
+        model_controller.scan_and_load_models_metadata()
+        assert len(model_controller.models_info) == num_models
 
     @pytest.mark.parametrize("num_single_models", [0, 1, 3])
     @pytest.mark.parametrize("num_multi_models", [0, 2])
@@ -97,9 +101,9 @@ class TestCustomInferenceModel:
         for counter in range(1, num_single_models + 1):
             single_model_factory(f"model-{counter}")
 
-        custom_inference_model = CustomInferenceModel(options)
-        custom_inference_model._scan_and_load_models_metadata()
-        assert len(custom_inference_model._models_info) == (num_multi_models + num_single_models)
+        model_controller = ModelController(options, None)
+        model_controller.scan_and_load_models_metadata()
+        assert len(model_controller.models_info) == (num_multi_models + num_single_models)
 
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
     @pytest.mark.usefixtures(
@@ -117,14 +121,14 @@ class TestCustomInferenceModel:
 
         num_models = 3
         init_repo_with_models_factory(num_models, is_multi=is_multi)
-        custom_inference_model = CustomInferenceModel(options)
-        custom_inference_model._scan_and_load_models_metadata()
-        custom_inference_model._collect_datarobot_model_files()
+        model_controller = ModelController(options, GitTool(options.root_dir))
+        model_controller.scan_and_load_models_metadata()
+        model_controller.collect_datarobot_model_files()
 
         # Change 1 - one common module
         make_a_change_and_commit(git_repo, [str(common_filepath)], 1)
 
-        models_info = list(custom_inference_model.models_info.values())
+        models_info = list(model_controller.models_info.values())
         for model_index in range(num_models):
             model_main_program_filepath = models_info[model_index].main_program_filepath()
             make_a_change_and_commit(
@@ -136,13 +140,13 @@ class TestCustomInferenceModel:
             with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.dict(
                 os.environ, {"GITHUB_SHA": head_git_sha}
             ), patch.object(
-                CustomInferenceModel,
+                ModelController,
                 "_get_latest_model_version_git_commit_ancestor",
                 return_value=last_provision_git_sha,
             ):
-                custom_inference_model._lookup_affected_models_by_the_current_action()
+                model_controller.lookup_affected_models_by_the_current_action()
 
-            models_info = list(custom_inference_model.models_info.values())
+            models_info = list(model_controller.models_info.values())
             assert (
                 len([m_info for m_info in models_info if m_info.is_affected_by_commit])
                 == num_models
@@ -154,11 +158,11 @@ class TestCustomInferenceModel:
             with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.dict(
                 os.environ, {"GITHUB_SHA": head_git_sha}
             ), patch.object(
-                CustomInferenceModel,
+                ModelController,
                 "_get_latest_model_version_git_commit_ancestor",
                 return_value=last_provision_git_sha,
             ):
-                custom_inference_model._lookup_affected_models_by_the_current_action()
+                model_controller.lookup_affected_models_by_the_current_action()
 
             num_affected_models = len(
                 [m_info for m_info in models_info if m_info.is_affected_by_commit]
@@ -184,7 +188,7 @@ class TestCustomInferenceModelDeletion:
     @contextlib.contextmanager
     def _mock_local_models(self, user_provided_id):
         with patch.object(
-            CustomInferenceModel, "models_info", new_callable=PropertyMock
+            ModelController, "models_info", new_callable=PropertyMock
         ) as models_info_property, patch.object(
             ModelInfo, "user_provided_id", new_callable=PropertyMock
         ) as model_info_user_provided_id:
@@ -197,13 +201,13 @@ class TestCustomInferenceModelDeletion:
     @contextlib.contextmanager
     def _mock_fetched_models_that_do_not_exist_locally(self, user_provided_id, model_id):
         with patch.object(
-            CustomInferenceModel, "datarobot_models", new_callable=PropertyMock
+            ModelController, "datarobot_models", new_callable=PropertyMock
         ) as datarobot_models:
             # Ensure it does not match to the local model definition
             non_existing_user_provided_id = f"from-dr-{user_provided_id}"
             datarobot_models.return_value = {
                 non_existing_user_provided_id: DataRobotModel(
-                    model={"id": model_id}, latest_version=None
+                    model={"id": model_id or str(ObjectId())}, latest_version=None
                 )
             }
             yield
@@ -223,7 +227,7 @@ class TestCustomInferenceModelDeletion:
         """Test a failure to delete a model when input argument does not allow it."""
 
         options.allow_model_deletion = False
-        custom_inference_model = CustomInferenceModel(options)
+        model_controller = ModelController(options, None)
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": event_name}), self._mock_local_models(
             user_provided_id
         ), self._mock_fetched_models_that_do_not_exist_locally(
@@ -232,7 +236,7 @@ class TestCustomInferenceModelDeletion:
             model_id, has_deployment=False
         ):
             with pytest.raises(IllegalModelDeletion) as ex:
-                custom_inference_model._handle_deleted_models()
+                model_controller.handle_deleted_models()
             exception_msg = str(ex)
             assert "Model deletion was configured as not being allowed" in exception_msg
 
@@ -242,7 +246,7 @@ class TestCustomInferenceModelDeletion:
         """Test an undeployed model deletion during a pull request event."""
 
         options.allow_model_deletion = True
-        custom_inference_model = CustomInferenceModel(options)
+        model_controller = ModelController(options, None)
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request"}), self._mock_local_models(
             user_provided_id
         ), self._mock_fetched_models_that_do_not_exist_locally(
@@ -250,7 +254,7 @@ class TestCustomInferenceModelDeletion:
         ), self._mock_fetched_deployments(
             model_id, has_deployment=False
         ):
-            custom_inference_model._handle_deleted_models()
+            model_controller.handle_deleted_models()
 
     def test_models_deletion_for_pull_request_event_with_deployment(
         self, options, user_provided_id, model_id
@@ -258,7 +262,7 @@ class TestCustomInferenceModelDeletion:
         """Test a failure to delete a deployed model during a pull request event."""
 
         options.allow_model_deletion = True
-        custom_inference_model = CustomInferenceModel(options)
+        model_controller = ModelController(options, None)
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request"}), self._mock_local_models(
             user_provided_id
         ), self._mock_fetched_models_that_do_not_exist_locally(
@@ -267,7 +271,7 @@ class TestCustomInferenceModelDeletion:
             model_id, has_deployment=True
         ):
             with pytest.raises(IllegalModelDeletion):
-                custom_inference_model._handle_deleted_models()
+                model_controller.handle_deleted_models()
 
     def test_models_deletion_for_push_event_and_no_deployments(
         self, options, user_provided_id, model_id
@@ -277,7 +281,7 @@ class TestCustomInferenceModelDeletion:
         """
 
         options.allow_model_deletion = True
-        custom_inference_model = CustomInferenceModel(options)
+        model_controller = ModelController(options, None)
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.object(
             DrClient, "delete_custom_model_by_model_id"
         ) as mock_dr_client_delete_cm, self._mock_local_models(
@@ -287,7 +291,7 @@ class TestCustomInferenceModelDeletion:
         ), self._mock_fetched_deployments(
             model_id, has_deployment=False
         ):
-            custom_inference_model._handle_deleted_models()
+            model_controller.handle_deleted_models()
             mock_dr_client_delete_cm.assert_called_once()
 
     def test_models_deletion_for_push_event_and_deployment(
@@ -299,18 +303,16 @@ class TestCustomInferenceModelDeletion:
         """
 
         options.allow_model_deletion = True
-        custom_inference_model = CustomInferenceModel(options)
-        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.object(
-            DrClient, "delete_custom_model_by_model_id"
-        ) as mock_dr_client_delete_cm, self._mock_local_models(
+        model_controller = ModelController(options, None)
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), self._mock_local_models(
             user_provided_id
         ), self._mock_fetched_models_that_do_not_exist_locally(
             user_provided_id, model_id
         ), self._mock_fetched_deployments(
             model_id, has_deployment=True
         ):
-            custom_inference_model._handle_deleted_models()
-            mock_dr_client_delete_cm.assert_not_called()
+            with pytest.raises(IllegalModelDeletion):
+                model_controller.handle_deleted_models()
 
 
 @pytest.mark.usefixtures(
@@ -346,14 +348,16 @@ class TestGlobPatterns:
         """Test include Glob patterns and defaults in a given model definition."""
 
         models_factory(num_models, is_multi, with_include_glob, with_exclude_glob)
-        custom_inference_model = CustomInferenceModel(options)
+        custom_inference_model_action = CustomInferenceModelAction(options)
 
-        with patch.object(CustomInferenceModel, "_lookup_affected_models_by_the_current_action"):
-            custom_inference_model.run()
+        with patch.object(ModelController, "handle_model_changes"), patch.object(
+            DeploymentController, "fetch_deployments_from_datarobot"
+        ):
+            custom_inference_model_action.run()
 
-        assert len(custom_inference_model.models_info) == num_models
+        assert len(custom_inference_model_action.model_controller.models_info) == num_models
 
-        for _, model_info in custom_inference_model.models_info.items():
+        for _, model_info in custom_inference_model_action.model_controller.models_info.items():
             model_path = model_info.model_path
             readme_file_path = model_path / "README.md"
             assert readme_file_path.is_file()
@@ -394,10 +398,10 @@ class TestGlobPatterns:
         """Test excluded Glob patterns in a given model definition."""
 
         model_info = ModelInfo("yaml-path", "/m", None)
-        with patch("common.git_tool.Repo.init"), patch("custom_inference_model.DrClient"), patch(
-            "custom_inference_model.ModelInfo.user_provided_id", new_callable=PropertyMock("123")
+        with patch("common.git_tool.Repo.init"), patch("model_controller.DrClient"), patch(
+            "model_controller.ModelInfo.user_provided_id", new_callable=PropertyMock("123")
         ):
-            CustomInferenceModel._set_filtered_model_paths(
+            ModelController._set_filtered_model_paths(
                 model_info, included_paths, excluded_paths, repo_root_dir="/"
             )
             assert len(model_info.model_file_paths) == expected_num_model_files
@@ -410,9 +414,10 @@ class TestGlobPatterns:
         """Test missing main program in a given model."""
 
         models_factory(1, is_multi, include_main_prog=False)
-        custom_inference_model = CustomInferenceModel(options)
+        model_controller = ModelController(options, GitTool(options.root_dir))
+        model_controller.scan_and_load_models_metadata()
         with pytest.raises(ModelMainEntryPointNotFound):
-            custom_inference_model.run()
+            model_controller.collect_datarobot_model_files()
 
     @pytest.mark.parametrize(
         "local_paths, shared_paths, collision_expected",
@@ -449,7 +454,7 @@ class TestGlobPatterns:
             root_dir="/repo",
         )
         with patch.object(
-            CustomInferenceModel, "models_info", new_callable=PropertyMock
+            ModelController, "models_info", new_callable=PropertyMock
         ) as mock_models_info_property, patch.object(
             ModelInfo, "model_file_paths", new_callable=PropertyMock
         ) as mock_model_file_paths_property:
@@ -463,12 +468,10 @@ class TestGlobPatterns:
                 {p: ModelFilePath(p, model_path, options.root_dir) for p in shared_paths}
             )
             mock_model_file_paths_property.return_value = model_file_paths_property
-            with patch("common.git_tool.Repo.init"), patch("custom_inference_model.DrClient"):
-                custom_inference_model = CustomInferenceModel(options)
+            with patch("common.git_tool.Repo.init"), patch("model_controller.DrClient"):
+                model_controller = ModelController(options, None)
                 if collision_expected:
                     with pytest.raises(SharedAndLocalPathCollision):
-                        custom_inference_model._validate_collision_between_local_and_shared(
-                            model_info
-                        )
+                        model_controller._validate_collision_between_local_and_shared(model_info)
                 else:
-                    custom_inference_model._validate_collision_between_local_and_shared(model_info)
+                    model_controller._validate_collision_between_local_and_shared(model_info)
