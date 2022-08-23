@@ -15,10 +15,10 @@ import responses
 from bson import ObjectId
 
 from common.exceptions import DataRobotClientError
-from custom_inference_model import ModelFilePath
-from custom_inference_model import ModelInfo
 from dr_api_attrs import DrApiAttrs
 from dr_client import DrClient
+from model_file_path import ModelFilePath
+from model_info import ModelInfo
 from schema_validator import ModelSchema
 
 

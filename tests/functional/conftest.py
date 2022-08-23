@@ -19,7 +19,6 @@ from tempfile import TemporaryDirectory
 
 import pytest
 import yaml
-from bson import ObjectId
 from git import Repo
 
 from common.convertors import MemoryConvertor
@@ -68,7 +67,7 @@ def printout(msg):
 def unique_str():
     """Generate a unique 10-chars long string."""
 
-    return f"{random.randint(1, 2 ** 32): 010}"
+    return f"{random.randint(1, 2 ** 32):010}"
 
 
 @contextlib.contextmanager
@@ -182,7 +181,8 @@ def fixture_build_repo_for_testing(repo_root_path, git_repo):
     with open(deployment_yaml_filepath, "w", encoding="utf-8") as fd:
         yaml.safe_dump(deployment_metadata, fd)
 
-    # 8. Add files to repo
+    # 8. Add files to repo in multiple commits in order to avoid a use case of too few commits
+    #    that can be regarded as not a merge branch
     os.chdir(repo_root_path)
     git_repo.git.add("--all")
     git_repo.git.commit("-m", "Initial commit", "--no-verify")
@@ -282,21 +282,9 @@ def skip_model_testing(model_metadata, model_metadata_yaml_file):
 @pytest.fixture(name="model_metadata_yaml_file")
 def fixture_model_metadata_yaml_file(build_repo_for_testing, repo_root_path, git_repo):
     """A fixture to load and return the first defined model in the local source tree."""
-
     # pylint: disable=unused-argument
 
-    model_yaml_file = next(repo_root_path.rglob("*_1/model.yaml"))
-    with open(model_yaml_file, encoding="utf-8") as fd:
-        yaml_content = yaml.safe_load(fd)
-        yaml_content[ModelSchema.MODEL_ID_KEY] = f"my-awesome-model-{str(ObjectId())}"
-
-    with open(model_yaml_file, "w", encoding="utf-8") as fd:
-        yaml.safe_dump(yaml_content, fd)
-
-    git_repo.git.add(model_yaml_file)
-    git_repo.git.commit("--amend", "--no-edit")
-
-    return model_yaml_file
+    return next(repo_root_path.rglob("*_1/model.yaml"))
 
 
 @pytest.fixture(name="model_metadata")
@@ -397,7 +385,6 @@ def run_github_action(
         args = [
             "--webserver",
             os.environ.get("DATAROBOT_WEBSERVER"),
-            "--skip-cert-verification",
             "--api-token",
             os.environ.get("DATAROBOT_API_TOKEN"),
             "--branch",
@@ -405,9 +392,10 @@ def run_github_action(
             "--root-dir",
             str(repo_root_path),
             "--allow-model-deletion",
+            "--skip-cert-verification",
         ]
-        if is_deploy:
-            args.append("--deploy")
+        if not is_deploy:
+            args.append("--models-only")
 
         if allow_deployment_deletion:
             args.append("--allow-deployment-deletion")

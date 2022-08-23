@@ -16,8 +16,7 @@ import os
 import sys
 
 from common.exceptions import GenericException
-from custom_inference_deployment import CustomInferenceDeployment
-from custom_inference_model import CustomInferenceModel
+from custom_inference_model import CustomInferenceModelAction
 
 logger = logging.getLogger()
 
@@ -38,19 +37,9 @@ def argparse_options(args=None):
     """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--deploy",
-        action="store_true",
-        help="Determines whether to manage custom inference models or deployments.",
-    )
     parser.add_argument("--webserver", required=True, help="DataRobot Web server URL.")
     parser.add_argument(
         "--api-token", required=True, help="DataRobot public API authentication token."
-    )
-    parser.add_argument(
-        "--skip-cert-verification",
-        action="store_true",
-        help="Whether a request to an HTTPS URL will be made without a certificate verification.",
     )
     parser.add_argument(
         "--branch", required=True, help="The branch against which the program will function."
@@ -68,7 +57,16 @@ def argparse_options(args=None):
         help="Whether to detect local deleted deployment definitions and consequently "
         "delete them in DataRobot.",
     )
-
+    parser.add_argument(
+        "--models-only",
+        action="store_true",
+        help="Whether to handle custom inference models only, without deployments.",
+    )
+    parser.add_argument(
+        "--skip-cert-verification",
+        action="store_true",
+        help="Whether a request to an HTTPS URL will be made without a certificate verification.",
+    )
     options = parser.parse_args(args)
     logger.debug("Command line args: %s", options)
 
@@ -105,14 +103,11 @@ def main(args=None):
     options = argparse_options(args)
 
     try:
-        if options.deploy:
-            CustomInferenceDeployment(options).run()
-        else:
-            CustomInferenceModel(options).run()
-            print(
-                "::set-output name=message::"
-                "Custom inference model GitHub action completed with success.\n"
-            )
+        CustomInferenceModelAction(options).run()
+        print(
+            "::set-output name=message::"
+            "Custom inference model GitHub action completed with success.\n"
+        )
     except GenericException as ex:
         # Avoid printing the stacktrace
         logger.error(str(ex))
