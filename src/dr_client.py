@@ -1367,15 +1367,19 @@ class DrClient:
 
         training_dataset_payload = {}
 
-        DatasetParam = namedtuple("DatasetParam", ["local", "remote"])
+        DatasetParam = namedtuple("DatasetParam", ["local", "remote", "patch_remote"])
         dataset_params = [
-            DatasetParam(ModelSchema.TRAINING_DATASET_ID_KEY, "datasetId"),
-            DatasetParam(ModelSchema.PARTITIONING_COLUMN_KEY, "partitionColumn"),
+            DatasetParam(ModelSchema.TRAINING_DATASET_ID_KEY, "trainingDatasetId", "datasetId"),
+            DatasetParam(
+                ModelSchema.PARTITIONING_COLUMN_KEY,
+                "trainingDataPartitionColumn",
+                "partitionColumn",
+            ),
         ]
         for dataset_param in dataset_params:
             local_value = model_info.get_settings_value(dataset_param.local)
             if local_value and local_value != datarobot_custom_model.get(dataset_param.remote):
-                training_dataset_payload[dataset_param.remote] = local_value
+                training_dataset_payload[dataset_param.patch_remote] = local_value
 
         if training_dataset_payload:
             url = self.CUSTOM_MODEL_TRAINING_DATA.format(model_id=datarobot_custom_model["id"])
