@@ -617,8 +617,8 @@ class DeploymentSchema(SharedSchema):
     IMPORTANCE_KEY = "importance"  # Settings, Optional
     IMPORTANCE_CRITICAL_VALUE = "CRITICAL"
     IMPORTANCE_HIGH_VALUE = "HIGH"
-    IMPORTANCE_MODERATE_VALUE = ("MODERATE",)
-    IMPORTANCE_LOW_VALUE = ("LOW",)
+    IMPORTANCE_MODERATE_VALUE = "MODERATE"
+    IMPORTANCE_LOW_VALUE = "LOW"
 
     ENABLE_TARGET_DRIFT_KEY = "enable_target_drift"  # Settings, Optional
     ENABLE_FEATURE_DRIFT_KEY = "enable_feature_drift"  # Settings, Optional
