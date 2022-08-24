@@ -24,6 +24,7 @@ from common.exceptions import ModelMainEntryPointNotFound
 from common.exceptions import ModelMetadataAlreadyExists
 from common.exceptions import SharedAndLocalPathCollision
 from common.git_tool import GitTool
+from common.github_env import GitHubEnv
 from custom_inference_model import CustomInferenceModelAction
 from deployment_controller import DeploymentController
 from dr_client import DrClient
@@ -121,7 +122,7 @@ class TestCustomInferenceModel:
 
         num_models = 3
         init_repo_with_models_factory(num_models, is_multi=is_multi)
-        model_controller = ModelController(options, GitTool(options.root_dir))
+        model_controller = ModelController(options, GitTool(GitHubEnv.workspace_path()))
         model_controller.scan_and_load_models_metadata()
         model_controller.collect_datarobot_model_files()
 
@@ -402,7 +403,7 @@ class TestGlobPatterns:
             "model_controller.ModelInfo.user_provided_id", new_callable=PropertyMock("123")
         ):
             ModelController._set_filtered_model_paths(
-                model_info, included_paths, excluded_paths, repo_root_dir="/"
+                model_info, included_paths, excluded_paths, workspace_path="/"
             )
             assert len(model_info.model_file_paths) == expected_num_model_files
             for excluded_path in excluded_paths:
@@ -414,7 +415,7 @@ class TestGlobPatterns:
         """Test missing main program in a given model."""
 
         models_factory(1, is_multi, include_main_prog=False)
-        model_controller = ModelController(options, GitTool(options.root_dir))
+        model_controller = ModelController(options, GitTool(GitHubEnv.workspace_path()))
         model_controller.scan_and_load_models_metadata()
         with pytest.raises(ModelMainEntryPointNotFound):
             model_controller.collect_datarobot_model_files()
@@ -447,25 +448,27 @@ class TestGlobPatterns:
     def test_local_and_shared_collisions(self, local_paths, shared_paths, collision_expected):
         """Test collisions between local and shared file paths in a given model definition."""
 
+        workspace_path = "/repo"
         options = Namespace(
             webserver="www.dummy.com",
             api_token="abc",
             skip_cert_verification=True,
-            root_dir="/repo",
         )
         with patch.object(
             ModelController, "models_info", new_callable=PropertyMock
         ) as mock_models_info_property, patch.object(
             ModelInfo, "model_file_paths", new_callable=PropertyMock
-        ) as mock_model_file_paths_property:
-            model_path = Path("/repo/model")
+        ) as mock_model_file_paths_property, patch.dict(
+            os.environ, {"GITHUB_WORKSPACE": workspace_path}
+        ):
+            model_path = Path(f"{workspace_path}/model")
             model_info = ModelInfo("yaml-path", model_path, None)
             mock_models_info_property.return_value = model_info
             model_file_paths_property = {
-                p: ModelFilePath(p, model_path, options.root_dir) for p in local_paths
+                p: ModelFilePath(p, model_path, GitHubEnv.workspace_path()) for p in local_paths
             }
             model_file_paths_property.update(
-                {p: ModelFilePath(p, model_path, options.root_dir) for p in shared_paths}
+                {p: ModelFilePath(p, model_path, GitHubEnv.workspace_path()) for p in shared_paths}
             )
             mock_model_file_paths_property.return_value = model_file_paths_property
             with patch("common.git_tool.Repo.init"), patch("model_controller.DrClient"):

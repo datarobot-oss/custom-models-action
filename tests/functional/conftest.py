@@ -41,12 +41,12 @@ def webserver_accessible():
     return False
 
 
-def cleanup_models(dr_client_tool, repo_root_path):
+def cleanup_models(dr_client_tool, workspace_path):
     """Delete models in DataRobot, which are defined in the local repository source tree."""
 
     custom_models = dr_client_tool.fetch_custom_models()
     if custom_models:
-        for model_yaml_file in repo_root_path.rglob("**/model.yaml"):
+        for model_yaml_file in workspace_path.rglob("**/model.yaml"):
             with open(model_yaml_file, encoding="utf-8") as fd:
                 model_metadata = yaml.safe_load(fd)
 
@@ -92,8 +92,8 @@ def github_env_set(env_key, env_value):
         os.environ[env_key] = old_value
 
 
-@pytest.fixture(name="repo_root_path")
-def fixture_repo_root_path():
+@pytest.fixture(name="workspace_path")
+def fixture_workspace_path():
     """A fixture to create and return a temporary root dir to create a repository in it."""
 
     with TemporaryDirectory() as repo_tree:
@@ -102,17 +102,17 @@ def fixture_repo_root_path():
 
 
 @pytest.fixture(name="git_repo")
-def fixture_git_repo(repo_root_path):
+def fixture_git_repo(workspace_path):
     """
     A fixture to initialize a repository in a given root directory.
 
     Parameters
     ----------
-    repo_root_path : str
+    workspace_path : str
         The root folder for the source tree.
     """
 
-    repo = Repo.init(repo_root_path)
+    repo = Repo.init(workspace_path)
     repo.config_writer().set_value("user", "name", "functional-test-user").release()
     repo.config_writer().set_value("user", "email", "functional-test@company.com").release()
     logging.basicConfig()
@@ -122,7 +122,7 @@ def fixture_git_repo(repo_root_path):
 
 
 @pytest.fixture(name="build_repo_for_testing")
-def fixture_build_repo_for_testing(repo_root_path, git_repo):
+def fixture_build_repo_for_testing(workspace_path, git_repo):
     """
     A fixture to build a complete source stree with model and deployment definitions in it. Then
     commit everything into the repository that was initialized in that root dir.
@@ -160,14 +160,14 @@ def fixture_build_repo_for_testing(repo_root_path, git_repo):
     src_model_path = next(
         p for p in src_models_root_dir.glob("**") if not p.samefile(src_models_root_dir)
     )
-    dst_models_root_dir = repo_root_path / "models"
+    dst_models_root_dir = workspace_path / "models"
 
     first_model_metadata = _setup_model(src_model_path, dst_models_root_dir, 1)
     _setup_model(src_model_path, dst_models_root_dir, 2)
 
     # 7. Copy deployments
     deployments_src_root_dir = Path(__file__).parent / ".." / "deployments"
-    dst_deployments_dir = repo_root_path / deployments_src_root_dir.name
+    dst_deployments_dir = workspace_path / deployments_src_root_dir.name
     shutil.copytree(deployments_src_root_dir, dst_deployments_dir)
 
     deployment_yaml_filepath = next(dst_deployments_dir.glob("deployment.yaml"))
@@ -183,7 +183,7 @@ def fixture_build_repo_for_testing(repo_root_path, git_repo):
 
     # 8. Add files to repo in multiple commits in order to avoid a use case of too few commits
     #    that can be regarded as not a merge branch
-    os.chdir(repo_root_path)
+    os.chdir(workspace_path)
     git_repo.git.add("--all")
     git_repo.git.commit("-m", "Initial commit", "--no-verify")
 
@@ -280,11 +280,11 @@ def skip_model_testing(model_metadata, model_metadata_yaml_file):
 # NOTE: it was rather better to use the pytest.mark.usefixture for 'build_repo_for_testing'
 # but, apparently it cannot be used with fixtures.
 @pytest.fixture(name="model_metadata_yaml_file")
-def fixture_model_metadata_yaml_file(build_repo_for_testing, repo_root_path, git_repo):
+def fixture_model_metadata_yaml_file(build_repo_for_testing, workspace_path, git_repo):
     """A fixture to load and return the first defined model in the local source tree."""
     # pylint: disable=unused-argument
 
-    return next(repo_root_path.rglob("*_1/model.yaml"))
+    return next(workspace_path.rglob("*_1/model.yaml"))
 
 
 @pytest.fixture(name="model_metadata")
@@ -345,7 +345,7 @@ def increase_model_memory_by_1mb(model_yaml_file):
 
 
 def run_github_action(
-    repo_root_path,
+    workspace_path,
     git_repo,
     main_branch_name,
     event_name,
@@ -359,7 +359,7 @@ def run_github_action(
 
     Parameters
     ----------
-    repo_root_path : str
+    workspace_path : str or pathlib.Path
         The repository root directory.
     git_repo : git.Repo
         A tool to interact with the local Git repository.
@@ -377,9 +377,13 @@ def run_github_action(
 
     main_branch_head_sha = main_branch_head_sha or git_repo.head.commit.hexsha
     ref_name = main_branch_name if event_name == "push" else "merge-branch"
-    with github_env_set("GITHUB_EVENT_NAME", event_name), github_env_set(
+    with github_env_set("GITHUB_WORKSPACE", str(workspace_path)), github_env_set(
         "GITHUB_SHA", git_repo.commit(main_branch_head_sha).hexsha
-    ), github_env_set("GITHUB_BASE_REF", main_branch_name), github_env_set(
+    ), github_env_set("GITHUB_EVENT_NAME", event_name), github_env_set(
+        "GITHUB_SHA", git_repo.commit(main_branch_head_sha).hexsha
+    ), github_env_set(
+        "GITHUB_BASE_REF", main_branch_name
+    ), github_env_set(
         "GITHUB_REF_NAME", ref_name
     ):
         args = [
@@ -389,8 +393,6 @@ def run_github_action(
             os.environ.get("DATAROBOT_API_TOKEN"),
             "--branch",
             main_branch_name,
-            "--root-dir",
-            str(repo_root_path),
             "--allow-model-deletion",
             "--skip-cert-verification",
         ]

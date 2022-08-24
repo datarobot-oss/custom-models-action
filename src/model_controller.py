@@ -78,6 +78,7 @@ class ControllerBase(ABC):
 
     def __init__(self, options, repo):
         self._options = options
+        self._workspace_path = GitHubEnv.workspace_path()
         self._repo = repo
         self._dr_client = DrClient(
             self.options.webserver,
@@ -106,8 +107,8 @@ class ControllerBase(ABC):
         return self._stats
 
     def _next_yaml_content_in_repo(self):
-        yaml_files = glob(f"{self.options.root_dir}/**/*.yaml", recursive=True)
-        yaml_files.extend(glob(f"{self.options.root_dir}/**/*.yml", recursive=True))
+        yaml_files = glob(f"{self._workspace_path}/**/*.yaml", recursive=True)
+        yaml_files.extend(glob(f"{self._workspace_path}/**/*.yml", recursive=True))
         for yaml_path in yaml_files:
             with open(yaml_path, encoding="utf-8") as fd:
                 yield yaml_path, yaml.safe_load(fd)
@@ -116,7 +117,7 @@ class ControllerBase(ABC):
         match = re.match(r"^(/|\$ROOT/)", path)
         if match:
             path = path.replace(match[0], "", 1)
-            path = f"{self.options.root_dir}/{path}"
+            path = f"{self._workspace_path}/{path}"
         else:
             path = f"{parent}/{path}"
         return path
@@ -237,13 +238,13 @@ class ModelController(ControllerBase):
                 excluded_paths.update(glob(exclude_glob_pattern, recursive=True))
 
             self._set_filtered_model_paths(
-                model_info, included_paths, excluded_paths, self.options.root_dir
+                model_info, included_paths, excluded_paths, self._workspace_path
             )
             self._validate_model_integrity(model_info)
             logger.info("Model %s detected and verified.", model_info.model_path)
 
     @classmethod
-    def _set_filtered_model_paths(cls, model_info, included_paths, excluded_paths, repo_root_dir):
+    def _set_filtered_model_paths(cls, model_info, included_paths, excluded_paths, workspace_path):
         final_model_paths = []
         included_paths = cls._remove_undesired_sub_paths(included_paths)
         if excluded_paths:
@@ -262,7 +263,7 @@ class ModelController(ControllerBase):
                 continue
             final_model_paths.append(included_path)
 
-        model_info.set_model_paths(final_model_paths, repo_root_dir)
+        model_info.set_model_paths(final_model_paths, workspace_path)
 
     @staticmethod
     def _remove_undesired_sub_paths(paths):
@@ -458,9 +459,8 @@ class ModelController(ControllerBase):
                 latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
                 if latest_version:
                     model_root_dir = model_info.model_path
-                    repo_root_dir = self.options.root_dir
                     path_under_model, _ = ModelFilePath.get_path_under_model(
-                        deleted_file, model_root_dir, repo_root_dir
+                        deleted_file, model_root_dir, self._workspace_path
                     )
                     if not path_under_model:
                         raise UnexpectedResult(f"The path '{deleted_file}' is outside the repo.")

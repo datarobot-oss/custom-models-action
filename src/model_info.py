@@ -114,7 +114,7 @@ class ModelInfo:
         """Returns whether the main program file path exists or not"""
         return self.main_program_filepath() is not None
 
-    def set_model_paths(self, paths, repo_root_path):
+    def set_model_paths(self, paths, workspace_path):
         """
         Builds a dictionary of the files belong to the given model. The key is a resolved
         file path of a given file and the value is a ModelFilePath of that same file.
@@ -123,14 +123,14 @@ class ModelInfo:
         ----------
         paths : list
             A list of file paths associated with the given model.
-        repo_root_path : pathlib.Path
+        workspace_path : pathlib.Path
             The repository root directory.
         """
 
         logger.debug("Model %s is set with the following paths: %s", self.user_provided_id, paths)
         self._model_file_paths = {}
         for path in paths:
-            model_filepath = ModelFilePath(path, self.model_path, repo_root_path)
+            model_filepath = ModelFilePath(path, self.model_path, workspace_path)
             self._model_file_paths[model_filepath.resolved] = model_filepath
 
     def paths_under_model_by_relative(self, relative_to):

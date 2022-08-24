@@ -26,7 +26,7 @@ class CustomInferenceModelAction:
 
     def __init__(self, options):
         self._options = options
-        self._repo = GitTool(options.root_dir)
+        self._repo = GitTool(GitHubEnv.workspace_path())
         self._model_controller = ModelController(options, self._repo)
         self._deployment_controller = None
 

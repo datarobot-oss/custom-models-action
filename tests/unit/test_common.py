@@ -40,7 +40,7 @@ class TestGitTool:
     """Contains Git tool unit-tests."""
 
     def test_changed_files_between_commits(
-        self, git_repo, repo_root_path, init_repo_with_models_factory, common_filepath
+        self, git_repo, workspace_path, init_repo_with_models_factory, common_filepath
     ):
         """Test changed files between commits."""
 
@@ -48,13 +48,13 @@ class TestGitTool:
 
         make_a_change_and_commit(git_repo, [str(common_filepath)], 1)
 
-        first_model_main_program_filepath = repo_root_path / "model_0" / "custom.py"
+        first_model_main_program_filepath = workspace_path / "model_0" / "custom.py"
         assert first_model_main_program_filepath.is_file()
         make_a_change_and_commit(
             git_repo, [str(common_filepath), first_model_main_program_filepath], 2
         )
 
-        repo_tool = GitTool(repo_root_path)
+        repo_tool = GitTool(workspace_path)
         changed_files1, deleted_files = repo_tool.find_changed_files("HEAD")
         assert len(changed_files1) == 2, changed_files1
         assert not deleted_files
@@ -69,19 +69,19 @@ class TestGitTool:
         assert len(changed_files4) == 2, changed_files4
 
     def test_is_ancestor_of(
-        self, repo_root_path, git_repo, init_repo_with_models_factory, common_filepath
+        self, workspace_path, git_repo, init_repo_with_models_factory, common_filepath
     ):
         """Test the check for commit ancestor."""
 
         init_repo_with_models_factory(1, is_multi=False)
-        repo_tool = GitTool(repo_root_path)
+        repo_tool = GitTool(workspace_path)
         for index in range(1, 5):
             make_a_change_and_commit(git_repo, [str(common_filepath)], index)
             ancestor_ref = f"HEAD~{index}"
             assert repo_tool.is_ancestor_of(ancestor_ref, "HEAD")
 
     def test_merge_base_commit_sha(
-        self, repo_root_path, git_repo, init_repo_with_models_factory, common_filepath
+        self, workspace_path, git_repo, init_repo_with_models_factory, common_filepath
     ):
         """Test the merge base commit sha."""
 
@@ -97,6 +97,6 @@ class TestGitTool:
 
         head_sha = git_repo.head.commit.hexsha
 
-        repo_tool = GitTool(repo_root_path)
+        repo_tool = GitTool(workspace_path)
         split_commit_sha = repo_tool.merge_base_commit_sha("master", head_sha)
         assert split_commit_sha == git_repo.heads["master"].commit.hexsha

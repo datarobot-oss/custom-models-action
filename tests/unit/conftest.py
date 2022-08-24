@@ -26,10 +26,10 @@ from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 
 
-@pytest.fixture(name="repo_root_path")
-def fixture_repo_root_path():
+@pytest.fixture(name="workspace_path")
+def fixture_workspace_path():
     """
-    A fixture to temporarily create and return a root folder in which a repository will be
+    A fixture to temporarily create and return a workspace folder in which a repository will be
     initialized.
     """
 
@@ -108,10 +108,10 @@ def create_partial_deployment_schema(is_single=True, num_deployments=1):
 
 
 @pytest.fixture(name="common_path")
-def fixture_common_path(repo_root_path):
+def fixture_common_path(workspace_path):
     """A fixture that returns the common directory path from the repository root."""
 
-    return repo_root_path / "common"
+    return workspace_path / "common"
 
 
 @pytest.fixture(name="common_filepath")
@@ -121,7 +121,7 @@ def fixture_common_filepath(common_path):
     return common_path / "common.py"
 
 
-@pytest.mark.usefixtures("repo_root_path")
+@pytest.mark.usefixtures("workspace_path")
 @pytest.fixture(name="common_path_with_code")
 def fixture_common_path_with_code(common_path, common_filepath):
     """
@@ -138,20 +138,20 @@ def fixture_common_path_with_code(common_path, common_filepath):
 
 
 @pytest.fixture(name="excluded_src_path")
-def fixture_excluded_src_path(repo_root_path):
+def fixture_excluded_src_path(workspace_path):
     """
     A fixture to create directory and file under the root repository path that will not be
     part of any model definition.
     """
 
-    excluded_path = repo_root_path / "excluded_path"
+    excluded_path = workspace_path / "excluded_path"
     os.makedirs(excluded_path)
     write_to_file(excluded_path / "some_file.py", "# some_file.py")
     return excluded_path
 
 
 @pytest.fixture(name="single_model_factory")
-def fixture_single_model_factory(repo_root_path, common_path_with_code):
+def fixture_single_model_factory(workspace_path, common_path_with_code):
     """A factory fixture to create a single model definition."""
 
     def _inner(
@@ -162,7 +162,7 @@ def fixture_single_model_factory(repo_root_path, common_path_with_code):
         include_main_prog=True,
         user_provided_id=None,
     ):
-        model_path = repo_root_path / name
+        model_path = workspace_path / name
         os.makedirs(model_path)
         if include_main_prog:
             write_to_file(model_path / "custom.py", "# custom.py")
@@ -184,7 +184,7 @@ def fixture_single_model_factory(repo_root_path, common_path_with_code):
             # noinspection PyTypeChecker
             single_model_metadata[ModelSchema.VERSION_KEY][ModelSchema.INCLUDE_GLOB_KEY] = [
                 "./**",
-                f"/{common_path_with_code.relative_to(repo_root_path)}/**",
+                f"/{common_path_with_code.relative_to(workspace_path)}/**",
             ]
         if with_exclude_glob:
             # noinspection PyTypeChecker
@@ -202,7 +202,7 @@ def fixture_single_model_factory(repo_root_path, common_path_with_code):
 
 @pytest.mark.usefixtures("common_path_with_code")
 @pytest.fixture(name="models_factory")
-def fixture_models_factory(repo_root_path, single_model_factory):
+def fixture_models_factory(workspace_path, single_model_factory):
     """A fixture to create multiple model definitions."""
 
     def _inner(
@@ -237,7 +237,7 @@ def fixture_models_factory(repo_root_path, single_model_factory):
                     }
                 )
             multi_models_content = yaml.dump(multi_models_yaml_content)
-            write_to_file(repo_root_path / "models.yaml", multi_models_content)
+            write_to_file(workspace_path / "models.yaml", multi_models_content)
 
         return models_metadata
 
@@ -245,13 +245,13 @@ def fixture_models_factory(repo_root_path, single_model_factory):
 
 
 @pytest.fixture(name="single_model_root_path")
-def fixture_single_model_root_path(repo_root_path):
+def fixture_single_model_root_path(workspace_path):
     """A fixture to return the first model root path."""
 
-    return repo_root_path / "model_0"
+    return workspace_path / "model_0"
 
 
-@pytest.mark.usefixtures("repo_root_path")
+@pytest.mark.usefixtures("workspace_path")
 @pytest.fixture(name="single_model_file_paths")
 def fixture_single_model_file_paths(models_factory, single_model_root_path):
     """A fixture to return all the file paths below to a just created model."""
@@ -261,18 +261,18 @@ def fixture_single_model_file_paths(models_factory, single_model_root_path):
 
 
 @pytest.fixture
-def options(repo_root_path):
+def options(workspace_path):
     """A fixture to mock a parse args namespace options."""
 
-    return Namespace(
-        webserver="http://www.dummy.com",
-        api_token="abc123",
-        branch="master",
-        root_dir=repo_root_path,
-        allow_model_deletion=True,
-        skip_cert_verification=True,
-        models_only=False,
-    )
+    with patch.dict(os.environ, {"GITHUB_WORKSPACE": str(workspace_path)}):
+        yield Namespace(
+            webserver="http://www.dummy.com",
+            api_token="abc123",
+            branch="master",
+            allow_model_deletion=True,
+            skip_cert_verification=True,
+            models_only=False,
+        )
 
 
 @pytest.fixture
@@ -317,10 +317,10 @@ def mock_handle_deleted_models():
 
 
 @pytest.fixture(name="git_repo")
-def fixture_git_repo(repo_root_path):
+def fixture_git_repo(workspace_path):
     """A fixture to initialize a Git repository in a given root directory."""
 
-    repo = Repo.init(repo_root_path)
+    repo = Repo.init(workspace_path)
     repo.config_writer().set_value("user", "name", "test-user").release()
     repo.config_writer().set_value("user", "email", "test@company.com").release()
     logging.basicConfig()
@@ -330,21 +330,21 @@ def fixture_git_repo(repo_root_path):
 
 
 @pytest.fixture(name="init_repo_for_root_path_factory")
-def fixture_init_repo_for_root_path_factory(repo_root_path, git_repo):
+def fixture_init_repo_for_root_path_factory(workspace_path, git_repo):
     """A fixture to commit all changes in a given repository"""
 
     def _inner():
-        os.chdir(repo_root_path)
+        os.chdir(workspace_path)
         git_repo.git.add("--all")
         git_repo.git.commit("-m", "'Initial commit'", "--no-verify")
-        return repo_root_path
+        return workspace_path
 
     return _inner
 
 
 @pytest.fixture(name="init_repo_with_models_factory")
 def fixture_init_repo_with_models_factory(
-    repo_root_path, models_factory, init_repo_for_root_path_factory
+    workspace_path, models_factory, init_repo_for_root_path_factory
 ):
     """
     A fixture to create models in a given repository, commit the changes and return the
@@ -366,7 +366,7 @@ def fixture_init_repo_with_models_factory(
             include_main_prog,
         )
         init_repo_for_root_path_factory()
-        return repo_root_path
+        return workspace_path
 
     return _inner
 
