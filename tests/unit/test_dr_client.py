@@ -410,7 +410,7 @@ class TestCustomModelVersionRoutes:
         pull_request_commit_sha,
         single_model_file_paths,
         single_model_root_path,
-        repo_root_path,
+        workspace_path,
     ):
         """A case to test a full payload setup when creating a custom model version."""
 
@@ -418,7 +418,7 @@ class TestCustomModelVersionRoutes:
         try:
             regression_model_info._model_path = single_model_root_path
             changed_files_info = [
-                ModelFilePath(p, regression_model_info.model_path, repo_root_path)
+                ModelFilePath(p, regression_model_info.model_path, workspace_path)
                 for p in single_model_file_paths
             ]
             payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(

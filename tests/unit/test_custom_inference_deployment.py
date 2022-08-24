@@ -24,6 +24,7 @@ from common.exceptions import AssociatedModelVersionNotFound
 from common.exceptions import DeploymentMetadataAlreadyExists
 from common.exceptions import NoValidAncestor
 from common.git_tool import GitTool
+from common.github_env import GitHubEnv
 from custom_inference_model import CustomInferenceModelAction
 from deployment_controller import DeploymentController
 from deployment_info import DeploymentInfo
@@ -37,7 +38,7 @@ from tests.unit.conftest import write_to_file
 
 
 @pytest.fixture(name="single_deployment_factory")
-def fixture_single_deployment_factory(repo_root_path, single_model_factory):
+def fixture_single_deployment_factory(workspace_path, single_model_factory):
     """A factory fixture to create a single deployment along with a model."""
 
     def _inner(name, write_metadata=True, user_provided_id=None):
@@ -50,7 +51,7 @@ def fixture_single_deployment_factory(repo_root_path, single_model_factory):
         }
 
         if write_metadata:
-            deployment_yaml_filepath = repo_root_path / model_name / "deployment.yaml"
+            deployment_yaml_filepath = workspace_path / model_name / "deployment.yaml"
             write_to_file(deployment_yaml_filepath, yaml.dump(single_deployment_metadata))
 
         return single_deployment_metadata
@@ -69,7 +70,7 @@ class TestCustomInferenceDeployment:
 
     @pytest.fixture
     @pytest.mark.usefixtures("common_path_with_code")
-    def deployments_factory(self, repo_root_path, models_factory):
+    def deployments_factory(self, workspace_path, models_factory):
         """A factory fixture to create deployments with associated models."""
 
         def _inner(num_deployments=2, is_multi=False):
@@ -88,11 +89,11 @@ class TestCustomInferenceDeployment:
                 }
                 multi_deployments_metadata.append(deployment_metadata)
                 if not is_multi:
-                    deployment_yaml_filepath = repo_root_path / model_name / "deployment.yaml"
+                    deployment_yaml_filepath = workspace_path / model_name / "deployment.yaml"
                     write_to_file(deployment_yaml_filepath, yaml.dump(deployment_metadata))
 
             if is_multi:
-                deployments_yaml_filepath = repo_root_path / "deployments.yaml"
+                deployments_yaml_filepath = workspace_path / "deployments.yaml"
                 write_to_file(deployments_yaml_filepath, yaml.dump(multi_deployments_metadata))
 
             return multi_deployments_metadata, models_metadata
@@ -331,7 +332,7 @@ class TestCustomInferenceDeployment:
         ):
             yield
 
-    @pytest.mark.usefixtures("repo_root_path")
+    @pytest.mark.usefixtures("workspace_path")
     def test_deployments_integrity_validation_success(
         self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
     ):
@@ -340,14 +341,14 @@ class TestCustomInferenceDeployment:
         with self._mock_repo_with_datarobot_models(
             deployments_factory, git_repo, init_repo_for_root_path_factory
         ):
-            git_tool = GitTool(options.root_dir)
+            git_tool = GitTool(GitHubEnv.workspace_path())
             model_controller = ModelController(options, git_tool)
             deployment_controller = DeploymentController(options, model_controller, git_tool)
             deployment_controller.scan_and_load_deployments_metadata()
             deployment_controller.fetch_deployments_from_datarobot()
             deployment_controller.validate_deployments_integrity()
 
-    @pytest.mark.usefixtures("repo_root_path")
+    @pytest.mark.usefixtures("workspace_path")
     def test_deployments_integrity_validation_no_dr_deployments(
         self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
     ):
@@ -361,7 +362,7 @@ class TestCustomInferenceDeployment:
             init_repo_for_root_path_factory,
             with_dr_deployments=False,
         ):
-            git_tool = GitTool(options.root_dir)
+            git_tool = GitTool(GitHubEnv.workspace_path())
             model_controller = ModelController(options, git_tool)
             model_controller.scan_and_load_models_metadata()
             deployment_controller = DeploymentController(options, model_controller, git_tool)
@@ -369,7 +370,7 @@ class TestCustomInferenceDeployment:
             deployment_controller.fetch_deployments_from_datarobot()
             deployment_controller.validate_deployments_integrity()
 
-    @pytest.mark.usefixtures("repo_root_path", "mock_github_env_variables")
+    @pytest.mark.usefixtures("workspace_path", "mock_github_env_variables")
     def test_deployments_integrity_validation_no_associated_models(
         self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
     ):
@@ -391,7 +392,7 @@ class TestCustomInferenceDeployment:
                 with pytest.raises(AssociatedModelNotFound):
                     custom_inference_deployment.run()
 
-    @pytest.mark.usefixtures("repo_root_path")
+    @pytest.mark.usefixtures("workspace_path")
     def test_deployments_integrity_validation_no_latest_version(
         self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
     ):
@@ -405,7 +406,7 @@ class TestCustomInferenceDeployment:
             with_associated_dr_models=True,
             with_latest_dr_model_version=False,
         ):
-            git_tool = GitTool(options.root_dir)
+            git_tool = GitTool(GitHubEnv.workspace_path())
             model_controller = ModelController(options, git_tool)
             model_controller.scan_and_load_models_metadata()
             deployment_controller = DeploymentController(options, model_controller, git_tool)
@@ -414,7 +415,7 @@ class TestCustomInferenceDeployment:
             with pytest.raises(AssociatedModelVersionNotFound):
                 deployment_controller.validate_deployments_integrity()
 
-    @pytest.mark.usefixtures("repo_root_path")
+    @pytest.mark.usefixtures("workspace_path")
     def test_deployments_integrity_validation_no_main_branch_sha_failure(
         self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
     ):
@@ -426,7 +427,7 @@ class TestCustomInferenceDeployment:
             init_repo_for_root_path_factory,
             with_main_branch_sha=False,
         ):
-            git_tool = GitTool(options.root_dir)
+            git_tool = GitTool(GitHubEnv.workspace_path())
             model_controller = ModelController(options, git_tool)
             deployment_controller = DeploymentController(options, model_controller, git_tool)
             deployment_controller.scan_and_load_deployments_metadata()

@@ -44,7 +44,6 @@ def argparse_options(args=None):
     parser.add_argument(
         "--branch", required=True, help="The branch against which the program will function."
     )
-    parser.add_argument("--root-dir", required=True, help="The workspace root directory.")
     parser.add_argument(
         "--allow-model-deletion",
         action="store_true",

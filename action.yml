@@ -89,7 +89,6 @@ runs:
           --api-token ${{ inputs.api-token }} \
           --webserver ${{ inputs.webserver }} \
           --branch ${{ inputs.branch }} \
-          --root-dir "${{ github.workspace }}" \
           ${allow_model_deletion_arg} \
           ${allow_deployment_deletion_arg} \
           ${models_only_arg} \

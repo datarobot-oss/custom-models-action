@@ -38,10 +38,10 @@ from tests.functional.conftest import webserver_accessible
 
 @pytest.fixture(name="deployment_metadata_yaml_file")
 @pytest.mark.usefixtures("build_repo_for_testing")
-def fixture_deployment_metadata_yaml_file(repo_root_path, git_repo, model_metadata):
+def fixture_deployment_metadata_yaml_file(workspace_path, git_repo, model_metadata):
     """A fixture to return a unique deployment from the temporary created local source tree."""
 
-    deployment_yaml_file = next(repo_root_path.rglob("**/deployment.yaml"))
+    deployment_yaml_file = next(workspace_path.rglob("**/deployment.yaml"))
     with open(deployment_yaml_file, encoding="utf-8") as fd:
         yaml_content = yaml.safe_load(fd)
         yaml_content[DeploymentSchema.DEPLOYMENT_ID_KEY] = f"deployment-id-{str(ObjectId())}"
@@ -65,7 +65,7 @@ def fixture_deployment_metadata(deployment_metadata_yaml_file):
 
 
 @pytest.fixture(name="cleanup")
-def fixture_cleanup(dr_client, repo_root_path, deployment_metadata):
+def fixture_cleanup(dr_client, workspace_path, deployment_metadata):
     """A fixture to delete all deployments and models that were created from the source tree."""
 
     yield
@@ -78,7 +78,7 @@ def fixture_cleanup(dr_client, repo_root_path, deployment_metadata):
         pass
 
     # NOTE: we have more than one model in the tree
-    cleanup_models(dr_client, repo_root_path)
+    cleanup_models(dr_client, workspace_path)
 
 
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
@@ -154,7 +154,7 @@ class TestDeploymentGitHubActions:
     def test_e2e_deployment_create(
         self,
         dr_client,
-        repo_root_path,
+        workspace_path,
         git_repo,
         deployment_metadata,
         deployment_metadata_yaml_file,
@@ -172,7 +172,7 @@ class TestDeploymentGitHubActions:
 
             printout("Run the GitHub action to create a model and deployment")
             run_github_action(
-                repo_root_path, git_repo, main_branch_name, event_name, is_deploy=True
+                workspace_path, git_repo, main_branch_name, event_name, is_deploy=True
             )
 
         # 4. Validate
@@ -192,7 +192,7 @@ class TestDeploymentGitHubActions:
     def test_e2e_deployment_model_replacement(
         self,
         dr_client,
-        repo_root_path,
+        workspace_path,
         git_repo,
         model_metadata_yaml_file,
         deployment_metadata,
@@ -213,7 +213,7 @@ class TestDeploymentGitHubActions:
         ) = self._deploy_a_model_than_run_github_action_to_replace_or_challenge(
             dr_client,
             git_repo,
-            repo_root_path,
+            workspace_path,
             main_branch_name,
             deployment_metadata,
             model_metadata_yaml_file,
@@ -236,7 +236,7 @@ class TestDeploymentGitHubActions:
         cls,
         dr_client,
         git_repo,
-        repo_root_path,
+        workspace_path,
         main_branch_name,
         deployment_metadata,
         model_metadata_yaml_file,
@@ -244,7 +244,7 @@ class TestDeploymentGitHubActions:
     ):
         # Create a deployment
         printout("Run the GitHub action (push event) to create a model and deployment")
-        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=True)
+        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=True)
         local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         deployments = dr_client.fetch_deployments()
         assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
@@ -257,7 +257,7 @@ class TestDeploymentGitHubActions:
 
         # Run the GitHub action to replace the latest model in a deployment
         printout(f"Run the GitHub action ({event_name} event)")
-        run_github_action(repo_root_path, git_repo, main_branch_name, event_name, is_deploy=True)
+        run_github_action(workspace_path, git_repo, main_branch_name, event_name, is_deploy=True)
 
         printout("Validate ...")
         deployments = dr_client.fetch_deployments()
@@ -286,7 +286,7 @@ class TestDeploymentGitHubActions:
     def test_e2e_deployment_delete(
         self,
         dr_client,
-        repo_root_path,
+        workspace_path,
         git_repo,
         deployment_metadata,
         deployment_metadata_yaml_file,
@@ -296,7 +296,7 @@ class TestDeploymentGitHubActions:
 
         # Create a model and deployment. Run the GitHub action.
         printout("Run the GitHub action (push event) to create a model and deployment")
-        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=True)
+        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=True)
         deployments = dr_client.fetch_deployments()
         local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
@@ -308,7 +308,7 @@ class TestDeploymentGitHubActions:
 
         # Run the GitHub action but disallow deployment deletion
         run_github_action(
-            repo_root_path,
+            workspace_path,
             git_repo,
             main_branch_name,
             event_name="push",
@@ -323,7 +323,7 @@ class TestDeploymentGitHubActions:
         # Run the GitHub action (pull request) with allowed deployment deletion
         printout("Run the GitHub action (pull request) with allowed deletion")
         run_github_action(
-            repo_root_path,
+            workspace_path,
             git_repo,
             main_branch_name,
             "pull_request",
@@ -338,7 +338,7 @@ class TestDeploymentGitHubActions:
         # Run the GitHub action (push) with allowed deployment deletion
         printout("Run the GitHub action (push) with allowed deletion")
         run_github_action(
-            repo_root_path,
+            workspace_path,
             git_repo,
             main_branch_name,
             "push",
@@ -356,7 +356,7 @@ class TestDeploymentGitHubActions:
     def test_e2e_deployment_model_challengers(
         self,
         dr_client,
-        repo_root_path,
+        workspace_path,
         git_repo,
         model_metadata_yaml_file,
         deployment_metadata,
@@ -377,7 +377,7 @@ class TestDeploymentGitHubActions:
         ) = self._deploy_a_model_than_run_github_action_to_replace_or_challenge(
             dr_client,
             git_repo,
-            repo_root_path,
+            workspace_path,
             main_branch_name,
             deployment_metadata,
             model_metadata_yaml_file,
@@ -403,7 +403,7 @@ class TestDeploymentGitHubActions:
     def test_e2e_deployment_settings(
         self,
         dr_client,
-        repo_root_path,
+        workspace_path,
         git_repo,
         model_metadata_yaml_file,
         deployment_metadata,
@@ -420,7 +420,7 @@ class TestDeploymentGitHubActions:
                 # Run the GitHub action to create a model and deployment
                 printout("Run the GitHub action (push event) to create a model and deployment")
                 run_github_action(
-                    repo_root_path, git_repo, main_branch_name, "push", is_deploy=True
+                    workspace_path, git_repo, main_branch_name, "push", is_deploy=True
                 )
                 local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
                 deployment = dr_client.fetch_deployment_by_git_id(local_user_provided_id)
@@ -440,10 +440,10 @@ class TestDeploymentGitHubActions:
 
                         printout(f"Run the GitHub action ({event_name}")
                         run_github_action(
-                            repo_root_path, git_repo, main_branch_name, event_name, is_deploy=True
+                            workspace_path, git_repo, main_branch_name, event_name, is_deploy=True
                         )
             finally:
-                cleanup_models(dr_client, repo_root_path)
+                cleanup_models(dr_client, workspace_path)
 
     @staticmethod
     @contextlib.contextmanager

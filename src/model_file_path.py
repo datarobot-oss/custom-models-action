@@ -29,7 +29,7 @@ class ModelFilePath:
         MODEL = 1
         ROOT = 2
 
-    def __init__(self, raw_file_path, model_root_dir, repo_root_dir):
+    def __init__(self, raw_file_path, model_root_dir, workspace_path):
         self._raw_file_path = raw_file_path
         self._filepath = Path(raw_file_path)
         # It is important to have an indication about the path origin and the relation to
@@ -37,13 +37,13 @@ class ModelFilePath:
         # or it is supposed to be copied into it. This will help us to detect collisions
         # between paths that exist under the model versus those that are supposed to be copied.
         path_under_model, relative_to = self.get_path_under_model(
-            self._filepath, model_root_dir, repo_root_dir
+            self._filepath, model_root_dir, workspace_path
         )
         self._under_model = path_under_model
         self._relative_to = relative_to
 
     @classmethod
-    def get_path_under_model(cls, filepath, model_root_dir, repo_root_dir):
+    def get_path_under_model(cls, filepath, model_root_dir, workspace_path):
         """
         Returns the relative file path of a given model's file from the model's root directory.
 
@@ -53,7 +53,7 @@ class ModelFilePath:
             A model's file path.
         model_root_dir : pathlib.Path
             The model's root directory.
-        repo_root_dir : pathlib.Path
+        workspace_path : pathlib.Path
             The repository root directory.
 
         Returns
@@ -68,7 +68,9 @@ class ModelFilePath:
             relative_to = cls.RelativeTo.MODEL
         except ValueError:
             try:
-                path_under_model = cls._get_path_under_model_for_given_root(filepath, repo_root_dir)
+                path_under_model = cls._get_path_under_model_for_given_root(
+                    filepath, workspace_path
+                )
                 relative_to = cls.RelativeTo.ROOT
             except ValueError as ex:
                 raise PathOutsideTheRepository(

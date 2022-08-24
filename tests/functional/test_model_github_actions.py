@@ -35,12 +35,12 @@ from tests.functional.conftest import webserver_accessible
 
 
 @pytest.fixture
-def cleanup(dr_client, repo_root_path):
+def cleanup(dr_client, workspace_path):
     """A fixture to delete models in DataRobot that were created from the local source tree."""
 
     yield
 
-    cleanup_models(dr_client, repo_root_path)
+    cleanup_models(dr_client, workspace_path)
 
 
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
@@ -73,7 +73,7 @@ class TestModelGitHubActions:
     def test_e2e_pull_request_event_with_multiple_changes(  # pylint: disable=too-many-locals
         self,
         dr_client,
-        repo_root_path,
+        workspace_path,
         git_repo,
         model_metadata,
         model_metadata_yaml_file,
@@ -93,7 +93,7 @@ class TestModelGitHubActions:
             checks,
             feature_branch,
             git_repo,
-            repo_root_path,
+            workspace_path,
             main_branch_name,
             model_metadata,
             model_metadata_yaml_file,
@@ -102,7 +102,7 @@ class TestModelGitHubActions:
         )
         self._run_github_action_with_testing_enabled(
             dr_client,
-            repo_root_path,
+            workspace_path,
             git_repo,
             main_branch_name,
             model_metadata,
@@ -116,7 +116,7 @@ class TestModelGitHubActions:
         checks,
         feature_branch,
         git_repo,
-        repo_root_path,
+        workspace_path,
         main_branch_name,
         model_metadata,
         model_metadata_yaml_file,
@@ -146,7 +146,7 @@ class TestModelGitHubActions:
                 # Run GitHub pull request action
                 printout("Run custom model GitHub action (pull-request)...")
                 run_github_action(
-                    repo_root_path,
+                    workspace_path,
                     git_repo,
                     main_branch_name,
                     event_name="pull_request",
@@ -232,7 +232,7 @@ class TestModelGitHubActions:
     def _run_github_action_with_testing_enabled(
         cls,
         dr_client,
-        repo_root_path,
+        workspace_path,
         git_repo,
         main_branch_name,
         model_metadata,
@@ -240,7 +240,7 @@ class TestModelGitHubActions:
     ):
         printout("Run custom model GitHub action (push event) with testing ...")
         with cls.enable_custom_model_testing(model_metadata_yaml_file):
-            run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
+            run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
 
         custom_model = dr_client.fetch_custom_model_by_git_id(
             model_metadata[ModelSchema.MODEL_ID_KEY]
@@ -253,7 +253,7 @@ class TestModelGitHubActions:
     def test_e2e_pull_request_event_with_model_deletion(
         self,
         dr_client,
-        repo_root_path,
+        workspace_path,
         git_repo,
         model_metadata,
         model_metadata_yaml_file,
@@ -279,7 +279,7 @@ class TestModelGitHubActions:
             checks,
             feature_branch,
             git_repo,
-            repo_root_path,
+            workspace_path,
             main_branch_name,
             model_metadata,
             model_metadata_yaml_file,
@@ -288,7 +288,7 @@ class TestModelGitHubActions:
         )
 
         printout("Run custom model GitHub action (push event) ...")
-        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
+        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
 
         # 12. Validation. The model is actually deleted only upon merging.
         printout("Validate after merging ...")
@@ -312,7 +312,7 @@ class TestModelGitHubActions:
 
     @pytest.mark.usefixtures("cleanup")
     def test_e2e_push_event_with_multiple_changes(
-        self, repo_root_path, git_repo, model_metadata_yaml_file, main_branch_name
+        self, workspace_path, git_repo, model_metadata_yaml_file, main_branch_name
     ):
         """
         An end-to-end case to test a push event with multiple commits, by the custom
@@ -330,7 +330,7 @@ class TestModelGitHubActions:
 
             # 3. Run GitHub pull request action
             printout("Run custom model GitHub action (push event) ...")
-            run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
+            run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
         printout("Done")
 
     def test_is_accessible(self):
@@ -342,7 +342,7 @@ class TestModelGitHubActions:
     def test_e2e_set_training_and_holdout_datasets_for_structured_model(
         self,
         dr_client,
-        repo_root_path,
+        workspace_path,
         git_repo,
         model_metadata,
         model_metadata_yaml_file,
@@ -358,7 +358,7 @@ class TestModelGitHubActions:
             "Create a custom model as a preliminary requirement. "
             "Run custom model GitHub action (push event) ..."
         )
-        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
+        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
 
         with temporarily_upload_training_dataset_for_structured_model(
             dr_client, model_metadata_yaml_file, event_name="push"
@@ -369,7 +369,7 @@ class TestModelGitHubActions:
 
                 printout("Run custom inference models GitHub action ...")
                 run_github_action(
-                    repo_root_path, git_repo, main_branch_name, "push", is_deploy=False
+                    workspace_path, git_repo, main_branch_name, "push", is_deploy=False
                 )
 
                 # Validate
@@ -378,7 +378,7 @@ class TestModelGitHubActions:
                 assert custom_model["trainingDatasetId"] == training_dataset_id
                 assert custom_model["trainingDataPartitionColumn"] == partition_column
             finally:
-                cleanup_models(dr_client, repo_root_path)
+                cleanup_models(dr_client, workspace_path)
 
         printout("Done")
 
@@ -386,7 +386,7 @@ class TestModelGitHubActions:
     def test_e2e_set_training_and_holdout_datasets_for_unstructured_model(
         self,
         dr_client,
-        repo_root_path,
+        workspace_path,
         git_repo,
         model_metadata,
         model_metadata_yaml_file,
@@ -407,7 +407,7 @@ class TestModelGitHubActions:
                 "Create a custom model as a preliminary requirement. "
                 "Run custom model GitHub action (push event) ..."
             )
-            run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
+            run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
 
             user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
 
@@ -436,7 +436,7 @@ class TestModelGitHubActions:
 
                     printout("Run custom inference models GitHub action ...")
                     run_github_action(
-                        repo_root_path, git_repo, main_branch_name, "push", is_deploy=False
+                        workspace_path, git_repo, main_branch_name, "push", is_deploy=False
                     )
 
                     # Validation
@@ -450,7 +450,7 @@ class TestModelGitHubActions:
                         == holdout_dataset_id
                     )
                 finally:
-                    cleanup_models(dr_client, repo_root_path)
+                    cleanup_models(dr_client, workspace_path)
 
         printout("Done")
 
@@ -458,7 +458,7 @@ class TestModelGitHubActions:
     def test_e2e_update_model_settings(
         self,
         dr_client,
-        repo_root_path,
+        workspace_path,
         git_repo,
         model_metadata,
         model_metadata_yaml_file,
@@ -476,7 +476,7 @@ class TestModelGitHubActions:
             "Create a custom model as a preliminary requirement. "
             "Run custom model GitHub action (push event) ..."
         )
-        run_github_action(repo_root_path, git_repo, main_branch_name, "push", is_deploy=False)
+        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
 
         unique_string = unique_str()
         for settings_key, desired_settings_value in [
@@ -504,7 +504,7 @@ class TestModelGitHubActions:
 
                 printout("Run custom inference models GitHub action (push) ...")
                 run_github_action(
-                    repo_root_path, git_repo, main_branch_name, "push", is_deploy=False
+                    workspace_path, git_repo, main_branch_name, "push", is_deploy=False
                 )
 
                 # Validate

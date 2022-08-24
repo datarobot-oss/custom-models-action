@@ -6,6 +6,7 @@
 """A module to provide an interface to GitHub environment variables"""
 
 import os
+from pathlib import Path
 
 
 class GitHubEnv:
@@ -52,4 +53,11 @@ class GitHubEnv:
     @staticmethod
     def base_ref():
         """The name of the base ref or target branch of the pull request in a workflow run.o"""
+
         return os.environ.get("GITHUB_BASE_REF")
+
+    @staticmethod
+    def workspace_path():
+        """The default location of the repository when using the checkout action."""
+
+        return Path(os.environ.get("GITHUB_WORKSPACE"))
