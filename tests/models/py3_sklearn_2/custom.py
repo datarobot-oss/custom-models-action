@@ -1,10 +1,13 @@
+#  Copyright (c) 2022. DataRobot, Inc. and its affiliates.
+#  All rights reserved.
+#  This is proprietary source code of DataRobot, Inc. and its affiliates.
+#  Released under the terms of DataRobot Tool and Utility Agreement.
+
 """
-Copyright 2021 DataRobot, Inc. and its affiliates.
-All rights reserved.
-This is proprietary source code of DataRobot, Inc. and its affiliates.
-Released under the terms of DataRobot Tool and Utility Agreement.
+A super simple example of custom model body with a single 'transform' hook.
 """
-import pandas as pd
+
+import conversion
 
 
 def transform(data, model):
@@ -30,4 +33,9 @@ def transform(data, model):
         if target_col in data:
             data.pop(target_col)
     data = data.fillna(0)
+
+    inches = 10
+    centimeters = conversion.inch_to_cm(inches)
+    print(f"Inches: {inches}, Centimeters: {centimeters}", flush=True)
+
     return data
