@@ -708,8 +708,7 @@ class DrClient:
             )
             if response.status_code != 202:
                 raise DataRobotClientError(f"Failed uploading dataset. Response: {response.text}")
-        location = response.headers["Location"]
-        resource = self._wait_for_async_resolution(location)
+        resource = self._wait_for_async_resolution(response.headers["Location"])
         dataset_id = resource.split("/")[-2]
         logger.debug("Dataset uploaded successfully (id: %s)", dataset_id)
         return dataset_id
@@ -1092,6 +1091,11 @@ class DrClient:
         }
         url = self.DEPLOYMENT_ACTUALS_UPDATE_ROUTE.format(deployment_id=datarobot_deployment["id"])
         response = self._http_requester.post(url, json=payload)
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                f"Failed to update association dataset. Error: {response.text}.",
+                code=response.status_code,
+            )
         location = self._wait_for_async_resolution(response.headers["Location"])
         response = self._http_requester.get(location, raw=True)
         return response.json()
@@ -1392,8 +1396,7 @@ class DrClient:
                     f"Response status: {response.status_code}. "
                     f"Response body: {response.text}.",
                 )
-            location = response.headers["Location"]
-            self._wait_for_async_resolution(location)
+            location = self._wait_for_async_resolution(response.headers["Location"])
             response = self._http_requester.get(location, raw=True)
             return response.json()
         return None
