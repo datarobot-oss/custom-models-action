@@ -270,6 +270,7 @@ def options(workspace_path):
             api_token="abc123",
             branch="master",
             allow_model_deletion=True,
+            allow_deployment_deletion=True,
             skip_cert_verification=True,
             models_only=False,
         )

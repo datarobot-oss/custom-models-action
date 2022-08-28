@@ -363,7 +363,7 @@ class TestGlobPatterns:
 
         with patch.object(ModelController, "handle_model_changes"), patch.object(
             DeploymentController, "fetch_deployments_from_datarobot"
-        ):
+        ), patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}):
             custom_inference_model_action.run()
 
         assert len(custom_inference_model_action.model_controller.models_info) == num_models
