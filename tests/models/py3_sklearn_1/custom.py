@@ -7,7 +7,7 @@
 A super simple example of custom model body with a single 'transform' hook.
 """
 
-import conversion
+from common import conversion
 
 
 def transform(data, model):
@@ -36,6 +36,6 @@ def transform(data, model):
 
     inches = 10
     centimeters = conversion.inch_to_cm(inches)
-    print(f"Inches: {inches}, Centimeters: {centimeters}", flush=True)
+    print(f"Inches: {inches}, Centimeters: {centimeters}")
 
     return data
