@@ -13,6 +13,8 @@ env:
   LOGLEVEL: debug
   DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}
   DATAROBOT_WEBSERVER: ${{ secrets.DATAROBOT_WEBSERVER }}
+  INSPECT_CONTEXT: false
+  OUT_DIR: output-context/${{ github.event_name }}
 
 jobs:
 
