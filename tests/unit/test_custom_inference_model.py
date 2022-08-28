@@ -149,7 +149,13 @@ class TestCustomInferenceModel:
 
             models_info = list(model_controller.models_info.values())
             assert (
-                len([m_info for m_info in models_info if m_info.is_affected_by_commit])
+                len(
+                    [
+                        m_info
+                        for m_info in models_info
+                        if m_info.is_affected_by_commit(datarobot_latest_model_version={"id": "12"})
+                    ]
+                )
                 == num_models
             )
 
@@ -166,7 +172,11 @@ class TestCustomInferenceModel:
                 model_controller.lookup_affected_models_by_the_current_action()
 
             num_affected_models = len(
-                [m_info for m_info in models_info if m_info.is_affected_by_commit]
+                [
+                    m_info
+                    for m_info in models_info
+                    if m_info.is_affected_by_commit(datarobot_latest_model_version={"id": "12"})
+                ]
             )
             assert num_affected_models == reference
 

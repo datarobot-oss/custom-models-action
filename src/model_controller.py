@@ -482,12 +482,18 @@ class ModelController(ControllerBase):
         """Apply changes in DataRobot for models that were affected by the current commit."""
 
         for user_provided_id, model_info in self.models_info.items():
-            if model_info.is_affected_by_commit:
+            already_exists = user_provided_id in self.datarobot_models
+            custom_model = self.datarobot_models[user_provided_id].model if already_exists else None
+            latest_version = (
+                self.datarobot_models[user_provided_id].latest_version if already_exists else None
+            )
+
+            if model_info.is_affected_by_commit(latest_version):
                 logger.info("Model '%s' is affected by commit.", model_info.model_path)
 
-                if model_info.should_create_new_version:
-                    custom_model, already_existed = self._get_or_create_custom_model(model_info)
-                    if not already_existed:
+                if model_info.should_create_new_version(latest_version):
+                    if not custom_model:
+                        custom_model = self._create_custom_model(model_info)
                         self.stats.total_created += 1
 
                     custom_model_id = custom_model["id"]
@@ -503,23 +509,17 @@ class ModelController(ControllerBase):
                         custom_model_id,
                         version_id,
                     )
-                else:
-                    custom_model = self.datarobot_models[model_info.user_provided_id].model
 
                 if model_info.flags.should_update_settings:
                     self._update_settings(custom_model, model_info)
 
                 self.stats.total_affected += 1
 
-    def _get_or_create_custom_model(self, model_info):
-        already_exists = model_info.user_provided_id in self.datarobot_models
-        if already_exists:
-            custom_model = self.datarobot_models[model_info.user_provided_id].model
-        else:
-            custom_model = self._dr_client.create_custom_model(model_info)
-            self._set_datarobot_custom_model(model_info.user_provided_id, custom_model)
-            logger.info("Custom inference model was created: %s", custom_model["id"])
-        return custom_model, already_exists
+    def _create_custom_model(self, model_info):
+        custom_model = self._dr_client.create_custom_model(model_info)
+        self._set_datarobot_custom_model(model_info.user_provided_id, custom_model)
+        logger.info("Custom inference model was created: %s", custom_model["id"])
+        return custom_model
 
     def _create_custom_model_version(self, custom_model_id, model_info):
         if model_info.flags.should_upload_all_files:
@@ -530,7 +530,7 @@ class ModelController(ControllerBase):
         logger.info(
             "Create custom inference model version. user_provided_id:  %s, from_latest: %s",
             model_info.user_provided_id,
-            model_info.flags.should_upload_all_files,
+            model_info.flags.should_create_version_from_latest,
         )
         logger.debug(
             "Files to be uploaded: %s, user_provided_id: %s",
@@ -578,7 +578,7 @@ class ModelController(ControllerBase):
             pull_request_commit_sha,
             changed_file_paths,
             model_info.file_changes.deleted_file_ids,
-            from_latest=not model_info.flags.should_upload_all_files,
+            from_latest=model_info.flags.should_create_version_from_latest,
         )
         self.datarobot_models[model_info.user_provided_id].latest_version = custom_model_version
         return custom_model_version["id"]
