@@ -33,6 +33,14 @@ class ModelInfo:
         should_upload_all_files: bool = False
         should_update_settings: bool = False
 
+        @property
+        def should_create_version_from_latest(self):
+            """
+            A property to return whether a new model version should be created from latest version.
+            """
+
+            return not self.should_upload_all_files
+
     @dataclass
     class FileChanges:
         """Contains lists of changed/new and deleted files."""
