@@ -530,7 +530,7 @@ class ModelController(ControllerBase):
         logger.info(
             "Create custom inference model version. user_provided_id:  %s, from_latest: %s",
             model_info.user_provided_id,
-            model_info.flags.should_upload_all_files,
+            model_info.flags.should_create_version_from_latest,
         )
         logger.debug(
             "Files to be uploaded: %s, user_provided_id: %s",
@@ -578,7 +578,7 @@ class ModelController(ControllerBase):
             pull_request_commit_sha,
             changed_file_paths,
             model_info.file_changes.deleted_file_ids,
-            from_latest=not model_info.flags.should_upload_all_files,
+            from_latest=model_info.flags.should_create_version_from_latest,
         )
         self.datarobot_models[model_info.user_provided_id].latest_version = custom_model_version
         return custom_model_version["id"]
