@@ -335,6 +335,7 @@ class TestGlobPatterns:
     @pytest.mark.usefixtures("common_path_with_code")
     @pytest.mark.parametrize("num_models", [1, 2, 3])
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
+    @pytest.mark.parametrize("event_name", ["push", "pull_request"])
     @pytest.mark.parametrize(
         "with_include_glob",
         [True, False],
@@ -352,6 +353,7 @@ class TestGlobPatterns:
         options,
         num_models,
         is_multi,
+        event_name,
         common_filepath,
         with_include_glob,
         with_exclude_glob,
@@ -363,7 +365,7 @@ class TestGlobPatterns:
 
         with patch.object(ModelController, "handle_model_changes"), patch.object(
             DeploymentController, "fetch_deployments_from_datarobot"
-        ):
+        ), patch.dict(os.environ, {"GITHUB_EVENT_NAME": event_name}):
             custom_inference_model_action.run()
 
         assert len(custom_inference_model_action.model_controller.models_info) == num_models
