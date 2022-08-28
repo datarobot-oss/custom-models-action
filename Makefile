@@ -23,8 +23,17 @@ test-unit:
 
 test-functional: validate-env-DATAROBOT_WEBSERVER validate-env-DATAROBOT_API_TOKEN
 	set -ex; PYTHONPATH=.:src pytest -v --log-cli-level error ${FLAGS} ${FUNCTIONAL_TESTS}
+.PHONY: test-functional
 
-.PHONY: test
+test-functional-basic: validate-env-DATAROBOT_WEBSERVER validate-env-DATAROBOT_API_TOKEN
+	set -ex; PYTHONPATH=.:src \
+	pytest \
+	-v \
+	--log-cli-level error \
+	${FLAGS} \
+	tests/functional/test_deployment_github_actions.py\
+	::TestDeploymentGitHubActions::test_e2e_deployment_create
+.PHONY: test-functional-basic
 
 black:
 	@isort --profile black .
@@ -33,7 +42,6 @@ black:
 
 black-check:
 	@black --check .
-
 .PHONY: black-check
 
 lint: black-check

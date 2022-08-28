@@ -160,20 +160,34 @@ class ModelInfo:
             p.under_model for _, p in self.model_file_paths.items() if p.relative_to == relative_to
         )
 
-    @property
-    def is_affected_by_commit(self):
+    def is_affected_by_commit(self, datarobot_latest_model_version):
         """Whether the given model is affected by the last commit"""
-        return self.should_create_new_version or self.flags.should_update_settings
 
-    @property
-    def should_create_new_version(self):
-        """Whether a new custom inference model version should be created"""
-        return (
-            self.flags.should_upload_all_files
-            or self.file_changes.changed_or_new_files
-            or self.get_value(ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY)
-            or self.get_value(ModelSchema.VERSION_KEY, ModelSchema.REPLICAS_KEY)
+        return self.flags.should_update_settings or self.should_create_new_version(
+            datarobot_latest_model_version
         )
+
+    def should_create_new_version(self, datarobot_latest_model_version):
+        """Whether a new custom inference model version should be created"""
+
+        if self.flags.should_upload_all_files:
+            return True
+
+        if bool(self.file_changes.changed_or_new_files):
+            return True
+
+        if not datarobot_latest_model_version:
+            return True
+
+        configured_memory = self.get_value(ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY)
+        if configured_memory != datarobot_latest_model_version.get("maximumMemory"):
+            return True
+
+        configured_replicas = self.get_value(ModelSchema.VERSION_KEY, ModelSchema.REPLICAS_KEY)
+        if configured_replicas != datarobot_latest_model_version.get("replicas"):
+            return True
+
+        return False
 
     @property
     def should_run_test(self):
