@@ -208,6 +208,7 @@ class DeploymentController(ControllerBase):
                         self._replace_model_version_in_deployment(
                             desired_datarobot_model.latest_version, datarobot_deployment
                         )
+                    self.stats.total_affected += 1
 
     def _create_deployment(self, deployment_info):
         logger.info(
@@ -275,7 +276,6 @@ class DeploymentController(ControllerBase):
         deployment = self._dr_client.replace_model_deployment(
             model_latest_version, datarobot_deployment
         )
-        self.stats.total_affected += 1
         logger.info(
             "The latest model version was successfully replaced in a deployment. "
             "user_provided_id: %s, deployment_id: %s.",

@@ -519,6 +519,13 @@ class ModelController(ControllerBase):
                         custom_model_id,
                         latest_version["id"],
                     )
+                else:
+                    if GitHubEnv.is_push():
+                        # Upon pushing to the main branch, If the model was somehow affected by the
+                        # given event, make sure to update the main branch commit SHA. This solves
+                        # an issue of follow-up pull requests, which are not related to the given
+                        # model that should not affect the given model.
+                        self._update_custom_model_version_git_attributes(model_info, latest_version)
 
                 if model_info.flags.should_update_settings:
                     self._update_settings(custom_model, model_info)
@@ -529,6 +536,24 @@ class ModelController(ControllerBase):
                     )
 
                 self.stats.total_affected += 1
+
+    def _update_custom_model_version_git_attributes(self, model_info, custom_model_version):
+        main_branch_commit_sha = GitHubEnv.github_sha()
+        commit_url = GitTool.GITHUB_COMMIT_URL_PATTERN.format(
+            user_and_project=GitHubEnv.github_repository(),
+            sha=main_branch_commit_sha,
+        )
+        ref_name = GitHubEnv.ref_name()
+        logger.info(
+            "Updating model git info. path: %s, commit_sha: %s, commit_url: %s, ref_name: %s",
+            model_info.model_path,
+            main_branch_commit_sha,
+            commit_url,
+            ref_name,
+        )
+        self._dr_client.update_custom_model_version_main_branch_commit_sha(
+            custom_model_version, main_branch_commit_sha, commit_url, ref_name
+        )
 
     def _create_custom_model(self, model_info):
         custom_model = self._dr_client.create_custom_model(model_info)
@@ -689,7 +714,7 @@ class ModelController(ControllerBase):
                 msg += (
                     f"Deployment: {deployment['id']}, "
                     f"model_id: {model_id}, "
-                    f"user_provided_id: {missing_locally_id_to_git_id[model_id]}"
+                    f"user_provided_id: {missing_locally_id_to_git_id.get(model_id)}"
                     "\n"
                 )
             raise IllegalModelDeletion(

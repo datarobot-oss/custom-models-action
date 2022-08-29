@@ -289,7 +289,7 @@ class DrClient:
         ----------
         custom_model_id : str
             A custom model ID
-        custom_model_version_id :
+        custom_model_version_id : str
             A custom model version ID
 
         Returns
@@ -488,6 +488,49 @@ class DrClient:
             payload.append(("filesToDelete", file_id_to_delete))
 
         return file_objs
+
+    def update_custom_model_version_main_branch_commit_sha(
+        self, datarobot_custom_model_version, commit_sha, commit_url, ref_name
+    ):
+        """
+        Update a given custom inference model version main branch commit SHA.
+
+        Parameters
+        ----------
+        datarobot_custom_model_version : dict
+            A DataRobot custom model version entity.
+        commit_sha: str
+            The main branch commit SHA
+        commit_url: str
+            The commit page URL in GitHub.
+        ref_name : str
+            The branch or tag name that triggered the workflow run.
+
+        Returns
+        -------
+        dict,
+            A DataRobot custom model version
+        """
+
+        git_model_version = datarobot_custom_model_version["gitModelVersion"]
+        git_model_version["mainBranchCommitSha"] = commit_sha
+        git_model_version["commitUrl"] = commit_url
+        git_model_version["refName"] = ref_name
+        payload = {"gitModelVersion": git_model_version}
+
+        url = self.CUSTOM_MODELS_VERSION_ROUTE.format(
+            model_id=datarobot_custom_model_version["customModelId"],
+            model_ver_id=datarobot_custom_model_version["id"],
+        )
+        response = self._http_requester.patch(url, json=payload)
+        if response.status_code != 200:
+            raise DataRobotClientError(
+                f"Failed to update custom model version main branch commit SHA. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        return response.json()
 
     def delete_custom_model_by_model_id(self, custom_model_id):
         """
@@ -1270,7 +1313,7 @@ class DrClient:
         response = self._http_requester.post(url, json=payload)
         if response.status_code != 202:
             raise DataRobotClientError(
-                "Failed to submit a challenger."
+                "Failed to submit a challenger. "
                 f"Response status: {response.status_code} "
                 f"Response body: {response.text}",
             )
