@@ -13,3 +13,5 @@ version:
 
   include_glob_pattern: ["./*", "../common/*"]
   exclude_glob_pattern: ["model*.yaml"]
+
+  memory: 512Mi
