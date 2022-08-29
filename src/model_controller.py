@@ -519,6 +519,15 @@ class ModelController(ControllerBase):
                         custom_model_id,
                         latest_version["id"],
                     )
+                else:
+                    # If the model was somehow affected by the given event, make sure to update the
+                    # main branch commit SHA. This solves an issue of follow-up pull requests,
+                    # which are not related to the given model that should not affect the given
+                    # model.
+                    if GitHubEnv.is_push():
+                        self._dr_client.update_custom_model_version_main_branch_commit_sha(
+                            latest_version, GitHubEnv.github_sha()
+                        )
 
                 if model_info.flags.should_update_settings:
                     self._update_settings(custom_model, model_info)
