@@ -1,0 +1,18 @@
+user_provided_deployment_id: my-awesome-deployment-id-630c7d715621555f18c92622
+user_provided_model_id: my-awesome-model-id-630c72e3562155a879bc1445
+
+settings:
+  label: My Awesome Deployment 2 [GitHub CI/CD]
+
+  enable_challenger_models: false
+
+  association:
+    prediction_id: id
+    required_in_pred_request: true
+
+    # In order to enable the accuracy, make sure the 'association_id' and the 'actuals_dataset_id'
+    # exist in DataRobot catalogue. The 'actuals_dataset_id' will be replaced during the functional
+    # tests.
+    actuals_id: id
+    actuals_dataset_id: 62f0f226bc397a932a9c0c0f
+
