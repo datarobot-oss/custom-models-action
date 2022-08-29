@@ -434,8 +434,8 @@ class ModelController(ControllerBase):
             self._handle_changed_or_new_files(model_info, changed_files)
             self._handle_deleted_files(model_info, deleted_files)
 
-    @staticmethod
-    def _handle_changed_or_new_files(model_info, changed_or_new_files):
+    @classmethod
+    def _handle_changed_or_new_files(cls, model_info, changed_or_new_files):
         for changed_file in changed_or_new_files:
             changed_model_filepath = model_info.model_file_paths.get(changed_file)
             if changed_model_filepath:
@@ -446,10 +446,22 @@ class ModelController(ControllerBase):
                 )
                 model_info.file_changes.add_changed(changed_model_filepath)
 
-            # A change could happen in the model's definition (yaml), which is not necessarily
-            # included by the glob patterns
-            if model_info.yaml_filepath.samefile(changed_file):
-                model_info.flags.should_update_settings = True
+            cls._mark_changes_in_model_settings(model_info, changed_file)
+
+    @classmethod
+    def _mark_changes_in_model_settings(cls, model_info, changed_file):
+        # A change may happen in the model's definition (yaml), which is not necessarily
+        # included by the glob patterns
+        if any(changed_file.suffix == suffix for suffix in [".yaml", ".yml"]):
+            logger.debug(
+                "Check if changes were made to the model's yaml file. model's yaml "
+                "file: %s, checked yaml file: %s",
+                model_info.yaml_filepath,
+                changed_file,
+            )
+        if model_info.yaml_filepath.samefile(changed_file):
+            logger.debug("The model's settings were changed. path %s", model_info.model_path)
+            model_info.flags.should_update_settings = True
 
     def _handle_deleted_files(self, model_info, deleted_files):
         for deleted_file in deleted_files:
@@ -497,9 +509,7 @@ class ModelController(ControllerBase):
                         self.stats.total_created += 1
 
                     custom_model_id = custom_model["id"]
-                    version_id = self._create_custom_model_version(custom_model_id, model_info)
-                    if model_info.should_run_test:
-                        self._test_custom_model_version(custom_model_id, version_id, model_info)
+                    latest_version = self._create_custom_model_version(custom_model_id, model_info)
 
                     self.stats.total_created_versions += 1
                     logger.info(
@@ -507,11 +517,16 @@ class ModelController(ControllerBase):
                         "user_provided_id: %s, model_id: %s, version_id: %s.",
                         user_provided_id,
                         custom_model_id,
-                        version_id,
+                        latest_version["id"],
                     )
 
                 if model_info.flags.should_update_settings:
                     self._update_settings(custom_model, model_info)
+
+                if model_info.should_run_test:
+                    self._test_custom_model_version(
+                        custom_model["id"], latest_version["id"], model_info
+                    )
 
                 self.stats.total_affected += 1
 
@@ -581,7 +596,7 @@ class ModelController(ControllerBase):
             from_latest=model_info.flags.should_create_version_from_latest,
         )
         self.datarobot_models[model_info.user_provided_id].latest_version = custom_model_version
-        return custom_model_version["id"]
+        return custom_model_version
 
     def _test_custom_model_version(self, model_id, model_version_id, model_info):
         logger.info("Executing custom model test ...")
