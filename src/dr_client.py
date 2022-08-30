@@ -513,11 +513,14 @@ class DrClient:
             A DataRobot custom model version
         """
 
-        git_model_version = datarobot_custom_model_version["gitModelVersion"]
-        git_model_version["mainBranchCommitSha"] = commit_sha
-        git_model_version["commitUrl"] = commit_url
-        git_model_version["refName"] = ref_name
-        payload = {"gitModelVersion": git_model_version}
+        payload = {
+            "gitModelVersion": {
+                "mainBranchCommitSha": commit_sha,
+                "pullRequestCommitSha": None,
+                "commitUrl": commit_url,
+                "refName": ref_name,
+            }
+        }
 
         url = self.CUSTOM_MODELS_VERSION_ROUTE.format(
             model_id=datarobot_custom_model_version["customModelId"],
