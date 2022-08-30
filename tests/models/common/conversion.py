@@ -9,4 +9,5 @@ def inch_to_cm(inches):
 
 
 def cm_to_inch(cm):
+    """Convert centimeters to inches."""
     return cm / 2.54
