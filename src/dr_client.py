@@ -44,7 +44,8 @@ class DrClient:
     CUSTOM_MODEL_TRAINING_DATA = CUSTOM_MODEL_ROUTE + "trainingData/"
     DATASETS_ROUTE = "datasets/"
     DATASET_UPLOAD_ROUTE = DATASETS_ROUTE + "fromFile/"
-    MODEL_PACKAGES_CREATE_ROUTE = "modelPackages/fromCustomModelVersion/"
+    MODEL_PACKAGES_ROUTE = "modelPackages/"
+    MODEL_PACKAGES_CREATE_ROUTE = MODEL_PACKAGES_ROUTE + "fromCustomModelVersion/"
     DEPLOYMENTS_ROUTE = "deployments/"
     DEPLOYMENTS_CREATE_ROUTE = "deployments/fromModelPackage/"
     DEPLOYMENT_ROUTE = "deployments/{deployment_id}/"
@@ -790,6 +791,29 @@ class DrClient:
         return self._paginated_fetch(
             self.CUSTOM_MODEL_DEPLOYMENTS_ROUTE, json={"customModelIds": model_ids}
         )
+
+    def fetch_model_packages(self, model_id, limit=None):
+        """
+        Retrieve model packages from DataRobot by a model ID.
+
+        Parameters
+        ----------
+        model_id : list[str]
+            A DataRobot model ID.
+        limit : int or None
+            The maximum number of packages or None for all.
+
+        Returns
+        -------
+        list[dict]
+            A list of DataRobot model packages.
+        """
+
+        payload = {"modelId": model_id, "forChallenger": True}
+        if limit:
+            payload["limit"] = limit
+
+        return self._paginated_fetch(self.MODEL_PACKAGES_ROUTE, json=payload)
 
     def fetch_deployments(self):
         """

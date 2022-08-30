@@ -199,7 +199,7 @@ class DeploymentController(ControllerBase):
                     desired_datarobot_model, datarobot_deployment
                 ):
                     if deployment_info.is_challenger_enabled:
-                        self._create_challenger_in_deployment(
+                        self._conditionally_create_challenger_in_deployment(
                             desired_datarobot_model.latest_version,
                             datarobot_deployment,
                             deployment_info,
@@ -283,14 +283,36 @@ class DeploymentController(ControllerBase):
             deployment["id"],
         )
 
-    def _create_challenger_in_deployment(
+    def _conditionally_create_challenger_in_deployment(
         self, model_latest_version, datarobot_deployment, deployment_info
     ):
-        user_provided_id = datarobot_deployment.deployment["userProvidedId"]
+        associated_model_info = self._model_controller.models_info.get(
+            deployment_info.user_provided_model_id
+        )
+        if not associated_model_info.is_affected_by_commit(model_latest_version):
+            logger.debug(
+                "Avoid creating a challenger because the associated model was not affected. "
+                "User provided deployment ID: %s, Model path: %s, model latest version id: %s",
+                deployment_info.user_provided_id,
+                associated_model_info.model_path,
+                model_latest_version["id"],
+            )
+            return
+
+        if self._challenger_already_created(model_latest_version, datarobot_deployment):
+            logger.debug(
+                "Avoid creating a challenger because the challenger already exists. "
+                "User provided deployment ID: %s, model path: %s, model latest version id: %s",
+                deployment_info.user_provided_id,
+                associated_model_info.model_path,
+                model_latest_version["id"],
+            )
+            return
+
         logger.info(
             "Submitting a model challenger ... user provided deployment id: %s, "
             "model latest version id: %s.",
-            user_provided_id,
+            deployment_info.user_provided_id,
             model_latest_version["id"],
         )
         challenger = self._dr_client.create_challenger(
@@ -299,9 +321,14 @@ class DeploymentController(ControllerBase):
         logger.info(
             "A challenger was successfully created and it is waiting for approval. "
             "user provided deployment id: %s, challenger id: %s.",
-            user_provided_id,
+            deployment_info.user_provided_id,
             challenger["id"],
         )
+
+    def _challenger_already_created(self, model_latest_version, datarobot_deployment):
+        deployment_id = datarobot_deployment.deployment["id"]
+        challengers = self._dr_client.fetch_challengers(deployment_id)
+        return challengers[-1]["model"]["id"] == model_latest_version["id"]
 
     def _handle_deployment_changes(self, deployment_info, datarobot_deployment):
         desired_label = deployment_info.get_settings_value(DeploymentSchema.LABEL_KEY)

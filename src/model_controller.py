@@ -510,6 +510,7 @@ class ModelController(ControllerBase):
 
                     custom_model_id = custom_model["id"]
                     latest_version = self._create_custom_model_version(custom_model_id, model_info)
+                    self.datarobot_models[user_provided_id].latest_version = latest_version
 
                     self.stats.total_created_versions += 1
                     logger.info(
@@ -525,7 +526,10 @@ class ModelController(ControllerBase):
                         # given event, make sure to update the main branch commit SHA. This solves
                         # an issue of follow-up pull requests, which are not related to the given
                         # model that should not affect the given model.
-                        self._update_custom_model_version_git_attributes(model_info, latest_version)
+                        latest_version = self._update_custom_model_version_git_attributes(
+                            model_info, latest_version
+                        )
+                        self.datarobot_models[user_provided_id].latest_version = latest_version
 
                 if model_info.flags.should_update_settings:
                     self._update_settings(custom_model, model_info)
@@ -551,7 +555,7 @@ class ModelController(ControllerBase):
             commit_url,
             ref_name,
         )
-        self._dr_client.update_custom_model_version_main_branch_commit_sha(
+        return self._dr_client.update_custom_model_version_main_branch_commit_sha(
             custom_model_version, main_branch_commit_sha, commit_url, ref_name
         )
 
@@ -620,7 +624,6 @@ class ModelController(ControllerBase):
             model_info.file_changes.deleted_file_ids,
             from_latest=model_info.flags.should_create_version_from_latest,
         )
-        self.datarobot_models[model_info.user_provided_id].latest_version = custom_model_version
         return custom_model_version
 
     def _test_custom_model_version(self, model_id, model_version_id, model_info):
