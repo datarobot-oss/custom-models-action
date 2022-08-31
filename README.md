@@ -1,26 +1,29 @@
 # Custom Inference Models GitHub Action
+
+(**NOTE: this repository is still a work in progress**)
+
 This repository contains the DataRobot GitHub action to manage Datarobot custom inference models
 and deployments via CI/CD GitHub workflows. It enables users to create/delete and change settings of
 models and deployments.
 
-The control over models and deployments are done via metadata yaml files, which in general, can be
-located at any folder under the repository. The yaml files are searched, collected and tested
+The control over models and deployments are done via metadata YAML files, which in general, can be
+located at any folder under the repository. The YAML files are searched, collected and tested
 against a specific schema to identify whether they contain the related definitions for each of these
 entities.
 
 ## Datasets
-Datasets that are referenced in this definition yaml files are expected to exist in DataRobot
+Datasets that are referenced in this definition YAML files are expected to exist in DataRobot
 catalogue before doing any GitHub step. The user is required to upload these datasets
 upfront, to the DataRobot catalog via its UI or any other client.
 
 ## Drop-In Environments
-Environments that are referenced in this definition yaml files are expected to exist in DataRobot
+Environments that are referenced in this definition YAML files are expected to exist in DataRobot
 Custom Models environments, before doing any GitHub action. The user is required to validate
 the existence of such drop-in environments upfront and use any ID of these environments. The user
 can also install a new drop-in environment and use its ID. For more information please reference
 DataRobot documentation.
 
-## The GitHub Action's Input Arguments
+## The GitHub Action's Input Arguments <a id="input-arguments"/>
 The GitHub action is implemented as a Python program, which is being called with specific arguments
 that are provided by the user, in the GitHub workflow.
 
@@ -60,42 +63,139 @@ steps in the same GitHub job (refer to the workflow example blow):
 * `message` - the output message from the GitHub action.
 
 ## Model Definition
-The user is required to provide the model's metadata in a yaml file. The model's full schema is
+The user is required to provide the model's metadata in a YAML file. The model's full schema is
 defined in
 [this source code block](
 https://github.com/datarobot/custom-inference-model/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L271
 )
 
-A model metadata yaml file may contain a schema of a single model's definition (as specified above),
+A model metadata YAML file may contain a schema of a single model's definition (as specified above),
 or a schema of multiple models' definition.
 
 The **multiple models' schema** is defined [here](
 https://github.com/datarobot/custom-inference-model/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L351
 ).
 
-The single model's definition yaml file is required to be located inside the model's root directory.
-The multiple models' definition yaml file can be located anywhere in the repository.
+The single model's definition YAML file is required to be located inside the model's root directory.
+The multiple models' definition YAML file can be located anywhere in the repository.
 
 For examples please refer to the [model definition examples section](#model-examples) below.
 
+**Notes:**
+* A model is first created during a pull request, whenever a new definition is detected.
+* A model is actually deleted during merging to the main branch, upon missing of the associated
+  model's definition. This can happen if the definition's YAML file was deleted or the user
+  changed its unique ID.
+* Changes to the models in DataRobot are done during a pull request to the configured main
+  branch. These include changes to settings as well as to creation of new custom inference model
+  versions.
+* A new model version is created upon changes to the model's code or the fields under the `version`
+  section.
+
+### Model Definition Sections
+
+* At the top level, there are attributes which cannot be changed once the model is created.
+* `settings` - changes to the fields under this section will result in changes to the model's
+               settings, without creation of a new version.
+* `version` - changes to the fields under this section will result in creation of a new version.
+* `test` - contains attributes that control the custom inference model testing. If omitted, a
+           test will not be executed.
+
 ## Deployment Definition
-The user is required to provide the deployment's metadata in a yaml file. The deployment's full
+The user is required to provide the deployment's metadata in a YAML file. The deployment's full
 schema is defined in [this source code block](
 https://github.com/datarobot/custom-inference-model/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L639
 ).
 
-A deployment metadata yaml file may contain a schema of a single deployment's definition (as
+A deployment metadata YAML file may contain a schema of a single deployment's definition (as
 specified above), or a schema of multiple deployments' definition.
 
 The **multiple deployments' schema** is defined [here](
 https://github.com/datarobot/custom-inference-model/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L679
 ).
 
-The deployment's definition yaml file (either a single or multiple) can be located anywhere in
+The deployment's definition YAML file (either a single or multiple) can be located anywhere in
 the repository.
 
 For examples please refer to the [deployment definition examples section](#deployment-examples)
 below.
+
+**Notes:**:
+ * Changes to deployments in DataRobot are done only upon merging a pull request
+   to the configured main branch. During a pull request, the GitHub action only performs
+   integrity checks.
+ * Every new version of the associated custom inference model will result in a new challenger
+   or a model's replacement in the deployment. It depends on the deployment's configuration, which
+   can be controlled from the YAML file. The default is creation of a new challenger.
+
+### Deployment Definition Sections
+
+* At the top level, there are attributes which are not supposed to be changed once the
+  deployment is created. An exceptional is the `user_provided_model_id` field, which associates
+  a model definition to the given deployment. A change in this field will trigger a model
+  replacement or challenger, depending on the deployment's configuration.
+* `settings` - changes to the fields under this section will result in changes to the deployment's
+               settings.
+
+## GitHub Workflow
+A GitHub workflow is a configurable process made up of one or more jobs. It is defined in a YAML
+file, which is supposed to be located under `.github/workflows` in the repository
+(for more information please refer to
+  [Using Workflows in GitHub](https://docs.github.com/en/actions/using-workflows)
+)
+
+In order to successfully use the DataRobot custom inference model GitHub action the following
+should be embedded in the GitHub workflow definition:
+
+1. The action should be run upon two events: `pull_request` and `push`. Therefore, the
+   following should be set::
+        ```yaml
+        on:
+          pull_request:
+            branches: [ master ]
+          push:
+            branches: [ master ]
+        ```
+2. Use the DataRobot custom inference model action in a workflow job as follows:
+
+```yaml
+    jobs:
+        datarobot-custom-inference-model:
+            # Run this job on any action of a PR, but skip the job upon merging to the main branch.
+            # This will be taken care of by the push event.
+            if: ${{ github.event.pull_request.merged != true }}
+
+            runs-on: ubuntu-latest
+
+            steps:
+              - uses: actions/checkout@v3
+                with:
+                  fetch-depth: 0
+
+              - name: DataRobot Custom Inference Model
+                id: datarobot-custom-inference-model
+                uses: datarobot/custom-inference-model@v1.0.0
+                with:
+                  api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
+                  webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
+                  branch: master
+                  allow-model-deletion: true
+                  allow-deployment-deletion: true
+```
+   **Notes:**
+   - `if: ${{ github.event.pull_request.merged != true }}` - this is an important condition that is
+     needed in order to skip the action's execution upon merging. The action will be triggered
+     by the 'push' event.
+   - The action scans the repository files therefore it is required to use the `actions/checkout@v3`
+     action in a step before DataRobot action.
+   - There are two actions' input arguments that are used to establish a communication with
+     DataRobot system. They should reside in the repository "Secrets" section:
+     - `DATAROBOT_API_TOKEN` - the API token that is used to validate credentials with DataRobot
+                               system.
+     - `DATAROBOT_WEBSERVER` - the DataRobot web server URL, which can be accessed publicly.
+   - For the full possible input arguments to the action please refer to the
+     [input arguments section](#input-arguments) above.
+   - For a complete example please refer to the [workflow example](#workflow-example) below.
 
 ## Development Information
 
@@ -114,19 +214,19 @@ The top level folders include the following:
     * `deployments` - contains a deployment definition that is used by tests.
     * `functional` - contains the functional tests source code.
     * `models` - contains a model definition and source code, which are used by the
-      tests.
+                 tests.
     * `unit` - contains the unit-tests source code.
 
 ### Functional Tests
-The functional tests are written on top of the main entry point, thus simulating the GitHub
-actions execution. In order to enable communication with a real DataRobot system, there should
-be two environment variables that are expected to be set:
+- The functional tests are written on top of the main entry point, thus simulating the GitHub
+  actions execution. In order to enable communication with a real DataRobot system, there should
+  be two environment variables that are expected to be set:
 
-* `DATAROBOT_WEBSERVER` - the DataRobot web server URL, which can be accessed publicly.
-* `DATAROBOT_API_TOKEN` - the API token that is used to validate credentials with DataRobot system.
+  * `DATAROBOT_WEBSERVER` - the DataRobot web server URL, which can be accessed publicly.
+  * `DATAROBOT_API_TOKEN` - the API token that is used to validate credentials with DataRobot system.
 
-In the current repository there is a definition of one model under `tests/models/py3_sklearn/`,
-and one deployment under `tests/deployments`, which are used by the functional test.
+- In the current repository there is a definition of one model under `tests/models/py3_sklearn/`,
+  and one deployment under `tests/deployments`, which are used by the functional test.
 
 ### Development Workflow
 Changes in this repository should be submitted as a pull requests. When a pull request is
@@ -136,9 +236,10 @@ sequentially:
 * Execution of the unit-tests.
 * Execution of a single functional test
 
-**NOTE:** in order to enable the full execution of the functional test, the two related environment
-variables (`DATAROBOT_WEBSERVER` & `DATAROBOT_API_TOKEN`) should be set in the "Secrets" section
-in the GitHub repository.
+**Note:** in order to enable the full execution of the functional test, the two related
+variables (`DATAROBOT_WEBSERVER` & `DATAROBOT_API_TOKEN`) should be set in the
+"Secrets" section in the GitHub repository. These are read by the workflow, which sets
+the proper environment variables.
 
 
 ## Examples
@@ -151,7 +252,7 @@ in the GitHub repository.
 Here is an example of a minimal model's definition, which includes only mandatory fields:
 
 ```yaml
-user_provided_model_id: my-awesome-model-id-1
+user_provided_model_id: any-model-unique-id-1
 target_type: Regression
 settings:
   name: My Awsome GitHub Model 1 [GitHub CI/CD]
@@ -166,7 +267,7 @@ version:
 Here is an example of a full model's definition, which includes both mandatory and optional fields:
 
 ```yaml
-user_provided_model_id: my-awesome-model-id-1
+user_provided_model_id: any-model-unique-id-1
 target_type: Binary
 settings:
   name: My Awsome GitHub Model 1 [GitHub CI/CD]
@@ -231,7 +332,7 @@ Here is an example of a multi-models definition, which includes only mandatory f
 datarobot_models:
   - model_path: ./models/model_1
     model_metadata:
-      user_provided_model_id: my-awesome-model-id-1
+      user_provided_model_id: any-model-unique-id-1
       target_type: Regression
       settings:
         name: My Awsome GitHub Model 1 [GitHub CI/CD]
@@ -244,7 +345,7 @@ datarobot_models:
 
   - model_path: ./models/model_2
     model_metadata:
-      user_provided_model_id: my-awesome-model-id-2
+      user_provided_model_id: any-model-unique-string-2
       target_type: Regression
       settings:
         name: My Awsome GitHub Model 2 [GitHub CI/CD]
@@ -263,7 +364,7 @@ Here is an example of a minimal deployment's definition, which includes only man
 
 ```yaml
 user_provided_deployment_id: my-awesome-deployment-id
-user_provided_model_id: my-awesome-model-id-1
+user_provided_model_id: any-model-unique-id-1
 ```
 
 ##### A Full Single Deployment Definition
@@ -272,7 +373,7 @@ fields:
 
 ```yaml
 user_provided_deployment_id: my-awesome-deployment-id
-user_provided_model_id: my-awesome-model-id-2
+user_provided_model_id: any-model-unique-string-2
 prediction_environment_name: "https://eks-test.orm.company.com"
 settings:
   label: "My Awesome Deployment (model-2)"
@@ -298,17 +399,17 @@ settings:
 Here is an example of a multi-deployments definition, which includes only mandatory fields:
 
 ```yaml
-- user_provided_deployment_id: my-awesome-deployment-id-1
-  user_provided_model_id: my-awesome-model-id-1
+- user_provided_deployment_id: any-deployment-unique-id-1
+  user_provided_model_id: any-model-unique-id-1
 
-- user_provided_deployment_id: my-awesome-deployment-id-2
-  user_provided_model_id: my-awesome-model-id-2
+- user_provided_deployment_id: any-deployment-unique-id-2
+  user_provided_model_id: any-model-unique-string-2
 
-- user_provided_deployment_id: my-awesome-deployment-id-3
-  user_provided_model_id: my-awesome-model-id-3
+- user_provided_deployment_id: any-deployment-unique-id-3
+  user_provided_model_id: any-model-unique-id-3
 ```
 
-### GitHub Workflow Example
+### GitHub Workflow Example <a id="workflow-example"/>
 Here is an example for a GitHub workflow definition, which should be located under: `.
 github/workflows/workflow.yaml`:
 
@@ -324,16 +425,11 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-env:
-  LOGLEVEL: info
-  DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}
-  DATAROBOT_WEBSERVER: ${{ secrets.DATAROBOT_WEBSERVER }}
-
 jobs:
   datarobot-custom-inference-model:
-    # Run this job on any action of a PR, but skip the job upon merge to master. This will be
-    # taken care by the push event.
-    if: ${{ false && github.event.pull_request.merged != true }}
+    # Run this job on any action of a PR, but skip the job upon merging to the main branch. This
+    # will be taken care of by the push event.
+    if: ${{ github.event.pull_request.merged != true }}
 
     runs-on: ubuntu-latest
 
@@ -346,8 +442,8 @@ jobs:
         id: datarobot-custom-inference-model
         uses: datarobot/custom-inference-model@v1.0.0
         with:
-          api-token: $DATAROBOT_API_TOKEN
-          webserver: $DATAROBOT_WEBSERVER
+          api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
+          webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
           branch: master
           allow-model-deletion: true
           allow-deployment-deletion: true
