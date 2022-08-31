@@ -53,10 +53,10 @@ class ModelInfo:
 
             self.changed_or_new_files.append(model_file_path)
 
-        def extend_deleted(self, deleted_file_id_list):
-            """EXtend the delete file IDs list."""
+        def add_deleted_file_id(self, deleted_file_id):
+            """Add a file ID to the deleted file IDs list."""
 
-            self.deleted_file_ids.extend(deleted_file_id_list)
+            self.deleted_file_ids.append(deleted_file_id)
 
     def __init__(self, yaml_filepath, model_path, metadata):
         self._yaml_filepath = Path(yaml_filepath)
@@ -170,13 +170,12 @@ class ModelInfo:
     def should_create_new_version(self, datarobot_latest_model_version):
         """Whether a new custom inference model version should be created"""
 
-        if self.flags.should_upload_all_files:
-            return True
-
-        if bool(self.file_changes.changed_or_new_files):
-            return True
-
-        if not datarobot_latest_model_version:
+        if (
+            self.flags.should_upload_all_files
+            or bool(self.file_changes.changed_or_new_files)
+            or bool(self.file_changes.deleted_file_ids)
+            or not datarobot_latest_model_version
+        ):
             return True
 
         configured_memory = self.get_value(ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY)
