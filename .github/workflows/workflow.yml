@@ -14,8 +14,8 @@ on:
 
 env:
   LOGLEVEL: debug
-  DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}
-  DATAROBOT_WEBSERVER: ${{ secrets.DATAROBOT_WEBSERVER }}
+  DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}  # Required by the functional tests
+  DATAROBOT_WEBSERVER: ${{ secrets.DATAROBOT_WEBSERVER }}  # Required by the functional tests
   INSPECT_CONTEXT: false
   OUT_DIR: output-context/${{ github.event_name }}
 
@@ -114,61 +114,3 @@ jobs:
         run: |
           make test-functional \
             FUNCTIONAL_TESTS='tests/functional/test_deployment_github_actions.py::TestDeploymentGitHubActions::test_e2e_deployment_create'
-
-  datarobot-custom-inference-model:
-    # Skip this job! It is an intermediate step towards putting it in a separate repository.
-    # Run this job on any action of a PR, but skip the job upon merge to master
-    if: ${{ false && github.event.pull_request.merged != true }}
-
-    needs: [validate-code-style, run-unit-tests]
-
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: GitHub Environment Variables
-        run: |
-          echo "GITHUB_EVENT_NAME: ${GITHUB_EVENT_NAME}"
-          echo "GITHUB_SHA: ${GITHUB_SHA}"
-          echo "GITHUB_HEAD_REF: ${GITHUB_HEAD_REF}"
-          echo "GITHUB_BASE_REF: ${GITHUB_BASE_REF}"
-          echo "GITHUB_REF: ${GITHUB_REF}"
-          echo "GITHUB_REF_NAME: ${GITHUB_REF_NAME}"
-          echo "GITHUB_REF_PROTECTED: ${GITHUB_REF_PROTECTED}"
-          echo "GITHUB_REF_TYPE: ${GITHUB_REF_TYPE}"
-          echo "GITHUB_RUN_ID: ${GITHUB_RUN_ID}"
-          echo "GITHUB_RUN_NUMBER: ${GITHUB_RUN_NUMBER}"
-
-      - name: Git log
-        run: git log --name-only
-
-      - name: DataRobot Custom Inference Model
-        id: datarobot-custom-inference-model
-        if: ${{ env.INSPECT_CONTEXT == 'false' }}
-        uses: ./
-        with:
-          api-token: $DATAROBOT_API_TOKEN
-          webserver: $DATAROBOT_WEBSERVER
-          branch: master
-          allow-model-deletion: true
-          allow-deployment-deletion: true
-          skip-cert-verification: true
-
-      - name: DataRobot Custom Inference Model Action Results
-        run: |
-          echo "Total affected models: ${{ steps.datarobot-custom-inference-model.outputs.total-affected-models }}"
-          echo "Total created models: ${{ steps.datarobot-custom-inference-model.outputs.total-created-models }}"
-          echo "Total deleted models: ${{ steps.datarobot-custom-inference-model.outputs.total-deleted-models }}"
-          echo "Total created model versions: ${{ steps.datarobot-custom-inference-model.outputs.total-created-model-versions }}"
-
-          echo "Total affected deployments: ${{ steps.datarobot-custom-inference-model.outputs.total-affected-deployments }}"
-          echo "Total created deployments: ${{ steps.datarobot-custom-inference-model.outputs.total-created-deployments }}"
-          echo "Total deleted deployments: ${{ steps.datarobot-custom-inference-model.outputs.total-deleted-deployments }}"
-
-          echo "Message: ${{ steps.datarobot-custom-inference-model.outputs.message }}"
