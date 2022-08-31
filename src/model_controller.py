@@ -425,14 +425,14 @@ class ModelController(ControllerBase):
                 GitHubEnv.github_sha(), from_commit_sha
             )
             logger.debug(
-                "Model %s changes since commit %s. Changed files: %s. Deleted files: %s.",
+                "Model %s was changed since commit %s. Changed files: %s. Deleted files: %s.",
                 model_info.user_provided_id,
                 from_commit_sha,
                 changed_files,
                 deleted_files,
             )
             self._handle_changed_or_new_files(model_info, changed_files)
-            self._handle_deleted_files(model_info, deleted_files)
+            self._handle_deleted_files(model_info)
 
     @classmethod
     def _handle_changed_or_new_files(cls, model_info, changed_or_new_files):
@@ -463,32 +463,37 @@ class ModelController(ControllerBase):
                 logger.debug("The model's settings were changed. path %s", model_info.model_path)
                 model_info.flags.should_update_settings = True
 
-    def _handle_deleted_files(self, model_info, deleted_files):
-        for deleted_file in deleted_files:
-            # Being stateless, check each deleted file against the stored custom model version
-            # in DataRobot
-            if model_info.user_provided_id in self.datarobot_models:
-                latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
-                if latest_version:
-                    model_root_dir = model_info.model_path
-                    path_under_model, _ = ModelFilePath.get_path_under_model(
-                        deleted_file, model_root_dir, self._workspace_path
-                    )
-                    if not path_under_model:
-                        raise UnexpectedResult(f"The path '{deleted_file}' is outside the repo.")
+    def _handle_deleted_files(self, model_info):
+        """
+        Deleted files may happen in two scenarios:
+        - A file that belongs to the model was deleted from the source tree
+        - A file that belonged to the model was excluded using the 'glob' pattern
 
-                    model_info.file_changes.extend_deleted(
-                        [
-                            item["id"]
-                            for item in latest_version["items"]
-                            if path_under_model == item["filePath"]
-                        ]
-                    )
-                    logger.debug(
-                        "File path %s will be deleted from model %s.",
-                        deleted_file,
-                        model_info.user_provided_id,
-                    )
+        The logic to tackle these both scenarios is to go over the current files in DataRobot
+        model version and check if the file exists in the model info. If not, it is regarded
+        as deleted.
+        """
+
+        if model_info.user_provided_id in self.datarobot_models:
+            latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
+            if latest_version:
+                for item in latest_version["items"]:
+                    if not self._file_path_belongs_to_model(item["filePath"], model_info):
+                        model_info.file_changes.add_deleted_file_id(item["id"])
+                        logger.debug(
+                            "File ID was added to deleted list. Model: %s, path: %s",
+                            model_info.model_path,
+                            item["filePath"],
+                        )
+
+    def _file_path_belongs_to_model(self, path_under_model_to_check, model_info):
+        for local_file_path in model_info.model_file_paths:
+            existing_path_under_model, _ = ModelFilePath.get_path_under_model(
+                local_file_path, model_info.model_path, self._workspace_path
+            )
+            if path_under_model_to_check == existing_path_under_model:
+                return True
+        return False
 
     def handle_model_changes(self):
         """Apply changes in DataRobot for models that were affected by the current commit."""
