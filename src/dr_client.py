@@ -591,7 +591,7 @@ class DrClient:
         response_data = response.json()
 
         if response_data["overallStatus"] != "succeeded":
-            for check, result in response_data["testingStatus"]:
+            for check, result in response_data["testingStatus"].items():
                 status = result["status"]
                 if status != "succeeded":
                     raise DataRobotClientError(
