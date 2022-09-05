@@ -4,10 +4,9 @@
 #  Released under the terms of DataRobot Tool and Utility Agreement.
 
 """
-The implementation of the custom inference model GitHub action. It scans and loads model
-definitions from the local source tree, performs validations and then detects which
-models/deployments were affected by the last Git action and applies the proper actions
-in DataRobot application.
+The implementation of the custom models GitHub action. It scans and loads model definitions
+from the local source tree, performs validations and then detects which models/deployments
+were affected by the last Git action and applies the proper actions in DataRobot application.
 """
 
 import logging
@@ -21,8 +20,8 @@ logger = logging.getLogger()
 
 
 # pylint: disable=too-few-public-methods
-class CustomInferenceModelAction:
-    """The implementation of the custom inference model GitHub action."""
+class CustomModelsAction:
+    """The implementation of the custom models GitHub action."""
 
     def __init__(self, options):
         self._options = options
@@ -44,8 +43,9 @@ class CustomInferenceModelAction:
 
     def run(self):
         """
-        Executes the GitHub action logic to manage custom inference models. The logic takes into
-        account the fact that a model can be deleted along with a deployment in the same commit.
+        Executes the GitHub action logic to manage custom inference models and deployments.
+        The logic takes into account the fact that a model can be deleted along with a deployment
+        in the same commit.
         """
 
         try:
@@ -86,7 +86,7 @@ class CustomInferenceModelAction:
         supported_events = ["push", "pull_request"]
         if GitHubEnv.event_name() not in supported_events:
             logger.warning(
-                "Skip custom inference model action. It is expected to be executed only "
+                "Skip custom models action. It is expected to be executed only "
                 "on %s events. Current event: %s.",
                 supported_events,
                 GitHubEnv.event_name(),
@@ -97,7 +97,7 @@ class CustomInferenceModelAction:
         logger.info("GITHUB_BASE_REF: %s.", base_ref)
         if GitHubEnv.is_pull_request() and base_ref != self._options.branch:
             logger.info(
-                "Skip custom inference model action. It is executed only when the referenced "
+                "Skip custom models action. It is executed only when the referenced "
                 "branch is %s. Current ref branch: %s.",
                 self._options.branch,
                 base_ref,
@@ -107,7 +107,7 @@ class CustomInferenceModelAction:
         # NOTE: in the case of functional tests, the number of remotes is zero and still it's valid.
         if self._repo.num_remotes() > 1:
             logger.warning(
-                "Skip custom inference model action, because the given repository has more than "
+                "Skip custom models action, because the given repository has more than "
                 "one remote configured."
             )
             return False
@@ -117,7 +117,7 @@ class CustomInferenceModelAction:
             num_commits = self._repo.num_commits()
             if num_commits < 2:
                 logger.warning(
-                    "Skip custom inference model action. The minimum number of commits "
+                    "Skip custom models action. The minimum number of commits "
                     "should be 2. Current number is %d.",
                     num_commits,
                 )

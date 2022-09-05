@@ -20,8 +20,8 @@ import yaml
 from bson import ObjectId
 from git import Repo
 
-from custom_inference_model import CustomInferenceModelAction
-from custom_inference_model import ModelController
+from custom_models_action import CustomModelsAction
+from model_controller import ModelController
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 
@@ -280,7 +280,7 @@ def options(workspace_path):
 def mock_prerequisites():
     """A fixture to mock the _prerequisites private method in te GitHub action."""
 
-    with patch.object(CustomInferenceModelAction, "_prerequisites"):
+    with patch.object(CustomModelsAction, "_prerequisites"):
         yield
 
 

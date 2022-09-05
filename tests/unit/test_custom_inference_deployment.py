@@ -25,7 +25,7 @@ from common.exceptions import DeploymentMetadataAlreadyExists
 from common.exceptions import NoValidAncestor
 from common.git_tool import GitTool
 from common.github_env import GitHubEnv
-from custom_inference_model import CustomInferenceModelAction
+from custom_models_action import CustomModelsAction
 from deployment_controller import DeploymentController
 from deployment_info import DeploymentInfo
 from dr_client import DrClient
@@ -385,8 +385,8 @@ class TestCustomInferenceDeployment:
             with_dr_deployments=False,
             with_associated_dr_models=False,
         ):
-            custom_inference_deployment = CustomInferenceModelAction(options)
-            with patch.object(CustomInferenceModelAction, "_print_statistics"), patch.object(
+            custom_inference_deployment = CustomModelsAction(options)
+            with patch.object(CustomModelsAction, "_print_statistics"), patch.object(
                 ModelController, "fetch_models_from_datarobot"
             ):
                 with pytest.raises(AssociatedModelNotFound):

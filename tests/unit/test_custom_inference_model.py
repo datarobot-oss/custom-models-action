@@ -25,7 +25,7 @@ from common.exceptions import ModelMetadataAlreadyExists
 from common.exceptions import SharedAndLocalPathCollision
 from common.git_tool import GitTool
 from common.github_env import GitHubEnv
-from custom_inference_model import CustomInferenceModelAction
+from custom_models_action import CustomModelsAction
 from deployment_controller import DeploymentController
 from dr_client import DrClient
 from model_controller import ModelController
@@ -359,7 +359,7 @@ class TestGlobPatterns:
         """Test include Glob patterns and defaults in a given model definition."""
 
         models_factory(num_models, is_multi, with_include_glob, with_exclude_glob)
-        custom_inference_model_action = CustomInferenceModelAction(options)
+        custom_inference_model_action = CustomModelsAction(options)
 
         with patch.object(ModelController, "handle_model_changes"), patch.object(
             DeploymentController, "fetch_deployments_from_datarobot"

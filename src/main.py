@@ -16,7 +16,7 @@ import os
 import sys
 
 from common.exceptions import GenericException
-from custom_inference_model import CustomInferenceModelAction
+from custom_models_action import CustomModelsAction
 
 logger = logging.getLogger()
 
@@ -102,7 +102,7 @@ def main(args=None):
     options = argparse_options(args)
 
     try:
-        CustomInferenceModelAction(options).run()
+        CustomModelsAction(options).run()
         print(
             "::set-output name=message::"
             "Custom inference model GitHub action completed with success.\n"
