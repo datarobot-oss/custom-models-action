@@ -7,7 +7,7 @@
 A super simple example of custom model body with a single 'transform' hook.
 """
 
-import conversion
+from common import conversion
 
 
 def transform(data, model):
