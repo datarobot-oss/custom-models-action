@@ -1,4 +1,4 @@
-# Custom Inference Models GitHub Action
+# Custom Models GitHub Action
 
 (**NOTE: this repository is still a work in progress**)
 
@@ -38,11 +38,9 @@ The action supports the following mandatory input arguments:
 The action supports the following optional input arguments:
 
 * `--allow-deployment-deletion` - whether to detect local deleted deployment definitions and
-     consequently delete them in DataRobot. It applies to Custom Inference Model Deployment GitHub
-     action only (Default: false).
+     consequently delete them in DataRobot (Default: false).
 * `--allow-model-deletion` - whether to detect local deleted model definitions and consequently
-     delete them in DataRobot. It applies to Custom Inference Model GitHub action only
-     (Default: false).
+     delete them in DataRobot (Default: false).
 * `--models-only` - determines whether to manage custom inference models only or also deployments
      (Default: false).
 * `--skip-cert-verification` - whether a request to an HTTPS URL will be made without a certificate
@@ -66,14 +64,14 @@ steps in the same GitHub job (refer to the workflow example blow):
 The user is required to provide the model's metadata in a YAML file. The model's full schema is
 defined in
 [this source code block](
-https://github.com/datarobot/custom-inference-model/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L271
+https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L271
 )
 
 A model metadata YAML file may contain a schema of a single model's definition (as specified above),
 or a schema of multiple models' definition.
 
 The **multiple models' schema** is defined [here](
-https://github.com/datarobot/custom-inference-model/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L351
+https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L351
 ).
 
 The single model's definition YAML file is required to be located inside the model's root directory.
@@ -104,14 +102,14 @@ For examples please refer to the [model definition examples section](#model-exam
 ## Deployment Definition
 The user is required to provide the deployment's metadata in a YAML file. The deployment's full
 schema is defined in [this source code block](
-https://github.com/datarobot/custom-inference-model/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L639
+https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L639
 ).
 
 A deployment metadata YAML file may contain a schema of a single deployment's definition (as
 specified above), or a schema of multiple deployments' definition.
 
 The **multiple deployments' schema** is defined [here](
-https://github.com/datarobot/custom-inference-model/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L679
+https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L679
 ).
 
 The deployment's definition YAML file (either a single or multiple) can be located anywhere in
@@ -144,8 +142,8 @@ file, which is supposed to be located under `.github/workflows` in the repositor
   [Using Workflows in GitHub](https://docs.github.com/en/actions/using-workflows)
 )
 
-In order to successfully use the DataRobot custom inference model GitHub action the following
-should be embedded in the GitHub workflow definition:
+In order to successfully use the DataRobot custom models GitHub action the following should be
+embedded in the GitHub workflow definition:
 
 1. The action should be run upon two events: `pull_request` and `push`. Therefore, the
    following should be set::
@@ -156,11 +154,11 @@ should be embedded in the GitHub workflow definition:
           push:
             branches: [ master ]
         ```
-2. Use the DataRobot custom inference model action in a workflow job as follows:
+2. Use the DataRobot custom models action in a workflow job as follows:
 
 ```yaml
     jobs:
-        datarobot-custom-inference-model:
+        datarobot-custom-models-action:
             # Run this job on any action of a PR, but skip the job upon merging to the main branch.
             # This will be taken care of by the push event.
             if: ${{ github.event.pull_request.merged != true }}
@@ -172,9 +170,9 @@ should be embedded in the GitHub workflow definition:
                 with:
                   fetch-depth: 0
 
-              - name: DataRobot Custom Inference Model
-                id: datarobot-custom-inference-model
-                uses: datarobot/custom-inference-model@v1.0.0
+              - name: DataRobot Custom Models Action
+                id: datarobot-custom-models-action
+                uses: datarobot/custom-models-action@v1.0.0
                 with:
                   api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
                   webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
@@ -201,7 +199,7 @@ should be embedded in the GitHub workflow definition:
 
 ### The Repository Structure
 The top level folders include the following:
-* `action.yaml` - the definition of the DataRobot custom inference model GitHub action.
+* `action.yaml` - the definition of the DataRobot custom models GitHub action.
 * `.github` - contains a GitHub workflow that executes the following jobs:
     * A linter and code style check.
     * An execution of the unit-tests.
@@ -426,7 +424,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  datarobot-custom-inference-model:
+  datarobot-custom-models-action:
     # Run this job on any action of a PR, but skip the job upon merging to the main branch. This
     # will be taken care of by the push event.
     if: ${{ github.event.pull_request.merged != true }}
@@ -438,9 +436,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: DataRobot Custom Inference Model
-        id: datarobot-custom-inference-model
-        uses: datarobot/custom-inference-model@v1.0.0
+      - name: DataRobot Custom Models Action
+        id: datarobot-custom-models-action
+        uses: datarobot/custom-models-action@v1.0.0
         with:
           api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
           webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
@@ -448,16 +446,16 @@ jobs:
           allow-model-deletion: true
           allow-deployment-deletion: true
 
-      - name: DataRobot Custom Inference Model Action Results
+      - name: DataRobot Custom Models Action Results
         run: |
-          echo "Total affected models: ${{ steps.datarobot-custom-inference-model.outputs.total-affected-models }}"
-          echo "Total created models: ${{ steps.datarobot-custom-inference-model.outputs.total-created-models }}"
-          echo "Total deleted models: ${{ steps.datarobot-custom-inference-model.outputs.total-deleted-models }}"
-          echo "Total created model versions: ${{ steps.datarobot-custom-inference-model.outputs.total-created-model-versions }}"
+          echo "Total affected models: ${{ steps.datarobot-custom-models-action.outputs.total-affected-models }}"
+          echo "Total created models: ${{ steps.datarobot-custom-models-action.outputs.total-created-models }}"
+          echo "Total deleted models: ${{ steps.datarobot-custom-models-action.outputs.total-deleted-models }}"
+          echo "Total created model versions: ${{ steps.datarobot-custom-models-action.outputs.total-created-model-versions }}"
 
-          echo "Total affected deployments: ${{ steps.datarobot-custom-inference-model.outputs.total-affected-deployments }}"
-          echo "Total created deployments: ${{ steps.datarobot-custom-inference-model.outputs.total-created-deployments }}"
-          echo "Total deleted deployments: ${{ steps.datarobot-custom-inference-model.outputs.total-deleted-deployments }}"
+          echo "Total affected deployments: ${{ steps.datarobot-custom-models-action.outputs.total-affected-deployments }}"
+          echo "Total created deployments: ${{ steps.datarobot-custom-models-action.outputs.total-created-deployments }}"
+          echo "Total deleted deployments: ${{ steps.datarobot-custom-models-action.outputs.total-deleted-deployments }}"
 
-          echo "Message: ${{ steps.datarobot-custom-inference-model.outputs.message }}"
+          echo "Message: ${{ steps.datarobot-custom-models-action.outputs.message }}"
 ```
