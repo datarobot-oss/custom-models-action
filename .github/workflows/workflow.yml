@@ -77,38 +77,3 @@ jobs:
         with:
           name: Context info artifact
           path: output-context
-
-  datarobot-custom-models-action:
-    # Run this job on any action of a PR, but skip the job upon merging to the main branch. This
-    # will be taken care of by the push event.
-    if: ${{ github.event.pull_request.merged != true }}
-
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: DataRobot Custom Models Action
-        id: datarobot-custom-models-action
-        uses: datarobot/custom-models-action@v1.0.0
-        with:
-          api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
-          webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
-          branch: angelos/qa-6302
-          allow-model-deletion: true
-          allow-deployment-deletion: true
-
-      - name: DataRobot Custom Models Action Results
-        run: |
-          echo "Total affected models: ${{ steps.datarobot-custom-models-action.outputs.total-affected-models }}"
-          echo "Total created models: ${{ steps.datarobot-custom-models-action.outputs.total-created-models }}"
-          echo "Total deleted models: ${{ steps.datarobot-custom-models-action.outputs.total-deleted-models }}"
-          echo "Total created model versions: ${{ steps.datarobot-custom-models-action.outputs.total-created-model-versions }}"
-          
-          echo "Total affected deployments: ${{ steps.datarobot-custom-models-action.outputs.total-affected-deployments }}"
-          echo "Total created deployments: ${{ steps.datarobot-custom-models-action.outputs.total-created-deployments }}"
-          echo "Total deleted deployments: ${{ steps.datarobot-custom-models-action.outputs.total-deleted-deployments }}"
-          
-          echo "Message: ${{ steps.datarobot-custom-models-action.outputs.message }}"
