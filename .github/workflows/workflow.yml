@@ -78,39 +78,37 @@ jobs:
           name: Context info artifact
           path: output-context
 
-  run-unit-tests:
-    # Run this job on any action of a PR, but skip the job upon merge to master
-    if: github.event.pull_request.merged != true
+  datarobot-custom-models-action:
+    # Run this job on any action of a PR, but skip the job upon merging to the main branch. This
+    # will be taken care of by the push event.
+    if: ${{ github.event.pull_request.merged != true }}
 
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-      - name: Install Reqruirements
-        run: pip install -r ${{ github.workspace }}/tests/requirements.txt
+      - name: DataRobot Custom Models Action
+        id: datarobot-custom-models-action
+        uses: datarobot/custom-models-action@v1.0.0
+        with:
+          api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
+          webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
+          branch: angelos/qa-6302
+          allow-model-deletion: true
+          allow-deployment-deletion: true
 
-      - name: Run unit-tests
-        run: make test
-
-  run-functional-test:
-    needs: [run-unit-tests, validate-code-style]
-
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
-
-      - name: Install Reqruirements
-        run: pip install -r ${{ github.workspace }}/tests/requirements.txt
-
-      - name: Run a functional test
+      - name: DataRobot Custom Models Action Results
         run: |
-          make test-functional \
-            FUNCTIONAL_TESTS='tests/functional/test_deployment_github_actions.py::TestDeploymentGitHubActions::test_e2e_deployment_create'
+          echo "Total affected models: ${{ steps.datarobot-custom-models-action.outputs.total-affected-models }}"
+          echo "Total created models: ${{ steps.datarobot-custom-models-action.outputs.total-created-models }}"
+          echo "Total deleted models: ${{ steps.datarobot-custom-models-action.outputs.total-deleted-models }}"
+          echo "Total created model versions: ${{ steps.datarobot-custom-models-action.outputs.total-created-model-versions }}"
+          
+          echo "Total affected deployments: ${{ steps.datarobot-custom-models-action.outputs.total-affected-deployments }}"
+          echo "Total created deployments: ${{ steps.datarobot-custom-models-action.outputs.total-created-deployments }}"
+          echo "Total deleted deployments: ${{ steps.datarobot-custom-models-action.outputs.total-deleted-deployments }}"
+          
+          echo "Message: ${{ steps.datarobot-custom-models-action.outputs.message }}"
