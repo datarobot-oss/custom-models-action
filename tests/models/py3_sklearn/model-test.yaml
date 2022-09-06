@@ -1,15 +1,23 @@
-user_provided_model_id: my-awesome-model-id-1
-
-target_type: Regression
-
+user_provided_model_id: any-model-unique-id-1
+target_type: Binary
 settings:
-  name: My Awsome GitHub Model 1 [GitHub CI/CD]
+  name: My Awesome GitHub Model 1 [GitHub CI/CD]
+  description: My awesome model
   target_name: Grade 2014
+  holdout_dataset_id: 63175edb6b361d4e0c0d78ea
+  language: Python
+  negative_class_label: '0'
+  positive_class_label: '1'
+  training_dataset_id: 63175edb6b361d4e0c0d78ea
 
 version:
-  # Make sure this is the environment ID in your system.
-  # It is the '[DataRobot] Python 3 Scikit-Learn Drop-In' environment
+  # Make sure this is the environment ID is in your system.
+  # This one is the '[DataRobot] Python 3 Scikit-Learn Drop-In' environment
   model_environment_id: 5e8c889607389fe0f466c72d
-
-  include_glob_pattern: [./*]
-  exclude_glob_pattern: [deployment.yaml]
+  exclude_glob_pattern:
+    - README.md
+    - out/
+  include_glob_pattern:
+    - ./
+  memory: 100Mi
+  replicas: 3
