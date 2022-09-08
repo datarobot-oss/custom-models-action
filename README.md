@@ -459,3 +459,13 @@ jobs:
 
           echo "Message: ${{ steps.datarobot-custom-models-action.outputs.message }}"
 ```
+
+# Copyright and License
+
+Custom Models GitHub Action is Copyright 2022 DataRobot, Inc.  All rights reserved.
+Licensed under a Modified 3-Clause BSD License (the "License").  See the LICENSE file. You may not
+use this software except in compliance with the License.
+
+Software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT ANY EXPRESS OR
+IMPLIED WARRANTIES OF ANY KIND AND WITHOUT ANY LICENSE TO ANY PATENTS OR TRADEMARKS. See the
+LICENSE file for the specific language governing permissions and limitations under the License.
