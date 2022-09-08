@@ -1,4 +1,4 @@
-user_provided_model_id: any-model-unique-id-2
+user_provided_model_id: any-model-unique-id-3
 target_type: Regression
 settings:
   name: My Awesome GitHub Model 2 [GitHub CI/CD]
