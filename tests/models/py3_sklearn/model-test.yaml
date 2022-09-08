@@ -1,4 +1,4 @@
-user_provided_model_id: any-model-unique-id-1
+user_provided_model_id: any-model-unique-id-2
 target_type: Regression
 settings:
   name: My Awsome GitHub Model 1 [GitHub CI/CD]
