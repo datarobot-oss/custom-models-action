@@ -1,7 +1,7 @@
-user_provided_model_id: any-model-unique-id-1
+user_provided_model_id: any-model-unique-id-2
 target_type: Regression
 settings:
-  name: My Awesome GitHub Model 1 [GitHub CI/CD]
+  name: My Awesome GitHub Model 2 [GitHub CI/CD]
   target_name: Grade 2014
 
 version:
