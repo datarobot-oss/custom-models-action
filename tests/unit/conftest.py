@@ -192,10 +192,12 @@ def fixture_single_model_factory(workspace_path, common_path_with_code):
                 "./README.md"
             ]
 
+        metadata_yaml_filepath = None
         if write_metadata:
-            write_to_file(model_path / "model.yaml", yaml.dump(single_model_metadata))
+            metadata_yaml_filepath = model_path / "model.yaml"
+            write_to_file(metadata_yaml_filepath, yaml.dump(single_model_metadata))
 
-        return single_model_metadata
+        return single_model_metadata, metadata_yaml_filepath
 
     yield _inner
 
@@ -215,7 +217,7 @@ def fixture_models_factory(workspace_path, single_model_factory):
         models_metadata = []
         for counter in range(num_models):
             model_name = f"model_multi_{counter}" if is_multi else f"model_{counter}"
-            model_metadata = single_model_factory(
+            model_metadata, _ = single_model_factory(
                 model_name,
                 write_metadata=not is_multi,
                 with_include_glob=with_include_glob,
