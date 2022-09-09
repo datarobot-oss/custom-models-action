@@ -3,7 +3,7 @@ target_type: Binary
 settings:
   name: My Awsome GitHub Model 1 [GitHub CI/CD]
   description: My awesome model
-  target_name: complication
+  target_name: complication!
   holdout_dataset_id: 631b18526bed5f2f400d77de
   language: Python
   negative_class_label: '0'
@@ -42,7 +42,7 @@ test:
       match_threshold: 0.9
       output_dataset_id: 631b18656bed5f2f400d77f6
       passing_match_rate: 85
-      predictions_column: complication
+      predictions_column: complication!
     side_effects:
       block_deployment_if_fails: true
       enabled: true
