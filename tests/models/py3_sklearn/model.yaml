@@ -3,7 +3,7 @@ target_type: Binary
 settings:
   name: My Awsome GitHub Model 1 [GitHub CI/CD]
   description: My awesome model
-  target_name: Grade 2014
+  target_name: complication
   holdout_dataset_id: 631b18526bed5f2f400d77de
   language: Python
   negative_class_label: '0'
