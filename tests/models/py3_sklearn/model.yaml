@@ -18,4 +18,4 @@ version:
     - README.md
     - out/
   include_glob_pattern:
-    - .
+    - ./*
