@@ -42,7 +42,7 @@ test:
       match_threshold: 0.9
       output_dataset_id: 631b18656bed5f2f400d77f6
       passing_match_rate: 85
-      predictions_column: Grade 2014
+      predictions_column: complication
     side_effects:
       block_deployment_if_fails: true
       enabled: true
