@@ -17,5 +17,3 @@ version:
   exclude_glob_pattern:
     - README.md
     - out/
-  memory: 100Mi
-  replicas: 3
