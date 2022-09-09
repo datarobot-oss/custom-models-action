@@ -33,7 +33,7 @@ jobs:
         # to this url: datarobot/custom-inference-model@v1.0.0
         uses: ./
         with:
-          api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
+          api-token: ${{ secrets.QA_API_TOKEN }}
           webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
           branch: angelos/qa-6302
           allow-model-deletion: true
