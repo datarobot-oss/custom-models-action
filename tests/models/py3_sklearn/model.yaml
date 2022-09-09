@@ -1,0 +1,56 @@
+user_provided_model_id: any-model-unique-id-1
+target_type: Binary
+settings:
+  name: My Awsome GitHub Model 1 [GitHub CI/CD]
+  description: My awesome model
+  target_name: Grade 2014
+  holdout_dataset_id: 627790ca5621558b55c78d78
+  language: Python
+  negative_class_label: '0'
+  positive_class_label: '1'
+  training_dataset_id: 627790ba56215587b3021632
+
+version:
+  # Make sure this is the environment ID is in your system.
+  # This one is the '[DataRobot] Python 3 Scikit-Learn Drop-In' environment
+  model_environment_id: 5e8c889607389fe0f466c72d
+  exclude_glob_pattern:
+    - README.md
+    - out/
+  include_glob_pattern:
+    - ./
+  memory: 100Mi
+  replicas: 3
+
+test:
+  memory: 100Mi
+  skip: false
+  test_data_id: 63186c606b361d4e0c0d798e
+  checks:
+    null_value_imputation:
+      block_deployment_if_fails: true
+      enabled: true
+    performance:
+      block_deployment_if_fails: false
+      enabled: true
+      max_execution_time: 100
+      maximum_response_time: 50
+      number_of_parallel_users: 3
+    prediction_verification:
+      block_deployment_if_fails: false
+      enabled: true
+      match_threshold: 0.9
+      output_dataset_id: 631b0d566bed5f2f400d7783
+      passing_match_rate: 85
+      predictions_column: Grade 2014
+    side_effects:
+      block_deployment_if_fails: true
+      enabled: true
+    stability:
+      block_deployment_if_fails: true
+      enabled: true
+      maximum_payload_size: 1000
+      minimum_payload_size: 100
+      number_of_parallel_users: 1
+      passing_rate: 95
+      total_prediction_requests: 50
