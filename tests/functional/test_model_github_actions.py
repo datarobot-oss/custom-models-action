@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from common.convertors import MemoryConvertor
+from common.exceptions import DataRobotClientError
 from dr_client import DrClient
 from schema_validator import ModelSchema
 from tests.conftest import unique_str
@@ -368,6 +369,70 @@ class TestModelGitHubActions:
                 git_repo.git.commit("-m", "Update training / holdout dataset(s)")
 
                 printout("Run custom inference models GitHub action ...")
+                run_github_action(
+                    workspace_path, git_repo, main_branch_name, "push", is_deploy=False
+                )
+
+                # Validate
+                user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
+                custom_model = dr_client.fetch_custom_model_by_git_id(user_provided_id)
+                assert custom_model["trainingDatasetId"] == training_dataset_id
+                assert custom_model["trainingDataPartitionColumn"] == partition_column
+            finally:
+                cleanup_models(dr_client, workspace_path)
+
+        printout("Done")
+
+    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
+    def test_e2e_set_training_dataset_with_wrong_model_target_name(
+        self,
+        dr_client,
+        workspace_path,
+        git_repo,
+        model_metadata,
+        model_metadata_yaml_file,
+        main_branch_name,
+    ):
+        """
+        And end-to-end case to test a training dataset assignment for structured model, whose
+        definition initially contains wrong target name.
+        """
+
+        with temporarily_upload_training_dataset_for_structured_model(
+            dr_client, model_metadata_yaml_file, event_name="push"
+        ) as (training_dataset_id, partition_column):
+            try:
+                git_repo.git.add(model_metadata_yaml_file)
+                git_repo.git.commit("-m", "Update training / holdout dataset(s)")
+
+                printout(
+                    "Create a custom model with wrong target name. "
+                    "Run custom model GitHub action (push event) ..."
+                )
+
+                with temporarily_replace_schema_value(
+                    model_metadata_yaml_file,
+                    ModelSchema.SETTINGS_SECTION_KEY,
+                    ModelSchema.TARGET_NAME_KEY,
+                    new_value="wrong-target-name",
+                ):
+                    git_repo.git.add(model_metadata_yaml_file)
+                    git_repo.git.commit("-m", "Set wrong target name")
+
+                    with pytest.raises(DataRobotClientError) as ex:
+                        run_github_action(
+                            workspace_path, git_repo, main_branch_name, "push", is_deploy=False
+                        )
+                    assert ex.value.code == 422, ex.value
+                    assert (
+                        "Custom model's target is not found in the provided dataset"
+                        in ex.value.args[0]
+                    ), ex.value.args
+
+                git_repo.git.add(model_metadata_yaml_file)
+                git_repo.git.commit("-m", "Set valid target name")
+
+                printout("Run custom inference models GitHub action with proper target ...")
                 run_github_action(
                     workspace_path, git_repo, main_branch_name, "push", is_deploy=False
                 )

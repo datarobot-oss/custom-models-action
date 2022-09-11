@@ -648,8 +648,9 @@ class ModelController(ControllerBase):
         self._dr_client.run_custom_model_version_testing(model_id, model_version_id, model_info)
 
     def _update_settings(self, datarobot_custom_model, model_info):
-        self._update_training_and_holdout_datasets(datarobot_custom_model, model_info)
         self._update_model_settings(datarobot_custom_model, model_info)
+        # NOTE: training/holdout datasets update should always come after model's setting update
+        self._update_training_and_holdout_datasets(datarobot_custom_model, model_info)
 
     def _update_training_and_holdout_datasets(self, datarobot_custom_model, model_info):
         if model_info.is_unstructured:
