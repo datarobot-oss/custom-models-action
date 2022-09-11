@@ -43,18 +43,19 @@ def fixture_single_deployment_factory(workspace_path, single_model_factory):
 
     def _inner(name, write_metadata=True, user_provided_id=None):
         model_name = f"model_{name}"
-        model_metadata = single_model_factory(model_name, write_metadata)
+        model_metadata, _ = single_model_factory(model_name, write_metadata)
 
         single_deployment_metadata = {
             DeploymentSchema.DEPLOYMENT_ID_KEY: user_provided_id or str(uuid.uuid4()),
             DeploymentSchema.MODEL_ID_KEY: model_metadata[SharedSchema.MODEL_ID_KEY],
         }
 
+        deployment_yaml_filepath = None
         if write_metadata:
             deployment_yaml_filepath = workspace_path / model_name / "deployment.yaml"
             write_to_file(deployment_yaml_filepath, yaml.dump(single_deployment_metadata))
 
-        return single_deployment_metadata
+        return single_deployment_metadata, deployment_yaml_filepath
 
     yield _inner
 
@@ -107,6 +108,17 @@ class TestCustomInferenceDeployment:
         deployment_controller = DeploymentController(options, None, None)
         deployment_controller.scan_and_load_deployments_metadata()
         assert len(deployment_controller._deployments_info) == 0
+
+    def test_scan_and_load_deployments_empty_yaml_definition(self, options, single_model_factory):
+        """Test deployment' scanning and loading of empty yaml file."""
+
+        name = "model-1"
+        _, deployment_yaml_filepath = single_model_factory(name, write_metadata=True)
+        with open(deployment_yaml_filepath, "w", encoding="utf-8") as fd:
+            fd.write("")
+        deployment_controller = DeploymentController(options, None, None)
+        deployment_controller.scan_and_load_deployments_metadata()
+        assert len(deployment_controller.deployments_info) == 0
 
     def test_scan_and_load_already_exists_deployment(self, options, single_deployment_factory):
         """Tes scanning and loading of an already existing deployments with same IDs."""

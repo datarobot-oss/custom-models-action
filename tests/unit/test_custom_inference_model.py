@@ -51,6 +51,17 @@ class TestCustomInferenceModel:
         model_controller.scan_and_load_models_metadata()
         assert len(model_controller.models_info) == 0
 
+    def test_scan_and_load_models_empty_yaml_definition(self, options, single_model_factory):
+        """Test models' scanning and loading of empty yaml file."""
+
+        name = "model-1"
+        _, model_yaml_filepath = single_model_factory(name, write_metadata=True)
+        with open(model_yaml_filepath, "w", encoding="utf-8") as fd:
+            fd.write("")
+        model_controller = ModelController(options, None)
+        model_controller.scan_and_load_models_metadata()
+        assert len(model_controller.models_info) == 0
+
     @pytest.mark.parametrize("num_models", [1, 2, 3])
     def test_scan_and_load_models_from_multi_separate_yaml_files(
         self, options, single_model_factory, num_models

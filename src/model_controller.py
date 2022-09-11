@@ -111,7 +111,11 @@ class ControllerBase(ABC):
         yaml_files.extend(glob(f"{self._workspace_path}/**/*.yml", recursive=True))
         for yaml_path in yaml_files:
             with open(yaml_path, encoding="utf-8") as fd:
-                yield yaml_path, yaml.safe_load(fd)
+                yaml_content = yaml.safe_load(fd)
+                if not yaml_content:
+                    logger.warning("Detected an invalid or empty yaml file: %s", yaml_path)
+                else:
+                    yield yaml_path, yaml_content
 
     def _to_absolute(self, path, parent):
         match = re.match(r"^(/|\$ROOT/)", path)
