@@ -634,7 +634,8 @@ class DrClient:
             raise DataRobotClientError(
                 "Custom model version test failed. "
                 f"Response code: {response.status_code}. "
-                f"Response body: {response.text}."
+                f"Response body: {response.text}.",
+                code=response.status_code,
             )
         return response
 
@@ -754,7 +755,10 @@ class DrClient:
                 self.DATASET_UPLOAD_ROUTE, data=mp_encoder, headers=headers
             )
             if response.status_code != 202:
-                raise DataRobotClientError(f"Failed uploading dataset. Response: {response.text}")
+                raise DataRobotClientError(
+                    f"Failed uploading dataset. Response: " f"{response.text}",
+                    code=response.status_code,
+                )
         resource = self._wait_for_async_resolution(response.headers["Location"])
         dataset_id = resource.split("/")[-2]
         logger.debug("Dataset uploaded successfully (id: %s)", dataset_id)
@@ -772,7 +776,9 @@ class DrClient:
 
         response = self._http_requester.delete(f"{self.DATASETS_ROUTE}{dataset_id}/")
         if response.status_code != 204:
-            raise DataRobotClientError(f"Failed deleting dataset id '{dataset_id}'")
+            raise DataRobotClientError(
+                f"Failed deleting dataset id '{dataset_id}'", code=response.status_code
+            )
 
     def fetch_custom_model_deployments(self, model_ids):
         """
@@ -1273,6 +1279,7 @@ class DrClient:
                 "A deployment's model validation was failed. "
                 f"Response status: {response.status_code} "
                 f"Response body: {response.text}",
+                code=response.status_code,
             )
 
         validation_response = response.json()
@@ -1295,6 +1302,7 @@ class DrClient:
                 "Failed to replace a model in a deployment."
                 f"Response status: {response.status_code} "
                 f"Response body: {response.text}",
+                code=response.status_code,
             )
         location = self._wait_for_async_resolution(response.headers["Location"])
         response = self._http_requester.get(location, raw=True)
@@ -1343,6 +1351,7 @@ class DrClient:
                 "Failed to submit a challenger. "
                 f"Response status: {response.status_code} "
                 f"Response body: {response.text}",
+                code=response.status_code,
             )
         location = self._wait_for_async_resolution(response.headers["Location"])
         response = self._http_requester.get(location, raw=True)
@@ -1371,6 +1380,7 @@ class DrClient:
                 f"deployment_id: {deployment_id}, "
                 f"Response status: {response.status_code}, "
                 f"Response body: {response.text}",
+                code=response.status_code,
             )
         return response.json()["data"]
 
@@ -1417,6 +1427,7 @@ class DrClient:
                     f"DataRobot model ID: {datarobot_custom_model['id']}, "
                     f"Response status: {response.status_code}, "
                     f"Response body: {response.text}",
+                    code=response.status_code,
                 )
             return response.json()
         return None
@@ -1465,6 +1476,7 @@ class DrClient:
                     f"DataRobot model ID: {datarobot_custom_model['id']}. "
                     f"Response status: {response.status_code}. "
                     f"Response body: {response.text}.",
+                    code=response.status_code,
                 )
             location = self._wait_for_async_resolution(response.headers["Location"])
             response = self._http_requester.get(location, raw=True)
@@ -1505,6 +1517,7 @@ class DrClient:
                     f"DataRobot model ID: {datarobot_custom_model['id']}. "
                     f"Response status: {response.status_code}. "
                     f"Response body: {response.text}.",
+                    code=response.status_code,
                 )
             return response.json()
         return None
