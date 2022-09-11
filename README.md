@@ -323,6 +323,11 @@ test:
       total_prediction_requests: 50
 ```
 
+**NOTE**: the patterns used in the `exclude_glob_pattern` & `include_glob_pattern` fields are an
+extension to the common glob rules. A path that ends with `/` (slash), which means a directory,
+will automatically be regarded as suffixed with `**`. This means that the directory will be
+scanned recursively.
+
 ##### A Multi Models Definition
 Here is an example of a multi-models definition, which includes only mandatory fields:
 

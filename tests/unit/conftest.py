@@ -183,8 +183,8 @@ def fixture_single_model_factory(workspace_path, common_path_with_code):
         if with_include_glob:
             # noinspection PyTypeChecker
             single_model_metadata[ModelSchema.VERSION_KEY][ModelSchema.INCLUDE_GLOB_KEY] = [
-                "./**",
-                f"/{common_path_with_code.relative_to(workspace_path)}/**",
+                "./",
+                f"/{common_path_with_code.relative_to(workspace_path)}/",
             ]
         if with_exclude_glob:
             # noinspection PyTypeChecker

@@ -117,6 +117,10 @@ class ControllerBase(ABC):
                 else:
                     yield yaml_path, yaml_content
 
+    @staticmethod
+    def _make_directory_pattern_recursive(pattern):
+        return f"{pattern}**" if pattern.endswith("/") else pattern
+
     def _to_absolute(self, path, parent):
         match = re.match(r"^(/|\$ROOT/)", path)
         if match:
@@ -220,6 +224,9 @@ class ModelController(ControllerBase):
             included_paths = set([])
             if include_glob_patterns:
                 for include_glob_pattern in include_glob_patterns:
+                    include_glob_pattern = self._make_directory_pattern_recursive(
+                        include_glob_pattern
+                    )
                     include_glob_pattern = self._to_absolute(
                         include_glob_pattern, model_info.model_path
                     )
@@ -232,6 +239,7 @@ class ModelController(ControllerBase):
                 ModelSchema.EXCLUDE_GLOB_KEY
             ]
             for exclude_glob_pattern in exclude_glob_patterns:
+                exclude_glob_pattern = self._make_directory_pattern_recursive(exclude_glob_pattern)
                 exclude_glob_pattern = self._to_absolute(
                     exclude_glob_pattern, model_info.model_path
                 )
