@@ -386,21 +386,28 @@ def run_github_action(
     ), github_env_set(
         "GITHUB_REF_NAME", ref_name
     ):
+        datarobot_webserver = os.environ.get("DATAROBOT_WEBSERVER")
         args = [
             "--webserver",
-            os.environ.get("DATAROBOT_WEBSERVER"),
+            datarobot_webserver,
             "--api-token",
             os.environ.get("DATAROBOT_API_TOKEN"),
             "--branch",
             main_branch_name,
             "--allow-model-deletion",
-            "--skip-cert-verification",
         ]
+
         if not is_deploy:
             args.append("--models-only")
 
         if allow_deployment_deletion:
             args.append("--allow-deployment-deletion")
+
+        if not any(
+            webserver_with_cert in datarobot_webserver
+            for webserver_with_cert in ["https://app.datarobot.com", "https://app.eu.datarobot.com"]
+        ):
+            args.append("--skip-cert-verification")
 
         main(args)
 
