@@ -382,6 +382,31 @@ class TestCustomInferenceDeployment:
             deployment_controller.fetch_deployments_from_datarobot()
             deployment_controller.validate_deployments_integrity()
 
+    @pytest.mark.usefixtures("no_deployments")
+    def test_save_statistics(self, options):
+        """A case to test deployment's statistics saving."""
+
+        with patch("dr_client.DrClient"):
+            deployment_controller = DeploymentController(options, None, None)
+
+            label = DeploymentController.DEPLOYMENTS_LABEL
+            deployment_controller._stats.save(label)
+            for param in ["total-affected", "total-created", "total-created"]:
+                assert f"{param}-{label}=0\n" in GitHubEnv.github_output()
+            assert "total-created-model-versions=0\n" not in GitHubEnv.github_output()
+
+            desired_value = 5
+            for param in ["total_affected", "total_created", "total_created"]:
+                setattr(deployment_controller._stats, param, desired_value)
+
+            deployment_controller._stats.save(label)
+
+            for param in ["total-affected", "total-created", "total-created"]:
+                assert f"{param}-{label}={desired_value}\n" in GitHubEnv.github_output()
+            assert (
+                f"total-created-model-versions={desired_value}\n" not in GitHubEnv.github_output()
+            )
+
     @pytest.mark.usefixtures("workspace_path", "mock_github_env_variables")
     def test_deployments_integrity_validation_no_associated_models(
         self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
@@ -398,7 +423,7 @@ class TestCustomInferenceDeployment:
             with_associated_dr_models=False,
         ):
             custom_inference_deployment = CustomModelsAction(options)
-            with patch.object(CustomModelsAction, "_print_statistics"), patch.object(
+            with patch.object(CustomModelsAction, "_save_statistics"), patch.object(
                 ModelController, "fetch_models_from_datarobot"
             ):
                 with pytest.raises(AssociatedModelNotFound):

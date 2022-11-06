@@ -61,3 +61,15 @@ class GitHubEnv:
         """The default location of the repository when using the checkout action."""
 
         return Path(os.environ.get("GITHUB_WORKSPACE"))
+
+    @staticmethod
+    def github_output():
+        """The GitHub output environment variable that holds output parameter values."""
+
+        return os.environ.get("GITHUB_OUTPUT", "")
+
+    @classmethod
+    def set_output_param(cls, name, value):
+        """Set an output parameter that can be referenced by a follow-up step."""
+
+        os.environ["GITHUB_OUTPUT"] = f"{cls.github_output()}{name}={value}\n"
