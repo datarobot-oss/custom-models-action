@@ -16,6 +16,7 @@ import os
 import sys
 
 from common.exceptions import GenericException
+from common.github_env import GitHubEnv
 from custom_models_action import CustomModelsAction
 
 logger = logging.getLogger()
@@ -103,9 +104,8 @@ def main(args=None):
 
     try:
         CustomModelsAction(options).run()
-        print(
-            "::set-output name=message::"
-            "Custom inference model GitHub action completed with success.\n"
+        GitHubEnv.set_output_param(
+            "message", "Custom inference model GitHub action completed with success."
         )
     except GenericException as ex:
         # Avoid printing the stacktrace

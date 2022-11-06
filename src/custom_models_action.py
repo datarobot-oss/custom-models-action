@@ -78,7 +78,7 @@ class CustomModelsAction:
                 self.model_controller.handle_deleted_models()
 
         finally:
-            self._print_statistics()
+            self._save_statistics()
 
     def _prerequisites(self):
         """Check prerequisites before execution."""
@@ -124,7 +124,7 @@ class CustomModelsAction:
                 return False
         return True
 
-    def _print_statistics(self):
-        self.model_controller.print_statistics()
+    def _save_statistics(self):
+        self.model_controller.save_statistics()
         if self.deployment_controller:
-            self.deployment_controller.print_statistics()
+            self.deployment_controller.save_statistics()

@@ -58,22 +58,15 @@ class ControllerBase(ABC):
         total_deleted: int = 0
         total_created_versions: int = 0
 
-        def print(self, label):
-            """
-            Print the statistics to the standard output. This is how the GitHub action
-            exposes statistics to other steps in the workflow.
-            """
+        def save(self, label):
+            """Save the statistics to the GitHub environment."""
 
-            print(
-                f"""
-                ::set-output name=total-affected-{label}::{self.total_affected}
-                ::set-output name=total-created-{label}::{self.total_created}
-                ::set-output name=total-deleted-{label}::{self.total_deleted}
-                """
-            )
+            GitHubEnv.set_output_param(f"total-affected-{label}", self.total_affected)
+            GitHubEnv.set_output_param(f"total-created-{label}", self.total_created)
+            GitHubEnv.set_output_param(f"total-deleted-{label}", self.total_deleted)
             if label == ControllerBase.MODELS_LABEL:
-                print(
-                    f"::set-output name=total-created-model-versions::{self.total_created_versions}"
+                GitHubEnv.set_output_param(
+                    "total-created-model-versions", self.total_created_versions
                 )
 
     def __init__(self, options, repo):
@@ -130,9 +123,10 @@ class ControllerBase(ABC):
             path = f"{parent}/{path}"
         return path
 
-    def print_statistics(self):
-        """Print the statistics that are configured by the GitHub action to the standard output."""
-        self.stats.print(self._label())
+    def save_statistics(self):
+        """Save the statistics that are configured by the GitHub action."""
+
+        self.stats.save(self._label())
 
     @abstractmethod
     def _label(self):

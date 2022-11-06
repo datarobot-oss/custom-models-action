@@ -191,6 +191,30 @@ class TestCustomInferenceModel:
             )
             assert num_affected_models == reference
 
+    @pytest.mark.usefixtures("no_models")
+    def test_save_statistics(self, options):
+        """A case to test custom inference model's statistics saving."""
+
+        with patch("dr_client.DrClient"):
+            model_controller = ModelController(options, repo=None)
+
+            label = ModelController.MODELS_LABEL
+            model_controller._stats.save(label)
+            for param in ["total-affected", "total-created", "total-created"]:
+                assert f"{param}-{label}=0\n" in GitHubEnv.github_output()
+            assert "total-created-model-versions=0\n" in GitHubEnv.github_output()
+
+            desired_value = 5
+            for param in ["total_affected", "total_created", "total_created"]:
+                setattr(model_controller._stats, param, desired_value)
+            setattr(model_controller._stats, "total_created_versions", desired_value)
+
+            model_controller._stats.save(label)
+
+            for param in ["total-affected", "total-created", "total-created"]:
+                assert f"{param}-{label}={desired_value}\n" in GitHubEnv.github_output()
+            assert f"total-created-model-versions={desired_value}\n" in GitHubEnv.github_output()
+
 
 class TestCustomInferenceModelDeletion:
     """Contains unit-tests for model deletion."""
