@@ -9,6 +9,7 @@
 """A module that contains unit-tests for the custom inference model deployment GitHub action."""
 
 import contextlib
+import re
 import uuid
 
 import pytest
@@ -382,6 +383,38 @@ class TestCustomInferenceDeployment:
             deployment_controller.fetch_deployments_from_datarobot()
             deployment_controller.validate_deployments_integrity()
 
+    @pytest.mark.usefixtures("no_deployments")
+    def test_save_statistics(self, options, github_output):
+        """A case to test deployment's statistics saving."""
+
+        with patch("dr_client.DrClient"):
+            deployment_controller = DeploymentController(options, None, None)
+
+            label = DeploymentController.DEPLOYMENTS_LABEL
+            deployment_controller._stats.save(label)
+            with open(github_output, "r", encoding="utf-8") as file:
+                github_output_content = file.read()
+
+            for param in ["total-affected", "total-created", "total-created"]:
+                assert re.search(f"^{param}-{label}=0$", github_output_content, flags=re.M)
+            assert not re.search(
+                "^total-created-model-versions=0$", github_output_content, flags=re.M
+            )
+
+            desired_value = 5
+            for param in ["total_affected", "total_created", "total_created"]:
+                setattr(deployment_controller._stats, param, desired_value)
+
+            deployment_controller._stats.save(label)
+            with open(github_output, "r", encoding="utf-8") as file:
+                github_output_content = file.read()
+
+            for param in ["total-affected", "total-created", "total-created"]:
+                assert re.search(f"{param}-{label}={desired_value}$", github_output_content, re.M)
+            assert not re.search(
+                f"^total-created-model-versions={desired_value}$", github_output_content, flags=re.M
+            )
+
     @pytest.mark.usefixtures("workspace_path", "mock_github_env_variables")
     def test_deployments_integrity_validation_no_associated_models(
         self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
@@ -398,7 +431,7 @@ class TestCustomInferenceDeployment:
             with_associated_dr_models=False,
         ):
             custom_inference_deployment = CustomModelsAction(options)
-            with patch.object(CustomModelsAction, "_print_statistics"), patch.object(
+            with patch.object(CustomModelsAction, "_save_statistics"), patch.object(
                 ModelController, "fetch_models_from_datarobot"
             ):
                 with pytest.raises(AssociatedModelNotFound):
