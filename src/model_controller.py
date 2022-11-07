@@ -492,17 +492,16 @@ class ModelController(ControllerBase):
                             item["filePath"],
                         )
 
-    def _file_path_belongs_to_model(self, path_under_model_to_check, model_info):
+    @staticmethod
+    def _file_path_belongs_to_model(path_under_model_to_check, model_info):
         logger.debug(
             "Check if file path belongs to a model. Model %s, Path under model: %s.",
             model_info.user_provided_id,
             path_under_model_to_check,
         )
-        for local_file_path in model_info.model_file_paths:
-            existing_path_under_model, _ = ModelFilePath.get_path_under_model(
-                local_file_path, model_info.model_path, self._workspace_path
-            )
-            if path_under_model_to_check == existing_path_under_model:
+        for _, model_filepath in model_info.model_file_paths.items():
+            logger.debug("Checking model's file: %s.", model_filepath.under_model)
+            if path_under_model_to_check == model_filepath.under_model:
                 logger.debug(
                     "Path belongs to a model. Model: %s, Path under model: %s.",
                     model_info.user_provided_id,
