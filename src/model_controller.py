@@ -431,7 +431,7 @@ class ModelController(ControllerBase):
                 GitHubEnv.github_sha(), from_commit_sha
             )
             logger.debug(
-                "Model %s was changed since commit %s. Changed files: %s. Deleted files: %s.",
+                "Model: %s, referenced commit %s. changed files: %s. deleted files: %s.",
                 model_info.user_provided_id,
                 from_commit_sha,
                 changed_files,
@@ -493,12 +493,27 @@ class ModelController(ControllerBase):
                         )
 
     def _file_path_belongs_to_model(self, path_under_model_to_check, model_info):
+        logger.debug(
+            "Check if file path belongs to a model. Model %s, Path under model: %s.",
+            model_info.user_provided_id,
+            path_under_model_to_check,
+        )
         for local_file_path in model_info.model_file_paths:
             existing_path_under_model, _ = ModelFilePath.get_path_under_model(
                 local_file_path, model_info.model_path, self._workspace_path
             )
             if path_under_model_to_check == existing_path_under_model:
+                logger.debug(
+                    "Path belongs to a model. Model: %s, Path under model: %s.",
+                    model_info.user_provided_id,
+                    path_under_model_to_check,
+                )
                 return True
+        logger.debug(
+            "Path does not belong to a model. Model %s, Path under model: %s.",
+            model_info.user_provided_id,
+            path_under_model_to_check,
+        )
         return False
 
     def handle_model_changes(self):
