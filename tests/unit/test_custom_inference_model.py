@@ -375,7 +375,7 @@ class TestCustomInferenceModelDeletion:
 class TestGlobPatterns:
     """Contains unit-test for glob patters."""
 
-    @pytest.mark.usefixtures("common_path_with_code")
+    @pytest.mark.usefixtures("common_path_with_code", "github_output")
     @pytest.mark.parametrize("num_models", [1, 2, 3])
     @pytest.mark.parametrize("is_multi", [True, False], ids=["multi", "single"])
     @pytest.mark.parametrize(
