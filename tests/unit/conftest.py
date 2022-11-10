@@ -456,23 +456,3 @@ def paginated_url_factory(webserver):
         return f"{webserver}/api/v2/{base_url}{suffix}"
 
     return _inner
-
-
-@pytest.fixture
-def github_output():
-    """
-    A fixture to emulate the 'GITHUB_OUTPUT' environment variable, which points to and
-    existing output file.
-    """
-
-    prev_github_output = os.environ.get("GITHUB_OUTPUT")
-    github_output_filepath = Path("/tmp/github_output")
-    with open(github_output_filepath, "w", encoding="utf-8"), patch.dict(
-        os.environ, {"GITHUB_OUTPUT": str(github_output_filepath)}
-    ):
-        yield github_output_filepath
-    os.remove(github_output_filepath)
-    if prev_github_output is None:
-        os.environ.pop("GITHUB_OUTPUT", None)
-    else:
-        os.environ["GITHUB_OUTPUT"] = prev_github_output

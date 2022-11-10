@@ -13,6 +13,7 @@ import json
 import pytest
 import responses
 from bson import ObjectId
+from mock import patch
 
 from common.exceptions import DataRobotClientError
 from dr_api_attrs import DrApiAttrs
@@ -34,6 +35,27 @@ def fixture_api_token():
     """A fixture to return a fake API token."""
 
     return "123abc"
+
+
+@pytest.fixture(name="dr_client")
+def fixture_dr_client(webserver, api_token):
+    """A fixture to create the DataRobot client."""
+
+    return DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False)
+
+
+@pytest.fixture(name="custom_model_id")
+def fixture_custom_model_id():
+    """A fixture to generate a fake custom model ID."""
+
+    return str(ObjectId())
+
+
+@pytest.fixture(name="custom_model_version_id")
+def fixture_custom_model_version_id():
+    """A fixture to generate a fake custom model version ID."""
+
+    return str(ObjectId())
 
 
 @pytest.fixture(name="minimal_regression_model_info")
@@ -192,8 +214,7 @@ class TestCustomModelRoutes:
     @responses.activate
     def test_create_custom_model_success(
         self,
-        webserver,
-        api_token,
+        dr_client,
         regression_model_info,
         custom_models_url,
         regression_model_response,
@@ -201,23 +222,15 @@ class TestCustomModelRoutes:
         """A case to test a successful custom model creation."""
 
         responses.add(responses.POST, custom_models_url, json=regression_model_response, status=201)
-        dr_client = DrClient(
-            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
-        )
         custom_model = dr_client.create_custom_model(regression_model_info)
         assert custom_model is not None
 
     @responses.activate
-    def test_create_custom_model_failure(
-        self, webserver, api_token, regression_model_info, custom_models_url
-    ):
+    def test_create_custom_model_failure(self, dr_client, regression_model_info, custom_models_url):
         """A case to test a failure in custom model creation."""
 
         status_code = 422
         responses.add(responses.POST, custom_models_url, json={}, status=status_code)
-        dr_client = DrClient(
-            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
-        )
         with pytest.raises(DataRobotClientError) as ex:
             dr_client.create_custom_model(regression_model_info)
         assert ex.value.code == status_code
@@ -225,8 +238,7 @@ class TestCustomModelRoutes:
     @responses.activate
     def test_delete_custom_model_success(
         self,
-        webserver,
-        api_token,
+        dr_client,
         custom_models_url,
         custom_models_url_factory,
         regression_model_response_factory,
@@ -239,16 +251,12 @@ class TestCustomModelRoutes:
         expected_model = expected_model[0][0]
         delete_url = f"{custom_models_url}{expected_model['id']}/"
         responses.add(responses.DELETE, delete_url, json={}, status=204)
-        dr_client = DrClient(
-            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
-        )
         dr_client.delete_custom_model_by_user_provided_id(expected_model["userProvidedId"])
 
     @responses.activate
     def test_delete_custom_model_failure(
         self,
-        webserver,
-        api_token,
+        dr_client,
         custom_models_url,
         custom_models_url_factory,
         regression_model_response_factory,
@@ -262,9 +270,6 @@ class TestCustomModelRoutes:
         delete_url = f"{custom_models_url}{expected_model['id']}/"
         status_code = 409
         responses.add(responses.DELETE, delete_url, json={}, status=status_code)
-        dr_client = DrClient(
-            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
-        )
         with pytest.raises(DataRobotClientError) as ex:
             dr_client.delete_custom_model_by_user_provided_id(expected_model["userProvidedId"])
         assert ex.value.code == status_code
@@ -282,8 +287,7 @@ class TestCustomModelRoutes:
     @responses.activate
     def test_fetch_custom_models_success(
         self,
-        webserver,
-        api_token,
+        dr_client,
         total_num_models,
         num_models_in_page,
         custom_models_url_factory,
@@ -296,9 +300,6 @@ class TestCustomModelRoutes:
             num_models_in_page,
             custom_models_url_factory,
             regression_model_response_factory,
-        )
-        dr_client = DrClient(
-            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
         )
         total_models_response = dr_client.fetch_custom_models()
         assert len(total_models_response) == total_num_models
@@ -313,12 +314,6 @@ class TestCustomModelRoutes:
 
 class TestCustomModelVersionRoutes:
     """Contains cases to test DataRobot custom model version routes."""
-
-    @pytest.fixture
-    def custom_model_id(self):
-        """A fixture to generate a fake custom model ID."""
-
-        return str(ObjectId())
 
     @pytest.fixture
     def main_branch_commit_sha(self):
@@ -353,40 +348,41 @@ class TestCustomModelVersionRoutes:
         def _inner(version_id):
             return {
                 "id": version_id,
-                "custom_model_id": custom_model_id,
+                "customModelId": custom_model_id,
                 "created": "2022-1-06 13:36:00",
                 "items": [
                     {
                         "id": "629741dc5621557833bd5aa1",
-                        "file_name": "custom.py",
-                        "file_path": "custom.py",
-                        "file_source": "s3",
+                        "fileName": "custom.py",
+                        "filePath": "custom.py",
+                        "fileSource": "s3",
                     },
                     {
                         "id": "629741dc5621557833bd5aa2",
-                        "file_name": "util/helper.py",
-                        "file_path": "util/helper.py",
-                        "file_source": "s3",
+                        "fileName": "util/helper.py",
+                        "filePath": "util/helper.py",
+                        "fileSource": "s3",
                     },
                 ],
-                "is_frozen": False,
-                "version_major": 1,
-                "version_minor": 2,
+                "isFrozen": False,
+                "versionMajor": 1,
+                "versionMinor": 2,
                 "label": "1.2",
                 "baseEnvironmentId": "629741dc5621557833bd5aa3",
-                "git_model_version": {
-                    "ref_name": ref_name,
-                    "commit_url": commit_url,
-                    "main_branch_commit_sha": main_branch_commit_sha,
-                    "pull_request_commit_sha": pull_request_commit_sha,
+                "gitModelVersion": {
+                    "refName": ref_name,
+                    "commitUrl": commit_url,
+                    "mainBranchCommitSha": main_branch_commit_sha,
+                    "pullRequestCommitSha": pull_request_commit_sha,
                 },
+                "dependencies": [],
             }
 
         return _inner
 
     @pytest.fixture
     def regression_model_version_response(self, regression_model_version_response_factory):
-        """A fixture to return a specific Regression model version with given ID."""
+        """A fixture to return a specific Regression model version."""
 
         return regression_model_version_response_factory(str(ObjectId()))
 
@@ -490,8 +486,7 @@ class TestCustomModelVersionRoutes:
     @responses.activate
     def test_create_custom_model_version_success(
         self,
-        webserver,
-        api_token,
+        dr_client,
         custom_model_id,
         regression_model_info,
         custom_models_version_url_factory,
@@ -505,9 +500,6 @@ class TestCustomModelVersionRoutes:
 
         url = custom_models_version_url_factory()
         responses.add(responses.POST, url, json=regression_model_version_response, status=201)
-        dr_client = DrClient(
-            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
-        )
         version_id = dr_client.create_custom_model_version(
             custom_model_id,
             regression_model_info,
@@ -521,8 +513,7 @@ class TestCustomModelVersionRoutes:
     @responses.activate
     def test_create_custom_model_version_failure(
         self,
-        webserver,
-        api_token,
+        dr_client,
         custom_model_id,
         regression_model_info,
         custom_models_version_url_factory,
@@ -536,9 +527,6 @@ class TestCustomModelVersionRoutes:
         status_code = 422
         url = custom_models_version_url_factory()
         responses.add(responses.POST, url, json={}, status=status_code)
-        dr_client = DrClient(
-            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
-        )
         with pytest.raises(DataRobotClientError) as ex:
             dr_client.create_custom_model_version(
                 custom_model_id,
@@ -563,8 +551,7 @@ class TestCustomModelVersionRoutes:
     @responses.activate
     def test_fetch_custom_model_versions_success(
         self,
-        webserver,
-        api_token,
+        dr_client,
         custom_model_id,
         total_num_model_versions,
         num_model_versions_in_page,
@@ -578,9 +565,6 @@ class TestCustomModelVersionRoutes:
             num_model_versions_in_page,
             custom_models_version_url_factory,
             regression_model_version_response_factory,
-        )
-        dr_client = DrClient(
-            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
         )
         total_versions_response = dr_client.fetch_custom_model_versions(custom_model_id)
         assert len(total_versions_response) == total_num_model_versions
@@ -659,6 +643,254 @@ class TestCustomModelVersionRoutes:
             assert not parameters
 
 
+class TestCustomModelVersionDependencies:
+    """
+    Contains unit-test to test the DataRobot custom model version dependencies and depdency
+    environment.
+    """
+
+    @pytest.fixture
+    def regression_model_version_factory(self, custom_model_id, custom_model_version_id):
+        """A factory fixture to create a Regression model version w/o dependencies."""
+
+        def _inner(with_dependencies):
+            cm_version_response = {
+                "id": custom_model_version_id,
+                "customModelId": custom_model_id,
+                "created": "2022-1-06 13:36:00",
+                "items": [
+                    {
+                        "id": "629741dc5621557833bd5aa1",
+                        "fileName": "custom.py",
+                        "filePath": "custom.py",
+                        "fileSource": "s3",
+                    },
+                ],
+                "isFrozen": False,
+                "versionMajor": 1,
+                "versionMinor": 2,
+                "label": "1.2",
+                "baseEnvironmentId": "629741dc5621557833bd5aa3",
+            }
+
+            if with_dependencies:
+                cm_version_response["items"].append(
+                    {
+                        "id": "629741dc5621557833bd5aa2",
+                        "fileName": "requirements.txt",
+                        "filePath": "requirements.txt",
+                        "fileSource": "s3",
+                    },
+                )
+                cm_version_response["dependencies"] = [
+                    {
+                        "packageName": "requests",
+                        "line": "requests == 2.28.1",
+                        "lineNumber": 2,
+                        "constraints": [{"version": "2.28.1", "constraintType": "=="}],
+                    }
+                ]
+            else:
+                cm_version_response["dependencies"] = []
+
+            return cm_version_response
+
+        return _inner
+
+    @pytest.fixture
+    def dependency_environment_build_response_factory(self):
+        """A fixture factory to create a dependency environment build response."""
+
+        def _inner(build_status):
+            """
+            Returns build status response.
+
+            Parameters
+            ----------
+            build_status : str
+                The build status: one of ["submitted", "processing", "success", "failed"].
+
+            Returns
+            -------
+            dict :
+                Build status response.
+
+            """
+            assert build_status in ["submitted", "processing", "success", "failed"]
+            return {
+                "buildStatus": build_status,
+                "buildStart": "2022-11-08T13:47:26.577146Z",
+                "buildEnd": (
+                    None
+                    if build_status in ["submitted", "processing"]
+                    else "2022-11-08T18:47:26.577146Z"
+                ),
+                "buildLogLocation": (
+                    None
+                    if build_status in ["submitted", "processing"]
+                    else "https://dr/api/v2/customModels/6357/versions/636/dependencyBuildLog/"
+                ),
+            }
+
+        return _inner
+
+    @pytest.fixture
+    def dependency_build_url(self, webserver, custom_model_id, custom_model_version_id):
+        """A fixture to return the dependency environment build URL."""
+
+        url_path = DrClient.CUSTOM_MODELS_VERSION_DEPENDENCY_BUILD_ROUTE.format(
+            model_id=custom_model_id, model_ver_id=custom_model_version_id
+        )
+        return f"{webserver}/api/v2/{url_path}"
+
+    def test_dependency_environment_build_is_not_required(
+        self, dr_client, regression_model_version_factory
+    ):
+        """Test the case in which a dependency environment built is not required."""
+
+        cm_version = regression_model_version_factory(with_dependencies=False)
+        with patch.object(
+            DrClient, "_dependency_environment_already_built_or_in_progress"
+        ) as mock_method:
+            dr_client.build_dependency_environment_if_required(cm_version)
+            mock_method.assert_not_called()
+
+    @pytest.mark.parametrize("build_status", ["submitted", "processing", "success", "failed"])
+    @responses.activate
+    def test_dependency_environment_was_built_or_in_progress(
+        self,
+        dr_client,
+        dependency_build_url,
+        regression_model_version_factory,
+        dependency_environment_build_response_factory,
+        build_status,
+    ):
+        """
+        Test the case in which a dependency environment build was already completed or in progress.
+        """
+
+        build_status_response = dependency_environment_build_response_factory(build_status)
+        response = responses.get(dependency_build_url, json=build_status_response, status=200)
+        cm_version = regression_model_version_factory(with_dependencies=True)
+
+        with patch.object(DrClient, "_monitor_dependency_environment_building") as mock_method:
+            dr_client.build_dependency_environment_if_required(cm_version)
+            assert response.call_count == 1
+            mock_method.assert_not_called()
+
+    @responses.activate
+    def test_dependency_environment_build_started_and_succeeded(
+        self,
+        dr_client,
+        custom_model_version_id,
+        dependency_build_url,
+        regression_model_version_factory,
+        dependency_environment_build_response_factory,
+    ):
+        """
+        Test the case in which a dependency environment build was submitted and eventually
+        succeeded.
+        """
+
+        response_objs = self._setup_ordered_responses(
+            custom_model_version_id,
+            dependency_build_url,
+            dependency_environment_build_response_factory,
+            is_success=True,
+        )
+        cm_version = regression_model_version_factory(with_dependencies=True)
+        with patch("time.sleep", return_value=None):
+            dr_client.build_dependency_environment_if_required(cm_version)
+        for response_obj in response_objs:
+            assert response_obj.call_count == 1
+
+    @staticmethod
+    def _setup_ordered_responses(
+        custom_model_version_id,
+        dependency_build_url,
+        dependency_environment_build_response_factory,
+        is_success,
+    ):
+        build_status = "success" if is_success else "failed"
+        ordered_responses = [
+            (
+                responses.GET,
+                {
+                    "message": f"Custom model version {custom_model_version_id} build has not "
+                    "been started"
+                },
+                422,
+            ),
+            (
+                responses.POST,
+                {
+                    "buildStatus": "submitted",
+                    "buildStart": "2022-11-08T13:47:26.577146Z",
+                    "buildEnd": None,
+                    "buildLogLocation": None,
+                },
+                202,
+            ),
+            (responses.GET, dependency_environment_build_response_factory("submitted"), 200),
+            (responses.GET, dependency_environment_build_response_factory("processing"), 200),
+            (responses.GET, dependency_environment_build_response_factory("processing"), 200),
+            (responses.GET, dependency_environment_build_response_factory(build_status), 200),
+        ]
+        response_objs = []
+        for method, response_json, status_code in ordered_responses:
+            response_obj = responses.add(  # pylint: disable=assignment-from-none
+                method, dependency_build_url, json=response_json, status=status_code
+            )
+            response_objs.append(response_obj)
+        return response_objs
+
+    @responses.activate
+    def test_dependency_environment_build_started_and_failed(
+        self,
+        webserver,
+        dr_client,
+        custom_model_id,
+        custom_model_version_id,
+        dependency_build_url,
+        regression_model_version_factory,
+        dependency_environment_build_response_factory,
+    ):
+        """
+        Test the case in which a dependency environment build was submitted but eventually failed.
+        """
+
+        response_objs = self._setup_ordered_responses(
+            custom_model_version_id,
+            dependency_build_url,
+            dependency_environment_build_response_factory,
+            is_success=False,
+        )
+        url_sub_path = DrClient.CUSTOM_MODELS_VERSION_DEPENDENCY_BUILD_LOG_ROUTE.format(
+            model_id=custom_model_id, model_ver_id=custom_model_version_id
+        )
+        dependency_build_log_url = f"{webserver}/api/v2/{url_sub_path}"
+        build_error_message = """
+        Step 1/4 : FROM registry.cm-staging.int.datarobot.com/custom-models/base-image:6356
+         ---> 8b6667fecb60
+        Step 2/4 : RUN pip install   "requests==2.30.0"
+         ---> Running in c4b112ff358c
+        ERROR: Could not find a version that satisfies the requirement requests==2.30.0
+        ERROR: No matching distribution found for requests==2.30.0
+        [notice] A new release of pip available: 22.3 -> 22.3.1
+        [notice] To update, run: python3 -m pip install --upgrade pip
+        Removing intermediate container c4b112ff358c
+        """
+        response_obj = responses.get(dependency_build_log_url, body=build_error_message, status=200)
+
+        cm_version = regression_model_version_factory(with_dependencies=True)
+        with patch("time.sleep", return_value=None), pytest.raises(DataRobotClientError) as ex:
+            dr_client.build_dependency_environment_if_required(cm_version)
+        assert build_error_message in str(ex.value)
+        assert response_obj.call_count == 1
+        for response_obj in response_objs:
+            assert response_obj.call_count == 1
+
+
 class TestDeploymentRoutes:
     """Contains unit-tests to test the DataRobot deployment routes."""
 
@@ -694,8 +926,7 @@ class TestDeploymentRoutes:
     @responses.activate
     def test_fetch_deployments_success(
         self,
-        webserver,
-        api_token,
+        dr_client,
         total_num_deployments,
         num_deployments_in_page,
         deployments_url_factory,
@@ -708,9 +939,6 @@ class TestDeploymentRoutes:
             num_deployments_in_page,
             deployments_url_factory,
             deployment_response_factory,
-        )
-        dr_client = DrClient(
-            datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False
         )
         total_deployments_response = dr_client.fetch_deployments()
         assert len(total_deployments_response) == total_num_deployments

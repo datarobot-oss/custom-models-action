@@ -545,6 +545,8 @@ class ModelController(ControllerBase):
                         custom_model_id,
                         latest_version["id"],
                     )
+
+                    self._dr_client.build_dependency_environment_if_required(latest_version)
                 else:
                     if GitHubEnv.is_push():
                         # Upon pushing to the main branch, If the model was somehow affected by the
