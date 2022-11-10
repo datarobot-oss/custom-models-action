@@ -465,11 +465,14 @@ def github_output():
     existing output file.
     """
 
-    github_output_filepath = Path("/tmp/github_output")
     prev_github_output = os.environ.get("GITHUB_OUTPUT")
+    github_output_filepath = Path("/tmp/github_output")
     with open(github_output_filepath, "w", encoding="utf-8"), patch.dict(
         os.environ, {"GITHUB_OUTPUT": str(github_output_filepath)}
     ):
         yield github_output_filepath
     os.remove(github_output_filepath)
-    os.environ["GITHUB_OUTPUT"] = prev_github_output
+    if prev_github_output is None:
+        os.environ.pop("GITHUB_OUTPUT", None)
+    else:
+        os.environ["GITHUB_OUTPUT"] = prev_github_output
