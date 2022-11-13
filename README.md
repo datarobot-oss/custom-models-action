@@ -172,7 +172,7 @@ embedded in the GitHub workflow definition:
 
               - name: DataRobot Custom Models Action
                 id: datarobot-custom-models-action
-                uses: datarobot/custom-models-action@v1.0.0
+                uses: datarobot/custom-models-action@v1.1.0
                 with:
                   api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
                   webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
@@ -186,6 +186,8 @@ embedded in the GitHub workflow definition:
      by the 'push' event.
    - The action scans the repository files therefore it is required to use the `actions/checkout@v3`
      action in a step before DataRobot action.
+   - The `custom-models-action@1.1.0` link refers to a specific historic release. You might want
+     to look at newer versions in the [RELEASES.md](RELEASES.md).
    - There are two actions' input arguments that are used to establish a communication with
      DataRobot system. They should reside in the repository "Secrets" section:
      - `DATAROBOT_API_TOKEN` - the API token that is used to validate credentials with DataRobot
@@ -443,7 +445,7 @@ jobs:
 
       - name: DataRobot Custom Models Action
         id: datarobot-custom-models-action
-        uses: datarobot/custom-models-action@v1.0.0
+        uses: datarobot/custom-models-action@v1.1.0
         with:
           api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
           webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
