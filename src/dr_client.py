@@ -39,6 +39,10 @@ class DrClient:
     CUSTOM_MODEL_ROUTE = CUSTOM_MODELS_ROUTE + "{model_id}/"
     CUSTOM_MODELS_VERSIONS_ROUTE = CUSTOM_MODEL_ROUTE + "versions/"
     CUSTOM_MODELS_VERSION_ROUTE = CUSTOM_MODEL_ROUTE + "versions/{model_ver_id}/"
+    CUSTOM_MODELS_VERSION_DEPENDENCY_BUILD_ROUTE = CUSTOM_MODELS_VERSION_ROUTE + "dependencyBuild/"
+    CUSTOM_MODELS_VERSION_DEPENDENCY_BUILD_LOG_ROUTE = (
+        CUSTOM_MODELS_VERSION_ROUTE + "dependencyBuildLog/"
+    )
     CUSTOM_MODELS_TEST_ROUTE = "customModelTests/"
     CUSTOM_MODEL_DEPLOYMENTS_ROUTE = "customModelDeployments/"
     CUSTOM_MODEL_TRAINING_DATA = CUSTOM_MODEL_ROUTE + "trainingData/"
@@ -529,12 +533,112 @@ class DrClient:
         response = self._http_requester.patch(url, json=payload)
         if response.status_code != 200:
             raise DataRobotClientError(
-                f"Failed to update custom model version main branch commit SHA. "
+                "Failed to update custom model version main branch commit SHA. "
                 f"Response status: {response.status_code} "
                 f"Response body: {response.text}",
                 code=response.status_code,
             )
         return response.json()
+
+    def get_custom_model_version_dependency_build_info(self, datarobot_custom_model_version):
+        """
+        Gets a custom model version dependency build information.
+
+        Parameters
+        ----------
+        datarobot_custom_model_version : dict
+            A DataRobot custom model version entity.
+        """
+
+        url = self.CUSTOM_MODELS_VERSION_DEPENDENCY_BUILD_ROUTE.format(
+            model_id=datarobot_custom_model_version["customModelId"],
+            model_ver_id=datarobot_custom_model_version["id"],
+        )
+        response = self._http_requester.get(url)
+        if response.status_code != 200:
+            raise DataRobotClientError(
+                "A custom model version dependency environment was not built yet. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+
+        return response.json()
+
+    def build_dependency_environment_if_required(self, datarobot_custom_model_version):
+        """
+        Builds a dedicated environment, which will be associated with the given custom model
+        version if the latter contains dependencies. The dependencies are extracted and
+        added to the custom model version by DataRobot, from a requirements.txt file that was
+        added to it.
+
+        Parameters
+        ----------
+        datarobot_custom_model_version : dict
+            A DataRobot custom model version entity.
+        """
+
+        if not datarobot_custom_model_version.get("dependencies"):
+            return
+
+        if self._dependency_environment_already_built_or_in_progress(
+            datarobot_custom_model_version
+        ):
+            return
+
+        url = self.CUSTOM_MODELS_VERSION_DEPENDENCY_BUILD_ROUTE.format(
+            model_id=datarobot_custom_model_version["customModelId"],
+            model_ver_id=datarobot_custom_model_version["id"],
+        )
+        response = self._http_requester.post(url)
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                "Failed to initiate environment dependency build. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+
+        self._monitor_dependency_environment_building(datarobot_custom_model_version, url)
+
+    def _dependency_environment_already_built_or_in_progress(self, datarobot_custom_model_version):
+        try:
+            self.get_custom_model_version_dependency_build_info(datarobot_custom_model_version)
+            return True
+        except DataRobotClientError:
+            return False
+
+    def _monitor_dependency_environment_building(self, datarobot_custom_model_version, url):
+        while True:
+            response_data = self.get_custom_model_version_dependency_build_info(
+                datarobot_custom_model_version
+            )
+            if response_data["buildStatus"] == "success":
+                break
+            if response_data["buildStatus"] == "failed":
+                url = self.CUSTOM_MODELS_VERSION_DEPENDENCY_BUILD_LOG_ROUTE.format(
+                    model_id=datarobot_custom_model_version["customModelId"],
+                    model_ver_id=datarobot_custom_model_version["id"],
+                )
+                response = self._http_requester.get(url)
+                raise DataRobotClientError(
+                    "Failed to build dependency environment. "
+                    f"Model ID: {datarobot_custom_model_version['customModelId']}. "
+                    f"Model version ID: {datarobot_custom_model_version['id']}"
+                    f"\n{response.text}"
+                )
+
+            logger.debug(
+                "Dependency environment build is in progress. Model ID: %s",
+                datarobot_custom_model_version["customModelId"],
+            )
+            time.sleep(1.0)
+
+        logger.info(
+            "Dependency environment was successfully built. Model ID: %s, Model version ID: %s",
+            datarobot_custom_model_version["customModelId"],
+            datarobot_custom_model_version["id"],
+        )
 
     def delete_custom_model_by_model_id(self, custom_model_id):
         """

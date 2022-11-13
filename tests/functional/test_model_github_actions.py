@@ -13,6 +13,7 @@ are skipped.
 
 import contextlib
 import os
+import shutil
 from enum import Enum
 from pathlib import Path
 
@@ -579,3 +580,54 @@ class TestModelGitHubActions:
                     f"Desired settings value '{desired_settings_value}' should be equal to the "
                     f"actual '{actual_settings_value}'."
                 )
+
+    @pytest.fixture
+    def dependency_package_name(self):
+        """A fixture to return the dependency package name that is used within a functional test."""
+
+        return "requests"
+
+    @pytest.fixture
+    def requirements_txt(self, dependency_package_name, model_metadata_yaml_file):
+        """A fixture to create a requirements.txt file with a dependency."""
+
+        requests_filepath = model_metadata_yaml_file.parent / "requirements.txt"
+        with open(requests_filepath, "w", encoding="utf-8") as file:
+            file.write(f"{dependency_package_name} >= 2.27.0\n")
+        yield requests_filepath
+        os.remove(requests_filepath)
+
+    @pytest.mark.usefixtures("cleanup", "skip_model_testing", "github_output")
+    def test_e2e_model_version_with_dependency(
+        self,
+        dr_client,
+        workspace_path,
+        git_repo,
+        model_metadata,
+        main_branch_name,
+        dependency_package_name,
+        requirements_txt,
+    ):
+        """
+        An end-to-end case to test model version with dependencies (requirements.txt).
+        """
+
+        shutil.rmtree(workspace_path / "models" / "model_2")
+        user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
+
+        # 1. Create a model just as a preliminary requirement (use GitHub action)
+        printout(
+            "Create a custom model with dependency environment. "
+            "Run custom model GitHub action (push event) ..."
+        )
+        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
+
+        cm_version = dr_client.fetch_custom_model_latest_version_by_user_provided_id(
+            user_provided_id
+        )
+        assert cm_version["dependencies"][0]["packageName"] == dependency_package_name
+        with open(requirements_txt, "r", encoding="utf-8") as file:
+            assert file.readline().strip() == cm_version["dependencies"][0]["line"]
+
+        build_info = dr_client.get_custom_model_version_dependency_build_info(cm_version)
+        assert build_info["buildStatus"] == "success"
