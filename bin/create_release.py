@@ -90,10 +90,9 @@ class ReleaseCreator:
     def _push_to_remote(self):
         user_response = input("Do you want to push the tags to remote? [yY] ")
         if user_response in ["y", "Y"]:
-            remote = self._repo.remotes["origin"]
             logger.info("Pushing branch and tags to remote ...")
             if not self._args.dry_run:
-                remote.push(follow_tags=True, force=self._args.force_override).raise_if_error()
+                self._repo.remotes.origin.push(self._args.tag)
 
 
 def configure_logging():
