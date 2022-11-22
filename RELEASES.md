@@ -1,9 +1,12 @@
 # RELEASES
 
+## 1.1.1 [2022-11-22]
+  * Update the README.md about referencing specific releases.
+
 ## 1.1.0 [2022-11-13]
   * Add support for custom model versions' dependencies.
   * Add a script to create a release.
-  * Bug fixs
+  * Bug fixes
 
 ## 1.0.2 [2022-11-07]
   * Bug fix
