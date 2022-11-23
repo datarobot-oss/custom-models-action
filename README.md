@@ -2,14 +2,115 @@
 
 (**NOTE: this repository is still a work in progress**)
 
-This repository contains the DataRobot GitHub action to manage Datarobot custom inference models
-and deployments via CI/CD GitHub workflows. It enables users to create/delete and change settings of
-models and deployments.
+The custom models action manages Datarobot custom inference models and deployments via CI/CD GitHub
+workflows. It enables users to create/delete and change settings of models and deployments.
 
 The control over models and deployments are done via metadata YAML files, which in general, can be
-located at any folder under the repository. The YAML files are searched, collected and tested
+located at any folder under the user's repository. The YAML files are searched, collected and tested
 against a specific schema to identify whether they contain the related definitions for each of these
 entities.
+
+# Quick Start
+In order to use the action to create a custom inference model and deployment in DataRobot from your
+own repository, you'll need to follow the steps below:
+
+1. Add the following workflow's content in any yaml file name to your repository,
+   under `.github/workflows` folder:
+
+```yaml
+name: Workflow CI/CD
+
+on:
+  pull_request:
+    branches: [ master ]
+  push:
+    branches: [ master ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  datarobot-custom-models-action:
+    # Run this job on any action of a PR, but skip the job upon merging to the main branch. This
+    # will be taken care of by the push event.
+    if: ${{ github.event.pull_request.merged != true }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: DataRobot Custom Models Action
+        id: datarobot-custom-models-action
+        uses: datarobot/custom-models-action@v1.1.2
+        with:
+          api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
+          webserver: https://app.datarobot.com/
+          branch: master
+          allow-model-deletion: true
+          allow-deployment-deletion: true
+```
+
+>  Notes:
+>  - The `api-token` field is set with `${{ secrets.DATAROBOT_API_TOKEN }}`, which is your
+>    DataRobot token. It is supposed to be added to the `Secrets` section in your GitHub repository
+>    settings. Alternatively, you can set the token string directly to this field, though it is
+>    highly discouraged because it is a sensitive data. If you do it, anyone who has an access to
+>    your repository will be able to see it.
+>  - The `webserver` value here directs to DataRobot US. You may need to change it according to
+>    your account.
+
+2. Add a commit for the workflow and push it to the remote. Once this is done, any followed
+   push / pull request to the remote, will trigger the action.
+
+3. In your DataRobot custom model's folder, add a model's definition yaml file (e.g. model.yaml),
+   with the following content (you'll probably need to change the values according to your model's
+   characteristics):
+
+```yaml
+user_provided_model_id: model-unique-id-1
+target_type: Regression
+settings:
+  name: My Awesome GitHub Model 1 [GitHub CI/CD]
+  target_name: Grade 2014
+
+version:
+  # Make sure this is the environment ID is in your system.
+  # This one is the '[DataRobot] Python 3 Scikit-Learn Drop-In' environment
+  model_environment_id: 5e8c889607389fe0f466c72d
+```
+
+>  Notes:
+>  - You may set any desired unique string value to `user_provided_model_id` field.
+>  - Make sure to choose the correct `target_type` value.
+>  - Make sure to set the correct `target_name` value.
+>  - The `model_environment_id` is the desired environment for your custom model.
+>    It should be taken from the DataRobot application, under the `Model Registry` ==>
+>    `Custom Model Workshop` ==> `Environments`.
+
+4. Add the following deployment's definition content to a deployment definition yaml file, with any
+   desired name, under any chosen directory in your repository:
+
+```yaml
+user_provided_deployment_id: my-awesome-deployment-id
+user_provided_model_id: model-unique-id-1
+```
+
+>  Notes:
+>  - You may set any desired unique string value to `user_provided_deployment_id` field.
+>  - The value in `user_provided_model_id` must match the value that you set in the model's
+>    definition yaml file.
+
+5. Create a commit for the new changes and push it to the remote:
+- If you browse to your GitHub repository page in GitHub and go to the `Actions` tab, you'll notice
+  that the action is being executed.
+- If you go to DataRobot application, you'll notice, after a while, that a new custom model was
+  created along with an associated deployment.
+
+
+# Full Details
 
 ## Datasets
 Datasets that are referenced in this definition YAML files are expected to exist in DataRobot
