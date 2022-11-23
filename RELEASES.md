@@ -1,5 +1,8 @@
 # RELEASES
 
+## 1.1.3 [2022-11-23]
+  * Add a 'Quick Start' section to the README.md.
+
 ## 1.1.2 [2022-11-23]
   * Update the action's name and add branding section.
 
