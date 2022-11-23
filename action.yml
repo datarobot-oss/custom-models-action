@@ -1,6 +1,9 @@
 # action.yml
-name: 'Custom Inference Model'
-description: 'Manage custom inference models in DataRobot'
+name: 'Custom Models Action'
+description: 'Manage custom inference models and deployments in DataRobot.'
+branding:
+  icon: activity
+  color: blue
 inputs:
   api-token: # id of input
     description: 'DataRobot authentication API token.'
