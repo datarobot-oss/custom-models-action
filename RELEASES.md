@@ -1,5 +1,8 @@
 # RELEASES
 
+## 1.1.2 [2022-11-23]
+  * Update the action's name and add branding section.
+
 ## 1.1.1 [2022-11-22]
   * Update the README.md about referencing specific releases.
 
