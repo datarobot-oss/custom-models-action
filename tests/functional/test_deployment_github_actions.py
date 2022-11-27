@@ -16,7 +16,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-from bson import ObjectId
 
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
@@ -32,6 +31,7 @@ from tests.functional.conftest import temporarily_replace_schema_value
 from tests.functional.conftest import (
     temporarily_upload_training_dataset_for_structured_model,
 )
+from tests.functional.conftest import unique_str
 from tests.functional.conftest import upload_and_update_dataset
 from tests.functional.conftest import webserver_accessible
 
@@ -44,7 +44,7 @@ def fixture_deployment_metadata_yaml_file(workspace_path, git_repo, model_metada
     deployment_yaml_file = next(workspace_path.rglob("**/deployment.yaml"))
     with open(deployment_yaml_file, encoding="utf-8") as fd:
         yaml_content = yaml.safe_load(fd)
-        yaml_content[DeploymentSchema.DEPLOYMENT_ID_KEY] = f"deployment-id-{str(ObjectId())}"
+        yaml_content[DeploymentSchema.DEPLOYMENT_ID_KEY] = f"deployment-id-{unique_str()}"
         yaml_content[DeploymentSchema.MODEL_ID_KEY] = model_metadata[ModelSchema.MODEL_ID_KEY]
 
     with open(deployment_yaml_file, "w", encoding="utf-8") as fd:
