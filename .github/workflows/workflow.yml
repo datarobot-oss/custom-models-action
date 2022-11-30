@@ -12,6 +12,10 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 env:
   LOGLEVEL: debug
   DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}  # Required by the functional tests
