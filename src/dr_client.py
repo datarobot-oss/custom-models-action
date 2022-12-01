@@ -748,7 +748,8 @@ class DrClient:
             raise DataRobotClientError(
                 "Custom model version test failed. "
                 f"Response code: {response.status_code}. "
-                f"Response body: {response.text}.",
+                f"Response body: {response.text}. "
+                f"Request payload: {payload}.",
                 code=response.status_code,
             )
         return response

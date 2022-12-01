@@ -46,7 +46,7 @@ def cleanup(dr_client, workspace_path):
 
 
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
-@pytest.mark.usefixtures("build_repo_for_testing", "set_model_dataset_for_testing")
+@pytest.mark.usefixtures("build_repo_for_testing", "set_model_dataset_for_testing", "github_output")
 class TestModelGitHubActions:
     """Contains an end-to-end test cases for the custom inference model GitHub action."""
 
@@ -597,7 +597,7 @@ class TestModelGitHubActions:
         yield requests_filepath
         os.remove(requests_filepath)
 
-    @pytest.mark.usefixtures("cleanup", "skip_model_testing", "github_output")
+    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
     def test_e2e_model_version_with_dependency(
         self,
         dr_client,
