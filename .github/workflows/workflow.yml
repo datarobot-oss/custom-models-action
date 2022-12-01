@@ -109,22 +109,37 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
-
-      - name: Install Requirements
-        run: pip install -r ${{ github.workspace }}/tests/requirements.txt
-
-      - name: Run functional test(s)
+      - name: Check run state for functional tests
+        id: functional-tests-state
         run: |
           body=$(cat <<"EOF"
           ${{github.event.pull_request.body}}
           EOF
           )
-          if grep '.*\- \[x\] Run all functional tests.*' <<< "${body}" > /dev/null; then
+          if grep '.*\- \[x\] Skip functional tests.*' <<< "${body}" > /dev/null; then
+            echo "The user decided to skip the functional tests."
+            echo "FUNCTIONAL_TESTS_RUN_STATE=skip" >> $GITHUB_OUTPUT
+          elif grep '.*\- \[x\] Run all functional tests.*' <<< "${body}" > /dev/null; then
             echo "Run all functional tests."
-            make test-functional
+            echo "FUNCTIONAL_TESTS_RUN_STATE=all" >> $GITHUB_OUTPUT
           else
             echo "Run a basic functional test."
+            echo "FUNCTIONAL_TESTS_RUN_STATE=basic" >> $GITHUB_OUTPUT
+          fi
+
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+        if: ${{ steps.functional-tests-state.outputs.FUNCTIONAL_TESTS_RUN_STATE != 'skip' }}
+
+      - name: Install Requirements
+        run: pip install -r ${{ github.workspace }}/tests/requirements.txt
+        if: ${{ steps.functional-tests-state.outputs.FUNCTIONAL_TESTS_RUN_STATE != 'skip' }}
+
+      - name: Run functional test(s)
+        if: ${{ steps.functional-tests-state.outputs.FUNCTIONAL_TESTS_RUN_STATE != 'skip' }}
+        run: |
+          if ${{ steps.functional-tests-state.outputs.FUNCTIONAL_TESTS_RUN_STATE == 'all' }}; then
+            make test-functional
+          else
             make test-functional-basic
           fi
