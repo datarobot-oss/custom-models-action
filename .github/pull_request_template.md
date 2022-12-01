@@ -7,3 +7,7 @@
 
 ## CHANGES
 <!-- List the changes in this PR, in highlights. -->
+
+
+----------------------------------------
+- [ ] Run all functional tests (>50 min)

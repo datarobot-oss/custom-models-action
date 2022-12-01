@@ -6,6 +6,7 @@ name: Workflow CI/CD
 on:
   pull_request:
     branches: [ master ]
+    types: [ opened, synchronize, reopened, edited ]
   push:
     branches: [ master ]
 
@@ -38,7 +39,7 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
-      - name: Install Reqruirements
+      - name: Install Requirements
         run: pip install -r ${{ github.workspace }}/tests/requirements.txt
 
       - name: Check source code format (pycodestyle + black)
@@ -94,7 +95,7 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
-      - name: Install Reqruirements
+      - name: Install Requirements
         run: pip install -r ${{ github.workspace }}/tests/requirements.txt
 
       - name: Run unit-tests
@@ -111,10 +112,16 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
-      - name: Install Reqruirements
+      - name: Install Requirements
         run: pip install -r ${{ github.workspace }}/tests/requirements.txt
 
-      - name: Run a functional test
+      - name: Run functional test(s)
         run: |
-          make test-functional \
-            FUNCTIONAL_TESTS='tests/functional/test_deployment_github_actions.py::TestDeploymentGitHubActions::test_e2e_deployment_create'
+          body="${{github.event.pull_request.body}}"
+          if grep '.*\- \[x\] Run all functional tests.*' <<< "${body}" > /dev/null; then
+            echo "Run all functional tests."
+            make test-functional
+          else
+            echo "Run a basic functional test."
+            make test-functional-basic
+          fi
