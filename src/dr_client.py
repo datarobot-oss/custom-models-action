@@ -87,7 +87,7 @@ class DrClient:
 
         self._http_requester = HttpRequester(datarobot_webserver, datarobot_api_token, verify_cert)
 
-    def _wait_for_async_resolution(self, async_location, max_wait=600, return_on_completed=False):
+    def _wait_for_async_resolution(self, async_location, max_wait=600, return_on_completed=True):
         start_time = time.time()
 
         while time.time() < start_time + max_wait:
@@ -1027,6 +1027,8 @@ class DrClient:
                 f"Response body: {response.text}",
                 code=response.status_code,
             )
+        location = self._wait_for_async_resolution(response.headers["Location"])
+        response = self._http_requester.get(location, raw=True)
         return response.json()["id"]
 
     def _get_prediction_environment_id(self, model_package, deployment_info):
