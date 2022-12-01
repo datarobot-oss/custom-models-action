@@ -622,6 +622,16 @@ class TestCustomModelVersionRoutes:
 
             assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
             parameters = DrClient._build_tests_parameters(mock_full_custom_model_checks)
+            dr_stability_check_key = DrApiAttrs.to_dr_test_check(ModelSchema.STABILITY_KEY)
+
+            assert (
+                parameters[dr_stability_check_key]["passingRate"]
+                == mock_full_custom_model_checks[ModelSchema.STABILITY_KEY][
+                    ModelSchema.PASSING_RATE_KEY
+                ]
+                / 100
+            )
+
             for check in [
                 ModelSchema.PREDICTION_VERIFICATION_KEY,
                 ModelSchema.PERFORMANCE_KEY,

@@ -823,7 +823,7 @@ class DrClient:
         if ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY in info:
             check_params["numPredictions"] = info[ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY]
         if ModelSchema.PASSING_RATE_KEY in info:
-            check_params["passingRate"] = info[ModelSchema.PASSING_RATE_KEY]
+            check_params["passingRate"] = info[ModelSchema.PASSING_RATE_KEY] / 100
         if ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY in info:
             check_params["numParallelUsers"] = info[ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY]
         if ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY in info:
