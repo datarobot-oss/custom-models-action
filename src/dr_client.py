@@ -640,6 +640,16 @@ class DrClient:
             datarobot_custom_model_version["id"],
         )
 
+    def delete_all_custom_models(self, return_on_error=True):
+        """Delete all the custom models that are accessed by the user in DataRobot."""
+
+        for custom_model in self.fetch_custom_models():
+            try:
+                self.delete_custom_model_by_model_id(custom_model["id"])
+            except DataRobotClientError:
+                if return_on_error:
+                    raise
+
     def delete_custom_model_by_model_id(self, custom_model_id):
         """
         Delete a custom model in DataRobot, given a DataRobot model ID.
@@ -1302,6 +1312,16 @@ class DrClient:
                 f"Failed to update deployment label. Error: {response.text}.",
                 code=response.status_code,
             )
+
+    def delete_all_deployments(self, return_on_error=True):
+        """Delete all the deployments that are accessed by the user in DataRobot."""
+
+        for deployment in self.fetch_deployments():
+            try:
+                self.delete_deployment_by_id(deployment["id"])
+            except DataRobotClientError:
+                if return_on_error:
+                    raise
 
     def delete_deployment_by_id(self, deployment_id):
         """

@@ -31,8 +31,7 @@ test-functional-basic: validate-env-DATAROBOT_WEBSERVER validate-env-DATAROBOT_A
 	-v \
 	--log-cli-level error \
 	${FLAGS} \
-	tests/functional/test_deployment_github_actions.py\
-	::TestDeploymentGitHubActions::test_e2e_deployment_create
+	tests/functional/test_deployment_github_actions.py::TestDeploymentGitHubActions::test_e2e_deployment_create
 .PHONY: test-functional-basic
 
 black:

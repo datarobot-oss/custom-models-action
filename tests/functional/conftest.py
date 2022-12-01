@@ -41,6 +41,27 @@ def webserver_accessible():
     return False
 
 
+def create_dr_client():
+    """Create a DataRobot client using parameter values from environment."""
+
+    webserver = os.environ.get("DATAROBOT_WEBSERVER")
+    api_token = os.environ.get("DATAROBOT_API_TOKEN")
+    return DrClient(webserver, api_token, verify_cert=False)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_clean_datarobot_environment():
+    """
+    A fixture to delete deployments and custom models in DataRobot. There might be such remainders
+    if a workflow is stopped in the middle.
+    """
+
+    if webserver_accessible():
+        dr_client = create_dr_client()
+        dr_client.delete_all_deployments(return_on_error=False)
+        dr_client.delete_all_custom_models(return_on_error=False)
+
+
 def cleanup_models(dr_client_tool, workspace_path):
     """Delete models in DataRobot, which are defined in the local repository source tree."""
 
@@ -320,9 +341,7 @@ def merge_branch_name():
 def fixture_dr_client():
     """A fixture to create a DataRobot client."""
 
-    webserver = os.environ.get("DATAROBOT_WEBSERVER")
-    api_token = os.environ.get("DATAROBOT_API_TOKEN")
-    return DrClient(webserver, api_token, verify_cert=False)
+    return create_dr_client()
 
 
 def increase_model_memory_by_1mb(model_yaml_file):
