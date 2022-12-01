@@ -117,7 +117,10 @@ jobs:
 
       - name: Run functional test(s)
         run: |
-          body="${{github.event.pull_request.body}}"
+          body=$(cat <<"EOF"
+          ${{github.event.pull_request.body}}
+          EOF
+          )
           if grep '.*\- \[x\] Run all functional tests.*' <<< "${body}" > /dev/null; then
             echo "Run all functional tests."
             make test-functional
