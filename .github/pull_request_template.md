@@ -9,6 +9,9 @@
 <!-- List the changes in this PR, in highlights. -->
 
 
---------------------------------------------
-- [ ] Run all functional tests (>50 minutes)\
-**CAUTION**: changing the state of the checkbox will immediately terminate any previous run of the tests.
+-----------------------------------------------------------------------------------------------
+**CAUTION**: changing any of the checkbox states will immediately terminate a previous run that
+is in progress.
+
+- [ ] Skip functional tests
+- [ ] Run all functional tests (>50 minutes)
