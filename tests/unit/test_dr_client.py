@@ -5,19 +5,25 @@
 
 # pylint: disable=protected-access
 # pylint: disable=too-many-arguments
+# pylint: disable=too-many-lines
 
 """A module that contains unit-tests for the DataRobot client module."""
 
+import contextlib
 import json
+import logging
 
 import pytest
 import responses
 from bson import ObjectId
+from mock import Mock
 from mock import patch
 
 from common.exceptions import DataRobotClientError
+from common.http_requester import HttpRequester
 from dr_api_attrs import DrApiAttrs
 from dr_client import DrClient
+from dr_client import logger as dr_client_logger
 from model_file_path import ModelFilePath
 from model_info import ModelInfo
 from schema_validator import ModelSchema
@@ -651,6 +657,124 @@ class TestCustomModelVersionRoutes:
                 info[ModelSchema.CHECK_ENABLED_KEY] = False
             parameters = DrClient._build_tests_parameters(mock_full_custom_model_checks)
             assert not parameters
+
+        @pytest.fixture
+        def patch_dr_client_logging_level_for_debugging(self):
+            """A fixture to path dr_client logger level to debug."""
+
+            origin_level = dr_client_logger.getEffectiveLevel()
+            dr_client_logger.setLevel(logging.DEBUG)
+            yield
+            dr_client_logger.setLevel(origin_level)
+
+        @pytest.fixture
+        def mock_custom_model_testing_input_args(self):
+            """A fixture to mock input arguments for the custom model testing method."""
+
+            return Mock(
+                model_id="123",
+                model_version_id="456",
+                model_info=Mock(user_provided_id="789", model_path="/a/b/c"),
+            )
+
+        @contextlib.contextmanager
+        def _mock_custom_model_version_response_factory(self, response_data):
+            with patch.object(DrClient, "_post_custom_model_test_request"), patch.object(
+                DrClient, "_wait_for_async_resolution"
+            ), patch.object(
+                HttpRequester, "get", return_value=Mock(json=Mock(return_value=response_data))
+            ):
+                yield
+
+        @pytest.mark.usefixtures("patch_dr_client_logging_level_for_debugging")
+        def test_custom_model_testing_success_response(
+            self, dr_client, mock_custom_model_testing_input_args, caplog
+        ):
+            """A case to test a custom model testing successful response."""
+
+            input_args = mock_custom_model_testing_input_args
+            response_data = {"overallStatus": "succeeded"}
+            with self._mock_custom_model_version_response_factory(response_data), patch.object(
+                DrClient, "_analyse_custom_model_testing_checks_response"
+            ) as analyse_method:
+                dr_client.run_custom_model_version_testing(
+                    model_id=input_args.model_id,
+                    model_version_id=input_args.model_version_id,
+                    model_info=input_args.model_info,
+                )
+                analyse_method.assert_not_called()
+                assert (
+                    "Custom model testing pass with success. "
+                    f"User provided ID: {input_args.model_info.user_provided_id}"
+                    in caplog.messages[0]
+                )
+
+        @pytest.mark.usefixtures("patch_dr_client_logging_level_for_debugging")
+        def test_custom_model_testing_warning(
+            self, dr_client, mock_custom_model_testing_input_args, caplog
+        ):
+            """A case to test a custom model testing response with warning."""
+
+            input_args = mock_custom_model_testing_input_args
+            response_data = {
+                "overallStatus": "warning",
+                "testingStatus": {
+                    "longRunningService": {"status": "success"},
+                    "errorCheck": {"status": "success"},
+                    "performanceCheck": {"status": "warning"},
+                },
+            }
+            with self._mock_custom_model_version_response_factory(response_data):
+                dr_client.run_custom_model_version_testing(
+                    model_id=input_args.model_id,
+                    model_version_id=input_args.model_version_id,
+                    model_info=input_args.model_info,
+                )
+                assert (
+                    "Custom model version overall testing status, "
+                    f"model_path: {input_args.model_info.model_path}, status: warning"
+                    in caplog.messages[0]
+                )
+                assert (
+                    "Custom model version check status, "
+                    f"model path: {input_args.model_info.model_path}, "
+                    f"check 'performanceCheck', status: warning." in caplog.messages[1]
+                )
+                assert (
+                    "Custom model testing pass with success. "
+                    f"User provided ID: {input_args.model_info.user_provided_id}"
+                    in caplog.messages[2]
+                )
+
+        @pytest.mark.usefixtures("patch_dr_client_logging_level_for_debugging")
+        def test_custom_model_testing_failed(
+            self, dr_client, mock_custom_model_testing_input_args, caplog
+        ):
+            """A case to test a custom model testing failure response."""
+
+            input_args = mock_custom_model_testing_input_args
+            expected_error_message = "Failed in error-check."
+            response_data = {
+                "overallStatus": "failed",
+                "testingStatus": {
+                    "longRunningService": {"status": "success"},
+                    "errorCheck": {"status": "failed", "message": expected_error_message},
+                    "performanceCheck": {"status": "warning"},
+                },
+            }
+            with self._mock_custom_model_version_response_factory(response_data):
+                with pytest.raises(DataRobotClientError) as ex:
+                    dr_client.run_custom_model_version_testing(
+                        model_id=input_args.model_id,
+                        model_version_id=input_args.model_version_id,
+                        model_info=input_args.model_info,
+                    )
+                assert expected_error_message in str(ex)
+                assert (
+                    "Custom model version overall testing status, "
+                    f"model_path: {input_args.model_info.model_path}, status: failed"
+                    in caplog.messages[0]
+                )
 
 
 class TestCustomModelVersionDependencies:
