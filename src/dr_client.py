@@ -709,7 +709,7 @@ class DrClient:
                 response_data, model_id, model_version_id, model_info
             )
         logger.debug(
-            "Custom model testing pass with success. User provided ID: %s",
+            "Custom model testing pass with success. User provided ID: %s.",
             model_info.user_provided_id,
         )
 
@@ -718,8 +718,10 @@ class DrClient:
         response_data, model_id, model_version_id, model_info
     ):
         logger.warning(
-            "Custom model version overall testing status, model_path: %s, status: %s",
+            "Custom model version overall testing status, model_path: %s, model_version_id: %s, "
+            "status: %s.",
             model_info.model_path,
+            model_version_id,
             response_data["overallStatus"],
         )
         for check, result in response_data["testingStatus"].items():
@@ -730,13 +732,19 @@ class DrClient:
                     f"model_id: {model_id}, model_version_id: {model_version_id}, "
                     f"check: {check}, status: {status}, message: {result['message']}."
                 )
-            if status not in ["success", "skipped"]:
-                logger.warning(
-                    "Custom model version check status, model path: %s, check '%s', status: %s.",
-                    model_info.model_path,
-                    check,
-                    status,
-                )
+            if status not in ["succeeded", "skipped"]:
+                check_message = result.get("message")
+                if check_message:
+                    logger.warning(
+                        "Check was unsuccessful, check '%s', status: %s, message: %s.",
+                        check,
+                        status,
+                        check_message,
+                    )
+                else:
+                    logger.warning("Check status, check '%s', status: %s.", check, status)
+            else:
+                logger.debug("Check status, check '%s', status: %s.", check, status)
 
     def _post_custom_model_test_request(self, model_id, model_version_id, model_info):
         payload = {

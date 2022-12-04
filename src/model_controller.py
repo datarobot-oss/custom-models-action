@@ -654,7 +654,11 @@ class ModelController(ControllerBase):
         return custom_model_version
 
     def _test_custom_model_version(self, model_id, model_version_id, model_info):
-        logger.info("Executing custom model test ...")
+        logger.info(
+            "Executing custom model test, model_path: %s, model_version_id: %s",
+            model_info.model_path,
+            model_version_id,
+        )
         self._dr_client.run_custom_model_version_testing(model_id, model_version_id, model_info)
 
     def _update_settings(self, datarobot_custom_model, model_info):

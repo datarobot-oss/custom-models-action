@@ -705,7 +705,7 @@ class TestCustomModelVersionRoutes:
                 analyse_method.assert_not_called()
                 assert (
                     "Custom model testing pass with success. "
-                    f"User provided ID: {input_args.model_info.user_provided_id}"
+                    f"User provided ID: {input_args.model_info.user_provided_id}."
                     in caplog.messages[0]
                 )
 
@@ -732,18 +732,19 @@ class TestCustomModelVersionRoutes:
                 )
                 assert (
                     "Custom model version overall testing status, "
-                    f"model_path: {input_args.model_info.model_path}, status: warning"
+                    f"model_path: {input_args.model_info.model_path}, "
+                    f"model_version_id: {input_args.model_version_id}, status: warning."
                     in caplog.messages[0]
                 )
-                assert (
-                    "Custom model version check status, "
-                    f"model path: {input_args.model_info.model_path}, "
-                    f"check 'performanceCheck', status: warning." in caplog.messages[1]
-                )
+                for index, (key, value) in enumerate(response_data["testingStatus"].items()):
+                    assert (
+                        f"Check status, check '{key}', status: {value['status']}."
+                        in caplog.messages[index + 1]
+                    )
                 assert (
                     "Custom model testing pass with success. "
-                    f"User provided ID: {input_args.model_info.user_provided_id}"
-                    in caplog.messages[2]
+                    f"User provided ID: {input_args.model_info.user_provided_id}."
+                    in caplog.messages[-1]
                 )
 
         @pytest.mark.usefixtures("patch_dr_client_logging_level_for_debugging")
@@ -772,7 +773,8 @@ class TestCustomModelVersionRoutes:
                 assert expected_error_message in str(ex)
                 assert (
                     "Custom model version overall testing status, "
-                    f"model_path: {input_args.model_info.model_path}, status: failed"
+                    f"model_path: {input_args.model_info.model_path}, "
+                    f"model_version_id: {input_args.model_version_id}, status: failed."
                     in caplog.messages[0]
                 )
 
