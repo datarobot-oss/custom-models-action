@@ -705,17 +705,46 @@ class DrClient:
         response_data = response.json()
 
         if response_data["overallStatus"] != "succeeded":
-            for check, result in response_data["testingStatus"].items():
-                status = result["status"]
-                if status != "succeeded":
-                    raise DataRobotClientError(
-                        f"Custom model version check failed.\nCheck: '{check}'.\nStatus: {status}."
-                        f"\nMessage: {result['message']}"
-                    )
+            self._analyse_custom_model_testing_checks_response(
+                response_data, model_id, model_version_id, model_info
+            )
         logger.debug(
-            "Custom model testing pass with success. User provided ID: %s",
+            "Custom model testing pass with success. User provided ID: %s.",
             model_info.user_provided_id,
         )
+
+    @staticmethod
+    def _analyse_custom_model_testing_checks_response(
+        response_data, model_id, model_version_id, model_info
+    ):
+        logger.warning(
+            "Custom model version overall testing status, model_path: %s, model_version_id: %s, "
+            "status: %s.",
+            model_info.model_path,
+            model_version_id,
+            response_data["overallStatus"],
+        )
+        for check, result in response_data["testingStatus"].items():
+            status = result["status"]
+            if status == "failed":
+                raise DataRobotClientError(
+                    "Custom model version check failed. "
+                    f"model_id: {model_id}, model_version_id: {model_version_id}, "
+                    f"check: {check}, status: {status}, message: {result['message']}."
+                )
+            if status not in ["succeeded", "skipped"]:
+                check_message = result.get("message")
+                if check_message:
+                    logger.warning(
+                        "Check was unsuccessful, check '%s', status: %s, message: %s.",
+                        check,
+                        status,
+                        check_message,
+                    )
+                else:
+                    logger.warning("Check status, check '%s', status: %s.", check, status)
+            else:
+                logger.debug("Check status, check '%s', status: %s.", check, status)
 
     def _post_custom_model_test_request(self, model_id, model_version_id, model_info):
         payload = {
