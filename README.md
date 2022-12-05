@@ -197,7 +197,7 @@ The multiple models' definition YAML file can be located anywhere in the reposit
 For examples, please refer to the [model definition examples section](#model-examples) below.
 
 <details><summary>Notes</summary>
-<p>
+
 * A model is first created during a pull request whenever a new definition is detected.
 * A model is deleted during a merge to the main branch if the associated model's definition 
   is missing. This can happen if the definition's YAML file was deleted or the user
@@ -207,7 +207,7 @@ For examples, please refer to the [model definition examples section](#model-exa
   versions.
 * A new model version is created upon changes to the model's code or the fields under the `version`
   section.
-</p>
+
 </details>
 
 #### Model Definition Sections
@@ -241,14 +241,14 @@ For examples, please refer to the [deployment definition examples section](#depl
 below.
 
 <details><summary>Notes</summary>
-<p>
+
  * Changes to deployments in DataRobot are made only upon merging a pull request
    to the configured main branch. During a pull request, the GitHub action only performs
    integrity checks.
  * Every new version of the associated custom inference model will result in a new challenger
    or a model's replacement in the deployment. It depends on the deployment's configuration, which
    can be controlled from the YAML file. The default is the creation of a new challenger.
-</p>
+
 </details>
 
 #### Deployment Definition Sections
@@ -308,7 +308,7 @@ included in the GitHub workflow definition:
                     allow-deployment-deletion: true
     ```
   <details><summary>Notes</summary>
-  <p>
+
   - `if: ${{ github.event.pull_request.merged != true }}`: An important condition that is
     needed in order to skip the action's execution upon merging. The action will be triggered
     by the 'push' event.
@@ -324,7 +324,7 @@ included in the GitHub workflow definition:
   For the full possible input arguments to the action, refer to the
     [input arguments section](#input-arguments) above.
   For a complete example, refer to the [workflow example](#workflow-example) below.
-  </p>
+
   </details>
 
 ### Development Information
@@ -381,7 +381,7 @@ sequentially:
 #### Model Examples <a id="model-examples"/>
 
 <details><summary>A Minimal Single Model Definition</summary>
-<p>
+
 
 Below is an example of a minimal model's definition, which includes only mandatory fields:
 
@@ -398,11 +398,11 @@ version:
   model_environment_id: 5e8c889607389fe0f466c72d
 ```
 
-</p>
+
 </details>
 
 <details><summary>Full Single Model Definition</summary>
-<p>
+
 
 Below is an example of a full model's definition, which includes both mandatory and optional fields:
 
@@ -470,11 +470,11 @@ test:
 > will automatically be regarded as suffixed with `**`. This means that the directory will be
 > scanned recursively.
 
-</p>
+
 </details>
 
 <details><summary>Multi Models Definition</summary>
-<p>
+
 
 Below is an example of a multi-models definition, which includes only mandatory fields:
 
@@ -507,13 +507,13 @@ datarobot_models:
         model_environment_id: 5e8c889607389fe0f466c72d
 ```
 
-</p>
+
 </details>
 
 #### Deployment Examples <a id="deployment-examples"/>
 
 <details><summary>Minimal Single Deployment Definition</summary>
-<p>
+
 
 Below is an example of a minimal deployment's definition, which includes only mandatory fields:
 
@@ -522,11 +522,11 @@ user_provided_deployment_id: my-awesome-deployment-id
 user_provided_model_id: any-model-unique-id-1
 ```
 
-</p>
+
 </details>
 
 <details><summary>Full Single Deployment Definition</summary>
-<p>
+
 
 Below is an example of a full deployment's definition, which includes both mandatory and optional
 fields:
@@ -555,11 +555,11 @@ settings:
       - Remote-IP
 ```
 
-</p>
+
 </details>
 
 <details><summary>Multi Deployments Definition</summary>
-<p>
+
 
 Below is an example of a multi-deployments definition, which includes only mandatory fields:
 
@@ -574,7 +574,7 @@ Below is an example of a multi-deployments definition, which includes only manda
   user_provided_model_id: any-model-unique-id-3
 ```
 
-</p>
+
 </details>
 
 #### GitHub Workflow Example <a id="workflow-example"/>
