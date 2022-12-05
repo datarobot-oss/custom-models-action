@@ -1,5 +1,9 @@
 # RELEASES
 
+## 1.1.4 [2022-12-05]
+  * Internal improvements to the development environment
+  * Bug fixes
+
 ## 1.1.3 [2022-11-23]
   * Add a 'Quick Start' section to the README.md.
 

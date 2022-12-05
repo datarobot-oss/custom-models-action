@@ -22,17 +22,24 @@ test-unit:
 .PHONY: test-unit
 
 test-functional: validate-env-DATAROBOT_WEBSERVER validate-env-DATAROBOT_API_TOKEN
-	set -ex; PYTHONPATH=.:src pytest -v --log-cli-level error ${FLAGS} ${FUNCTIONAL_TESTS}
+	set -ex; PYTHONPATH=.:src \
+	pytest \
+	-v \
+	--log-cli-level=debug \
+	--log-cli-date-format="%Y-%m-%d %H:%M:%S" \
+	--log-cli-format="%(asctime)s [%(levelname)-5s]  %(message)s" \
+	 ${FLAGS} ${FUNCTIONAL_TESTS}
 .PHONY: test-functional
 
 test-functional-basic: validate-env-DATAROBOT_WEBSERVER validate-env-DATAROBOT_API_TOKEN
 	set -ex; PYTHONPATH=.:src \
 	pytest \
 	-v \
-	--log-cli-level error \
+	--log-cli-level=debug \
+	--log-cli-date-format="%Y-%m-%d %H:%M:%S" \
+	--log-cli-format="%(asctime)s [%(levelname)-5s]  %(message)s" \
 	${FLAGS} \
-	tests/functional/test_deployment_github_actions.py\
-	::TestDeploymentGitHubActions::test_e2e_deployment_create
+	tests/functional/test_deployment_github_actions.py::TestDeploymentGitHubActions::test_e2e_deployment_create
 .PHONY: test-functional-basic
 
 black:

@@ -87,7 +87,7 @@ class DrClient:
 
         self._http_requester = HttpRequester(datarobot_webserver, datarobot_api_token, verify_cert)
 
-    def _wait_for_async_resolution(self, async_location, max_wait=600, return_on_completed=False):
+    def _wait_for_async_resolution(self, async_location, max_wait=600, return_on_completed=True):
         start_time = time.time()
 
         while time.time() < start_time + max_wait:
@@ -640,6 +640,16 @@ class DrClient:
             datarobot_custom_model_version["id"],
         )
 
+    def delete_all_custom_models(self, return_on_error=True):
+        """Delete all the custom models that are accessed by the user in DataRobot."""
+
+        for custom_model in self.fetch_custom_models():
+            try:
+                self.delete_custom_model_by_model_id(custom_model["id"])
+            except DataRobotClientError:
+                if return_on_error:
+                    raise
+
     def delete_custom_model_by_model_id(self, custom_model_id):
         """
         Delete a custom model in DataRobot, given a DataRobot model ID.
@@ -695,17 +705,46 @@ class DrClient:
         response_data = response.json()
 
         if response_data["overallStatus"] != "succeeded":
-            for check, result in response_data["testingStatus"].items():
-                status = result["status"]
-                if status != "succeeded":
-                    raise DataRobotClientError(
-                        f"Custom model version check failed.\nCheck: '{check}'.\nStatus: {status}."
-                        f"\nMessage: {result['message']}"
-                    )
+            self._analyse_custom_model_testing_checks_response(
+                response_data, model_id, model_version_id, model_info
+            )
         logger.debug(
-            "Custom model testing pass with success. User provided ID: %s",
+            "Custom model testing pass with success. User provided ID: %s.",
             model_info.user_provided_id,
         )
+
+    @staticmethod
+    def _analyse_custom_model_testing_checks_response(
+        response_data, model_id, model_version_id, model_info
+    ):
+        logger.warning(
+            "Custom model version overall testing status, model_path: %s, model_version_id: %s, "
+            "status: %s.",
+            model_info.model_path,
+            model_version_id,
+            response_data["overallStatus"],
+        )
+        for check, result in response_data["testingStatus"].items():
+            status = result["status"]
+            if status == "failed":
+                raise DataRobotClientError(
+                    "Custom model version check failed. "
+                    f"model_id: {model_id}, model_version_id: {model_version_id}, "
+                    f"check: {check}, status: {status}, message: {result['message']}."
+                )
+            if status not in ["succeeded", "skipped"]:
+                check_message = result.get("message")
+                if check_message:
+                    logger.warning(
+                        "Check was unsuccessful, check '%s', status: %s, message: %s.",
+                        check,
+                        status,
+                        check_message,
+                    )
+                else:
+                    logger.warning("Check status, check '%s', status: %s.", check, status)
+            else:
+                logger.debug("Check status, check '%s', status: %s.", check, status)
 
     def _post_custom_model_test_request(self, model_id, model_version_id, model_info):
         payload = {
@@ -738,7 +777,8 @@ class DrClient:
             raise DataRobotClientError(
                 "Custom model version test failed. "
                 f"Response code: {response.status_code}. "
-                f"Response body: {response.text}.",
+                f"Response body: {response.text}. "
+                f"Request payload: {payload}.",
                 code=response.status_code,
             )
         return response
@@ -812,7 +852,7 @@ class DrClient:
         if ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY in info:
             check_params["numPredictions"] = info[ModelSchema.TOTAL_PREDICTION_REQUESTS_KEY]
         if ModelSchema.PASSING_RATE_KEY in info:
-            check_params["passingRate"] = info[ModelSchema.PASSING_RATE_KEY]
+            check_params["passingRate"] = info[ModelSchema.PASSING_RATE_KEY] / 100
         if ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY in info:
             check_params["numParallelUsers"] = info[ModelSchema.NUMBER_OF_PARALLEL_USERS_KEY]
         if ModelSchema.MINIMUM_PAYLOAD_SIZE_KEY in info:
@@ -1027,6 +1067,8 @@ class DrClient:
                 f"Response body: {response.text}",
                 code=response.status_code,
             )
+        location = self._wait_for_async_resolution(response.headers["Location"])
+        response = self._http_requester.get(location, raw=True)
         return response.json()["id"]
 
     def _get_prediction_environment_id(self, model_package, deployment_info):
@@ -1300,6 +1342,16 @@ class DrClient:
                 f"Failed to update deployment label. Error: {response.text}.",
                 code=response.status_code,
             )
+
+    def delete_all_deployments(self, return_on_error=True):
+        """Delete all the deployments that are accessed by the user in DataRobot."""
+
+        for deployment in self.fetch_deployments():
+            try:
+                self.delete_deployment_by_id(deployment["id"])
+            except DataRobotClientError:
+                if return_on_error:
+                    raise
 
     def delete_deployment_by_id(self, deployment_id):
         """

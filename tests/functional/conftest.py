@@ -12,7 +12,6 @@ import contextlib
 import copy
 import logging
 import os
-import random
 import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -29,6 +28,7 @@ from main import main
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 from schema_validator import SharedSchema
+from tests.conftest import unique_str
 
 
 def webserver_accessible():
@@ -39,6 +39,27 @@ def webserver_accessible():
     if webserver and api_token:
         return DrClient(webserver, api_token, verify_cert=False).is_accessible()
     return False
+
+
+def create_dr_client():
+    """Create a DataRobot client using parameter values from environment."""
+
+    webserver = os.environ.get("DATAROBOT_WEBSERVER")
+    api_token = os.environ.get("DATAROBOT_API_TOKEN")
+    return DrClient(webserver, api_token, verify_cert=False)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_clean_datarobot_environment():
+    """
+    A fixture to delete deployments and custom models in DataRobot. There might be such remainders
+    if a workflow is stopped in the middle.
+    """
+
+    if webserver_accessible():
+        dr_client = create_dr_client()
+        dr_client.delete_all_deployments(return_on_error=False)
+        dr_client.delete_all_custom_models(return_on_error=False)
 
 
 def cleanup_models(dr_client_tool, workspace_path):
@@ -62,12 +83,6 @@ def printout(msg):
     """A common print out method."""
 
     print(msg)
-
-
-def unique_str():
-    """Generate a unique 10-chars long string."""
-
-    return f"{random.randint(1, 2 ** 32):010}"
 
 
 @contextlib.contextmanager
@@ -210,6 +225,71 @@ def set_model_dataset_for_testing(dr_client, model_metadata, model_metadata_yaml
                 ModelSchema.TEST_KEY,
                 ModelSchema.TEST_DATA_ID_KEY,
                 new_value=dataset_id,
+            ), temporarily_replace_metadata_value(
+                ModelSchema,
+                model_metadata,
+                ModelSchema.TEST_KEY,
+                ModelSchema.TEST_DATA_ID_KEY,
+                new_value=dataset_id,
+            ):
+                yield dataset_id
+        finally:
+            if dataset_id:
+                dr_client.delete_dataset(dataset_id)
+    else:
+        yield
+
+
+@contextlib.contextmanager
+def temporarily_replace_metadata_value(schema_cls, metadata, key, *sub_keys, new_value):
+    """A context manager to temporarily replace a value in a given metadata of a given schema."""
+
+    origin_value = None
+    try:
+        origin_value = schema_cls.get_value(metadata, key, *sub_keys)
+        schema_cls.set_value(metadata, key, *sub_keys, value=new_value)
+        yield
+    finally:
+        schema_cls.set_value(metadata, key, *sub_keys, value=origin_value)
+
+
+@pytest.fixture
+def set_deployment_actuals_dataset(dr_client, deployment_metadata, deployment_metadata_yaml_file):
+    """
+    A fixture to temporarily upload and set a deployment's dataset in a deployment definition and
+    DataRobot.
+    """
+
+    actuals_dataset_id = DeploymentSchema.get_value(
+        deployment_metadata,
+        DeploymentSchema.SETTINGS_SECTION_KEY,
+        DeploymentSchema.ASSOCIATION_KEY,
+        DeploymentSchema.ASSOCIATION_ACTUALS_DATASET_ID_KEY,
+    )
+    if actuals_dataset_id:
+        actuals_dataset_filepath = (
+            Path(__file__).parent
+            / ".."
+            / "datasets"
+            / "juniors_3_year_stats_regression_actuals.csv"
+        )
+        dataset_id = None
+        try:
+            dataset_id = dr_client.upload_dataset(actuals_dataset_filepath)
+
+            with temporarily_replace_schema_value(
+                deployment_metadata_yaml_file,
+                DeploymentSchema.SETTINGS_SECTION_KEY,
+                DeploymentSchema.ASSOCIATION_KEY,
+                DeploymentSchema.ASSOCIATION_ACTUALS_DATASET_ID_KEY,
+                new_value=dataset_id,
+            ), temporarily_replace_metadata_value(
+                DeploymentSchema,
+                deployment_metadata,
+                DeploymentSchema.SETTINGS_SECTION_KEY,
+                DeploymentSchema.ASSOCIATION_KEY,
+                DeploymentSchema.ASSOCIATION_ACTUALS_DATASET_ID_KEY,
+                new_value=dataset_id,
             ):
                 yield dataset_id
         finally:
@@ -320,9 +400,7 @@ def merge_branch_name():
 def fixture_dr_client():
     """A fixture to create a DataRobot client."""
 
-    webserver = os.environ.get("DATAROBOT_WEBSERVER")
-    api_token = os.environ.get("DATAROBOT_API_TOKEN")
-    return DrClient(webserver, api_token, verify_cert=False)
+    return create_dr_client()
 
 
 def increase_model_memory_by_1mb(model_yaml_file):
@@ -333,7 +411,7 @@ def increase_model_memory_by_1mb(model_yaml_file):
         memory = ModelSchema.get_value(
             yaml_content, ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY
         )
-        memory = memory or "256Mi"
+        memory = memory or "2048Mi"
         num_part, unit = MemoryConvertor._extract_unit_fields(memory)
         new_memory = f"{num_part+1}{unit}"
         yaml_content[ModelSchema.VERSION_KEY][ModelSchema.MEMORY_KEY] = new_memory

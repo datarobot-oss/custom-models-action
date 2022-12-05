@@ -16,13 +16,13 @@ from pathlib import Path
 
 import pytest
 import yaml
-from bson import ObjectId
 
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
 from deployment_info import DeploymentInfo
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
+from tests.conftest import unique_str
 from tests.functional.conftest import cleanup_models
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import printout
@@ -44,7 +44,7 @@ def fixture_deployment_metadata_yaml_file(workspace_path, git_repo, model_metada
     deployment_yaml_file = next(workspace_path.rglob("**/deployment.yaml"))
     with open(deployment_yaml_file, encoding="utf-8") as fd:
         yaml_content = yaml.safe_load(fd)
-        yaml_content[DeploymentSchema.DEPLOYMENT_ID_KEY] = f"deployment-id-{str(ObjectId())}"
+        yaml_content[DeploymentSchema.DEPLOYMENT_ID_KEY] = f"deployment-id-{unique_str()}"
         yaml_content[DeploymentSchema.MODEL_ID_KEY] = model_metadata[ModelSchema.MODEL_ID_KEY]
 
     with open(deployment_yaml_file, "w", encoding="utf-8") as fd:
@@ -70,6 +70,14 @@ def fixture_cleanup(dr_client, workspace_path, deployment_metadata):
 
     yield
 
+    cleanup_deployment(dr_client, deployment_metadata)
+    # NOTE: we have more than one model in the tree
+    cleanup_models(dr_client, workspace_path)
+
+
+def cleanup_deployment(dr_client, deployment_metadata):
+    """Silently delete a deployment that is specified in a deployment's metadata."""
+
     try:
         dr_client.delete_deployment_by_git_id(
             deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
@@ -77,12 +85,9 @@ def fixture_cleanup(dr_client, workspace_path, deployment_metadata):
     except (IllegalModelDeletion, DataRobotClientError):
         pass
 
-    # NOTE: we have more than one model in the tree
-    cleanup_models(dr_client, workspace_path)
-
 
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
-@pytest.mark.usefixtures("build_repo_for_testing")
+@pytest.mark.usefixtures("build_repo_for_testing", "github_output")
 class TestDeploymentGitHubActions:
     """Contains cases to test the deployment GitHub action."""
 
@@ -188,7 +193,9 @@ class TestDeploymentGitHubActions:
         printout("Done")
 
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
-    @pytest.mark.usefixtures("cleanup", "set_model_dataset_for_testing")
+    @pytest.mark.usefixtures(
+        "cleanup", "set_model_dataset_for_testing", "set_deployment_actuals_dataset"
+    )
     def test_e2e_deployment_model_replacement(
         self,
         dr_client,
@@ -282,7 +289,7 @@ class TestDeploymentGitHubActions:
         with open(deployment_metadata_yaml_file, "w", encoding="utf-8") as fd:
             yaml.safe_dump(deployment_metadata, fd)
 
-    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
+    @pytest.mark.usefixtures("cleanup", "skip_model_testing", "set_deployment_actuals_dataset")
     def test_e2e_deployment_delete(
         self,
         dr_client,
@@ -352,7 +359,9 @@ class TestDeploymentGitHubActions:
         printout("Done")
 
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
-    @pytest.mark.usefixtures("cleanup", "set_model_dataset_for_testing")
+    @pytest.mark.usefixtures(
+        "cleanup", "set_model_dataset_for_testing", "set_deployment_actuals_dataset"
+    )
     def test_e2e_deployment_model_challengers(
         self,
         dr_client,
@@ -399,7 +408,7 @@ class TestDeploymentGitHubActions:
         printout("Done")
 
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
-    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
+    @pytest.mark.usefixtures("skip_model_testing", "set_deployment_actuals_dataset")
     def test_e2e_deployment_settings(
         self,
         dr_client,
@@ -443,6 +452,7 @@ class TestDeploymentGitHubActions:
                             workspace_path, git_repo, main_branch_name, event_name, is_deploy=True
                         )
             finally:
+                cleanup_deployment(dr_client, deployment_metadata)
                 cleanup_models(dr_client, workspace_path)
 
     @staticmethod

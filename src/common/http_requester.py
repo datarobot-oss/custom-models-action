@@ -17,7 +17,6 @@ class HttpRequester:
     """
 
     def __init__(self, base_url, api_token=None, verify_cert=True):
-        self._session = requests.Session()
         self._base_url = base_url
         self._verify_cert = verify_cert
         self._headers = {"Authorization": f"Token {api_token}"} if api_token else {}
@@ -53,9 +52,7 @@ class HttpRequester:
         """
 
         url = endpoint_sub_url if raw else self._url(endpoint_sub_url)
-        return self._session.get(
-            url, headers=self._headers.copy(), verify=self._verify_cert, **kwargs
-        )
+        return requests.get(url, headers=self._headers.copy(), verify=self._verify_cert, **kwargs)
 
     def post(self, endpoint_sub_url, data=None, json=None, headers=None):
         """
@@ -113,7 +110,7 @@ class HttpRequester:
             request_headers.update(headers)
 
         url = self._url(endpoint_sub_url)
-        return self._session.patch(
+        return requests.patch(
             url, data=data, json=json, headers=request_headers, verify=self._verify_cert
         )
 
@@ -133,4 +130,4 @@ class HttpRequester:
         """
 
         url = self._url(endpoint_sub_url)
-        return self._session.delete(url, headers=self._headers.copy(), verify=self._verify_cert)
+        return requests.delete(url, headers=self._headers.copy(), verify=self._verify_cert)
