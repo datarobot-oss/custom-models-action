@@ -44,7 +44,7 @@ jobs:
 
       - name: DataRobot Custom Models Step
         id: datarobot-custom-models-step
-        uses: datarobot-oss/custom-models-action@HEAD
+        uses: datarobot-oss/custom-models-action@v1.1.4
         with:
           api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
           webserver: https://app.datarobot.com/
@@ -273,7 +273,7 @@ embedded in the GitHub workflow definition:
 
               - name: DataRobot Custom Models Step
                 id: datarobot-custom-models-step
-                uses: datarobot-oss/custom-models-action@HEAD
+                uses: datarobot-oss/custom-models-action@v1.1.4
                 with:
                   api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
                   webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
@@ -544,7 +544,7 @@ jobs:
 
       - name: DataRobot Custom Models Step
         id: datarobot-custom-models-step
-        uses: datarobot-oss/custom-models-action@HEAD
+        uses: datarobot-oss/custom-models-action@v1.1.4
         with:
           api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
           webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
