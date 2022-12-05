@@ -1,6 +1,6 @@
 # Custom Models GitHub Action
 
-> **Note**: This repository is still a work in progress
+**Note**: This repository is still a work in progress
 
 The custom models action manages custom inference models and deployments in DataRobot via GitHub CI/CD
 workflows. It enables users to create or delete models and deployments and modify settings. Metadata 
@@ -59,8 +59,8 @@ custom model repository in GitHub:
       [Encrypted secret for GitHub Actions](https://docs.github.com/en/actions/security-guides/encrypted-secrets#creating-encrypted-secrets-for-a-repository)
       containing your [DataRobot API key](https://docs.datarobot.com/en/docs/platform/account-mgmt/acct-settings/api-key-mgmt.html#api-key-management).
       Alternatively, you can set the token string directly to this field; however, this method is
-      highly discouraged because your API key is extremely sensitive data. If you use this method,
-      anyone who has access to your repository can access your API key.
+      highly discouraged because your API key is extremely sensitive data. If you use this method, 
+      anyone with access to your repository can access your API key.
 
     - `webserver`: Provide your DataRobot webserver value here if it isn't the default DataRobot 
       US server (`https://app.datarobot.com/`)
@@ -123,7 +123,7 @@ custom model repository in GitHub:
 
 Datasets that are referenced in this definition YAML files are expected to exist in the DataRobot catalog 
 before doing any GitHub step. The user is required to upload these datasets
-upfront, to the DataRobot catalog via its UI or any other client.
+upfront to the DataRobot catalog via its UI or any other client.
 
 ### Drop-In Environments
 
@@ -184,8 +184,8 @@ defined in
 https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L271
 )
 
-A model metadata YAML file may contain a schema of a single model's definition (as specified above),
-or a schema of multiple models' definition.
+A model metadata YAML file may contain a schema of a single model's definition (as specified above)
+or a schema of multiple models' definitions.
 
 The **multiple models' schema** is defined [here](
 https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L351
@@ -200,8 +200,8 @@ For examples, please refer to the [model definition examples section](#model-exa
 
 * A model is first created during a pull request whenever a new definition is detected.
 * A model is deleted during a merge to the main branch if the associated model's definition 
-  is missing. This can happen if the definition's YAML file was deleted or the user
-  changed its unique ID.
+  is missing. This can happen if the model definition's YAML file is deleted or if he model's 
+  unique ID is changed.
 * Changes to the models in DataRobot are made during a pull request to the configured main
   branch. These include changes to settings as well as the creation of new custom inference model
   versions.
@@ -212,7 +212,7 @@ For examples, please refer to the [model definition examples section](#model-exa
 
 #### Model Definition Sections
 
-At the top level, there are attributes you cannot changed after a model is created:
+At the top level, there are attributes you cannot change after a model is created:
 
 * `settings`: Changes to the fields under this section result in changes to the model's
               settings without the creation of a new version.
@@ -234,7 +234,7 @@ The **multiple deployments' schema** is defined [here](
 https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L679
 ).
 
-The deployment's definition YAML file (either a single or multiple) can be located anywhere in
+The deployment definition YAML file (single or multiple) can be located anywhere in
 the repository.
 
 For examples, please refer to the [deployment definition examples section](#deployment-examples)
@@ -318,8 +318,7 @@ included in the GitHub workflow definition:
     to look at newer versions in the [RELEASES.md](RELEASES.md).
   - There are two actions' input arguments that are used to establish communication with
     DataRobot system. They should reside in the repository **Secrets** section:
-    - `DATAROBOT_API_TOKEN`: The API token that is used to validate credentials with DataRobot
-                              system.
+    - `DATAROBOT_API_TOKEN`: The API token used to validate credentials with DataRobot.
     - `DATAROBOT_WEBSERVER`: The publicly accessible DataRobot web server URL.
   For the full possible input arguments to the action, refer to the
     [input arguments section](#input-arguments) above.
@@ -331,7 +330,7 @@ included in the GitHub workflow definition:
 
 #### The Repository Structure
 
-The top level files and directories include the following:
+The top-level files and directories include the following:
 
 * `action.yaml`: The YAML file containing the definition of the DataRobot custom models GitHub action.
 * `.github`: The directory containing a GitHub workflow that executes the following jobs:
@@ -363,13 +362,13 @@ and one deployment under `tests/deployments` used by the functional test.
 #### Development Workflow
 
 Changes in this repository should be submitted as pull requests. When a pull request is
-created, the associated GitHub workflow is triggered and the following jobs are executed
+created, the associated GitHub workflow is triggered, and the following jobs are executed
 sequentially:
 
 * Linter
 * Code style checks
 * Unit-tests.
-* Aa single functional test
+* A single functional test
 
 > **Note:** To enable the full execution of the functional test, the two related
 > variables (`DATAROBOT_WEBSERVER` and `DATAROBOT_API_TOKEN`) must be set in the
