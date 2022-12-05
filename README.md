@@ -1,6 +1,6 @@
 # Custom Models GitHub Action
 
-**Note**: This repository is still a work in progress
+> **Note**: This repository is still a work in progress
 
 The custom models action manages custom inference models and deployments in DataRobot via GitHub CI/CD
 workflows. It enables users to create or delete models and deployments and modify settings. Metadata 
@@ -121,22 +121,21 @@ custom model repository in GitHub:
 
 ### Datasets
 
-Datasets that are referenced in this definition YAML files are expected to exist in the DataRobot catalog 
-before doing any GitHub step. The user is required to upload these datasets
-upfront to the DataRobot catalog via its UI or any other client.
+Datasets referenced in custom models action YAML files are expected to exist in the DataRobot catalog 
+before configuring the action in GitHub. You should upload these datasets to the DataRobot 
+catalog (via the UI or any other client) prior to configuring the GitHub action.
 
 ### Drop-In Environments
 
-Environments that are referenced in this definition YAML files are expected to exist in DataRobot
-Custom Models environments before doing any GitHub action. The user is required to validate
-the existence of such drop-in environments upfront and use any ID of these environments. The user
-can also install a new drop-in environment and use its ID. For more information, please reference
-DataRobot documentation.
+Environments referenced in custom models action YAML files are expected to exist in DataRobot before 
+configuring the action in GitHub. You should validate the existence of the required drop-in environments 
+prior to configuring the GitHub action. In addition, you can install new drop-in environments. 
+For more information, see the [Custom model environments documentation](https://docs.datarobot.com/en/docs/mlops/deployment/custom-models/custom-env.html).
 
 ### The GitHub Action's Input Arguments <a id="input-arguments"/>
 
-The GitHub action is implemented as a Python program, which is being called with specific arguments
-that are provided by the user in the GitHub workflow.
+This GitHub action is implemented as a Python program, called with specific arguments
+provided in the GitHub workflow.
 
 #### Mandatory Input Arguments 
 
@@ -178,20 +177,19 @@ steps in the same GitHub job (refer to the workflow example below):
 
 ### Model Definition
 
-The user is required to provide the model's metadata in a YAML file. The model's full schema is
-defined in
+The GitHub action requires the model's metadata in a YAML file. The model's full schema is defined in
 [this source code block](
 https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L271
 )
 
-A model metadata YAML file may contain a schema of a single model's definition (as specified above)
-or a schema of multiple models' definitions.
+A model metadata YAML file may contain the schema of a single model's definition (as specified above)
+or the schema of multiple models' definitions.
 
-The **multiple models' schema** is defined [here](
+The **multiple models' schema** is defined in [this source code block](
 https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L351
 ).
 
-The single model's definition YAML file is required to be located inside the model's root directory.
+The single model's definition YAML file must be located inside the model's root directory.
 The multiple models' definition YAML file can be located anywhere in the repository.
 
 For examples, please refer to the [model definition examples section](#model-examples) below.
@@ -200,7 +198,7 @@ For examples, please refer to the [model definition examples section](#model-exa
 
 * A model is first created during a pull request whenever a new definition is detected.
 * A model is deleted during a merge to the main branch if the associated model's definition 
-  is missing. This can happen if the model definition's YAML file is deleted or if he model's 
+  is missing. This can happen if the model definition's YAML file is deleted or if the model's 
   unique ID is changed.
 * Changes to the models in DataRobot are made during a pull request to the configured main
   branch. These include changes to settings as well as the creation of new custom inference model
@@ -227,10 +225,10 @@ schema is defined in [this source code block](
 https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L639
 ).
 
-A deployment metadata YAML file may contain a schema of a single deployment's definition (as
-specified above) or a schema of multiple deployments' definitions.
+A deployment metadata YAML file may contain the schema of a single deployment's definition (as
+specified above) or the schema of multiple deployments' definitions.
 
-The **multiple deployments' schema** is defined [here](
+The **multiple deployments' schema** is defined [this source code block](
 https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L679
 ).
 
@@ -253,8 +251,7 @@ below.
 
 #### Deployment Definition Sections
 
-At the top level, there are attributes that are not supposed to be changed once the
-deployment is created: 
+At the top-level, some attributes shouldn't be changed once the deployment is created: 
 
 * `user_provided_model_id`: An exception that associates a model definition to the given deployment. 
   A change in this field triggers model replacement or challenger creation, depending on the deployment's configuration.
@@ -262,17 +259,15 @@ deployment is created:
 
 ### GitHub Workflow
 
-A GitHub workflow is a configurable process made up of one or more jobs. It is defined in a YAML
-file located under `.github/workflows` in the repository
-(for more information please refer to
-  [Using Workflows in GitHub](https://docs.github.com/en/actions/using-workflows)
-)
+A GitHub workflow is a configurable process of one or more jobs. It is defined in a YAML
+file located under `.github/workflows` in the repository. For more information, refer to
+[Using Workflows in GitHub](https://docs.github.com/en/actions/using-workflows).
 
-To use the Custom Models Action, the following YAML should be
-included in the GitHub workflow definition:
+To use the Custom Models Action, the following YAML should be included in the 
+GitHub workflow definition:
 
-1. The action should be run upon two events: `pull_request` and `push`. Therefore, the
-   following should be set:
+1. The action should run on two events: `pull_request` and `push`. Therefore, the
+   following should be defined:
 
     ```yaml
     on:
@@ -370,7 +365,7 @@ sequentially:
 * Unit-tests.
 * A single functional test
 
-> **Note:** To enable the full execution of the functional test, the two related
+> **Note**: To enable the full execution of the functional test, the two related
 > variables (`DATAROBOT_WEBSERVER` and `DATAROBOT_API_TOKEN`) must be set in the
 > **Secrets** section of the GitHub repository. These are read by the workflow, which 
 > sets the proper environment variables.
@@ -380,7 +375,6 @@ sequentially:
 #### Model Examples <a id="model-examples"/>
 
 <details><summary>A Minimal Single Model Definition</summary>
-
 
 Below is an example of a minimal model's definition, which includes only mandatory fields:
 
@@ -397,11 +391,9 @@ version:
   model_environment_id: 5e8c889607389fe0f466c72d
 ```
 
-
 </details>
 
 <details><summary>Full Single Model Definition</summary>
-
 
 Below is an example of a full model's definition, which includes both mandatory and optional fields:
 
@@ -469,11 +461,9 @@ test:
 > will automatically be regarded as suffixed with `**`. This means that the directory will be
 > scanned recursively.
 
-
 </details>
 
 <details><summary>Multi Models Definition</summary>
-
 
 Below is an example of a multi-models definition, which includes only mandatory fields:
 
@@ -506,13 +496,11 @@ datarobot_models:
         model_environment_id: 5e8c889607389fe0f466c72d
 ```
 
-
 </details>
 
 #### Deployment Examples <a id="deployment-examples"/>
 
 <details><summary>Minimal Single Deployment Definition</summary>
-
 
 Below is an example of a minimal deployment's definition, which includes only mandatory fields:
 
@@ -521,11 +509,9 @@ user_provided_deployment_id: my-awesome-deployment-id
 user_provided_model_id: any-model-unique-id-1
 ```
 
-
 </details>
 
 <details><summary>Full Single Deployment Definition</summary>
-
 
 Below is an example of a full deployment's definition, which includes both mandatory and optional
 fields:
@@ -554,11 +540,9 @@ settings:
       - Remote-IP
 ```
 
-
 </details>
 
 <details><summary>Multi Deployments Definition</summary>
-
 
 Below is an example of a multi-deployments definition, which includes only mandatory fields:
 
@@ -572,7 +556,6 @@ Below is an example of a multi-deployments definition, which includes only manda
 - user_provided_deployment_id: any-deployment-unique-id-3
   user_provided_model_id: any-model-unique-id-3
 ```
-
 
 </details>
 
