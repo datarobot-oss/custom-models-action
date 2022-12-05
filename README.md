@@ -213,8 +213,8 @@ For examples, please refer to the [model definition examples section](#model-exa
 At the top level, there are attributes you cannot change after a model is created:
 
 * `settings`: Changes to the fields under this section result in changes to the model's
-              settings without the creation of a new version.
-* `version`: Changes to the fields under this section result in the creation of a new version.
+              settings without creating a new version.
+* `version`: Changes to the fields under this section result in a new version.
 * `test`: Contains attributes that control the custom inference model testing. If omitted, a
           test will not be executed.
 
@@ -228,7 +228,7 @@ https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65
 A deployment metadata YAML file may contain the schema of a single deployment's definition (as
 specified above) or the schema of multiple deployments' definitions.
 
-The **multiple deployments' schema** is defined [this source code block](
+The **multiple deployments' schema** is defined in [this source code block](
 https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L679
 ).
 
@@ -251,7 +251,7 @@ below.
 
 #### Deployment Definition Sections
 
-At the top-level, some attributes shouldn't be changed once the deployment is created: 
+At the top level, some attributes shouldn't be changed once the deployment is created: 
 
 * `user_provided_model_id`: An exception that associates a model definition to the given deployment. 
   A change in this field triggers model replacement or challenger creation, depending on the deployment's configuration.
@@ -311,15 +311,15 @@ GitHub workflow definition:
     action a step before the DataRobot action.
   - `custom-models-action@1.1.1`: This link refers to a specific historic release. You might want
     to look at newer versions in the [RELEASES.md](RELEASES.md).
-  - There are two actions' input arguments that are used to establish communication with
-    DataRobot system. They should reside in the repository **Secrets** section:
+  - Two input arguments are used to establish communication with DataRobot. 
+    These arguments should be defined in the repository **Secrets** section:
     - `DATAROBOT_API_TOKEN`: The API token used to validate credentials with DataRobot.
     - `DATAROBOT_WEBSERVER`: The publicly accessible DataRobot web server URL.
-  For the full possible input arguments to the action, refer to the
-    [input arguments section](#input-arguments) above.
-  For a complete example, refer to the [workflow example](#workflow-example) below.
+      For the full possible input arguments to the action, refer to the [input arguments section](#input-arguments) above.
 
   </details>
+
+  For a complete example, refer to the [workflow example](#workflow-example) below.
 
 ### Development Information
 
