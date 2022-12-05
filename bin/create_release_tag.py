@@ -33,7 +33,7 @@ class ReleaseCreator:
             self._verify_override_conditions()
             self._remove_tag()
         else:
-            self._verify_release_history()
+            self._verify_valid_docs()
 
         self._create_tag()
         self._push_to_remote()
@@ -59,9 +59,13 @@ class ReleaseCreator:
         if user_response != "Yes":
             sys.exit(0)
 
-        self._verify_release_history()
+        self._verify_valid_docs()
 
-    def _verify_release_history(self):
+    def _verify_valid_docs(self):
+        self._verify_releases_history()
+        self._verify_tag_reference_in_readme()
+
+    def _verify_releases_history(self):
         releases_filepath = self._git_workspace_path / "RELEASES.md"
         today_date = date.today().strftime("%Y-%m-%d")
         expected_release_report_line = f"## {self._args.tag[1:]} [{today_date}]"
@@ -76,6 +80,27 @@ class ReleaseCreator:
                         )
                     break
         logger.info("Release history is valid (RELEASES.md).")
+
+    def _verify_tag_reference_in_readme(self):
+        readme_filepath = self._git_workspace_path / "README.md"
+        with open(readme_filepath, encoding="utf-8") as fd:
+            content = fd.read()
+
+        unexpected_tags_pattern = f"datarobot-oss/custom-models-action@((?!{self._args.tag})\\S+)"
+        unexpected_tags = re.findall(unexpected_tags_pattern, content)
+        if unexpected_tags:
+            print(f"An invalid tag(s) are referenced in the README.md: {unexpected_tags}")
+            user_response = input(f"Do you want to replace with new tag: {self._args.tag}? [yY] ")
+            if user_response in ["y", "Y"]:
+                with open(readme_filepath, "w", encoding="utf-8") as fd:
+                    content = re.sub(
+                        unexpected_tags_pattern,
+                        f"datarobot-oss/custom-models-action@{self._args.tag}",
+                        content,
+                    )
+                    fd.write(content)
+                    print("Replacement done. Please commit and try again ...")
+                    sys.exit(0)
 
     def _remove_tag(self):
         logger.info("Removing tag: %s", self._args.tag)
