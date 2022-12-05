@@ -306,26 +306,26 @@ included in the GitHub workflow definition:
                       branch: master
                       allow-model-deletion: true
                       allow-deployment-deletion: true
-    ```
-    <details><summary>Notes</summary>
-    <p>
-    - `if: ${{ github.event.pull_request.merged != true }}`: An important condition that is
-      needed in order to skip the action's execution upon merging. The action will be triggered
-      by the 'push' event.
-    - `actions/checkout@v3`: The action scans the repository files; therefore, it requires the checkout
-      action a step before the DataRobot action.
-    - `custom-models-action@1.1.1`: This link refers to a specific historic release. You might want
-      to look at newer versions in the [RELEASES.md](RELEASES.md).
-    - There are two actions' input arguments that are used to establish communication with
-      DataRobot system. They should reside in the repository **Secrets** section:
-      - `DATAROBOT_API_TOKEN`: The API token that is used to validate credentials with DataRobot
-                                system.
-      - `DATAROBOT_WEBSERVER`: The publicly accessible DataRobot web server URL.
-    For the full possible input arguments to the action, refer to the
-      [input arguments section](#input-arguments) above.
-    For a complete example, refer to the [workflow example](#workflow-example) below.
-    </p>
-    </details>
+  ```
+  <details><summary>Notes</summary>
+  <p>
+  - `if: ${{ github.event.pull_request.merged != true }}`: An important condition that is
+    needed in order to skip the action's execution upon merging. The action will be triggered
+    by the 'push' event.
+  - `actions/checkout@v3`: The action scans the repository files; therefore, it requires the checkout
+    action a step before the DataRobot action.
+  - `custom-models-action@1.1.1`: This link refers to a specific historic release. You might want
+    to look at newer versions in the [RELEASES.md](RELEASES.md).
+  - There are two actions' input arguments that are used to establish communication with
+    DataRobot system. They should reside in the repository **Secrets** section:
+    - `DATAROBOT_API_TOKEN`: The API token that is used to validate credentials with DataRobot
+                              system.
+    - `DATAROBOT_WEBSERVER`: The publicly accessible DataRobot web server URL.
+  For the full possible input arguments to the action, refer to the
+    [input arguments section](#input-arguments) above.
+  For a complete example, refer to the [workflow example](#workflow-example) below.
+  </p>
+  </details>
 
 ### Development Information
 
