@@ -283,30 +283,30 @@ included in the GitHub workflow definition:
     ```
 2. Use the DataRobot custom models action in a workflow job as follows:
 
-  ```yaml
-      jobs:
-          datarobot-custom-models:
-              # Run this job on any action of a PR, but skip the job upon merging to the main branch.
-              # This will be taken care of by the push event.
-              if: ${{ github.event.pull_request.merged != true }}
+    ```yaml
+    jobs:
+        datarobot-custom-models:
+            # Run this job on any action of a PR, but skip the job upon merging to the main branch.
+            # This will be taken care of by the push event.
+            if: ${{ github.event.pull_request.merged != true }}
 
-                  runs-on: ubuntu-latest
+                runs-on: ubuntu-latest
 
-                  steps:
-                    - uses: actions/checkout@v3
-                      with:
-                        fetch-depth: 0
-
-                  - name: DataRobot Custom Models Step
-                    id: datarobot-custom-models-step
-                    uses: datarobot-oss/custom-models-action@v1.1.4
+                steps:
+                  - uses: actions/checkout@v3
                     with:
-                      api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
-                      webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
-                      branch: master
-                      allow-model-deletion: true
-                      allow-deployment-deletion: true
-  ```
+                      fetch-depth: 0
+
+                - name: DataRobot Custom Models Step
+                  id: datarobot-custom-models-step
+                  uses: datarobot-oss/custom-models-action@v1.1.4
+                  with:
+                    api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
+                    webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
+                    branch: master
+                    allow-model-deletion: true
+                    allow-deployment-deletion: true
+    ```
   <details><summary>Notes</summary>
   <p>
   - `if: ${{ github.event.pull_request.merged != true }}`: An important condition that is
