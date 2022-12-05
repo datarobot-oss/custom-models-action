@@ -287,8 +287,6 @@ embedded in the GitHub workflow definition:
      by the 'push' event.
    - The action scans the repository files therefore it is required to use the `actions/checkout@v3`
      action in a step before DataRobot action.
-   - The `custom-models-action@1.1.1` link refers to a specific historic release. You might want
-     to look at newer versions in the [RELEASES.md](RELEASES.md).
    - There are two actions' input arguments that are used to establish a communication with
      DataRobot system. They should reside in the repository "Secrets" section:
      - `DATAROBOT_API_TOKEN` - the API token that is used to validate credentials with DataRobot
