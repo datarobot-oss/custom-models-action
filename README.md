@@ -30,7 +30,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  datarobot-custom-models-action:
+  datarobot-custom-models:
     # Run this job on any action of a PR, but skip the job upon merging to the main branch. This
     # will be taken care of by the push event.
     if: ${{ github.event.pull_request.merged != true }}
@@ -42,9 +42,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: DataRobot Custom Models Action
-        id: datarobot-custom-models-action
-        uses: datarobot/custom-models-action@v1.1.2
+      - name: DataRobot Custom Models Step
+        id: datarobot-custom-models-step
+        uses: datarobot-oss/custom-models-action@HEAD
         with:
           api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
           webserver: https://app.datarobot.com/
@@ -259,7 +259,7 @@ embedded in the GitHub workflow definition:
 
 ```yaml
     jobs:
-        datarobot-custom-models-action:
+        datarobot-custom-models:
             # Run this job on any action of a PR, but skip the job upon merging to the main branch.
             # This will be taken care of by the push event.
             if: ${{ github.event.pull_request.merged != true }}
@@ -271,9 +271,9 @@ embedded in the GitHub workflow definition:
                 with:
                   fetch-depth: 0
 
-              - name: DataRobot Custom Models Action
-                id: datarobot-custom-models-action
-                uses: datarobot/custom-models-action@v1.1.1
+              - name: DataRobot Custom Models Step
+                id: datarobot-custom-models-step
+                uses: datarobot-oss/custom-models-action@HEAD
                 with:
                   api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
                   webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
@@ -447,7 +447,7 @@ datarobot_models:
       version:
         # Make sure this is the environment ID is in your system.
         # This one is the '[DataRobot] Python 3 Scikit-Learn Drop-In' environment
-      model_environment_id: 5e8c889607389fe0f466c72d
+        model_environment_id: 5e8c889607389fe0f466c72d
 
   - model_path: ./models/model_2
     model_metadata:
@@ -458,9 +458,9 @@ datarobot_models:
         target_name: Grade 2014
 
       version:
-      # Make sure this is the environment ID is in your system.
-      # This one is the '[DataRobot] Python 3 Scikit-Learn Drop-In' environment
-      model_environment_id: 5e8c889607389fe0f466c72d
+        # Make sure this is the environment ID is in your system.
+        # This one is the '[DataRobot] Python 3 Scikit-Learn Drop-In' environment
+        model_environment_id: 5e8c889607389fe0f466c72d
 ```
 
 #### Deployment Examples <a id="deployment-examples"/>
@@ -532,7 +532,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  datarobot-custom-models-action:
+  datarobot-custom-models:
     # Run this job on any action of a PR, but skip the job upon merging to the main branch. This
     # will be taken care of by the push event.
     if: ${{ github.event.pull_request.merged != true }}
@@ -544,9 +544,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: DataRobot Custom Models Action
-        id: datarobot-custom-models-action
-        uses: datarobot/custom-models-action@v1.1.1
+      - name: DataRobot Custom Models Step
+        id: datarobot-custom-models-step
+        uses: datarobot-oss/custom-models-action@HEAD
         with:
           api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
           webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
@@ -556,16 +556,16 @@ jobs:
 
       - name: DataRobot Custom Models Action Results
         run: |
-          echo "Total affected models: ${{ steps.datarobot-custom-models-action.outputs.total-affected-models }}"
-          echo "Total created models: ${{ steps.datarobot-custom-models-action.outputs.total-created-models }}"
-          echo "Total deleted models: ${{ steps.datarobot-custom-models-action.outputs.total-deleted-models }}"
-          echo "Total created model versions: ${{ steps.datarobot-custom-models-action.outputs.total-created-model-versions }}"
+          echo "Total affected models: ${{ steps.datarobot-custom-models-step.outputs.total-affected-models }}"
+          echo "Total created models: ${{ steps.datarobot-custom-models-step.outputs.total-created-models }}"
+          echo "Total deleted models: ${{ steps.datarobot-custom-models-step.outputs.total-deleted-models }}"
+          echo "Total created model versions: ${{ steps.datarobot-custom-models-step.outputs.total-created-model-versions }}"
 
-          echo "Total affected deployments: ${{ steps.datarobot-custom-models-action.outputs.total-affected-deployments }}"
-          echo "Total created deployments: ${{ steps.datarobot-custom-models-action.outputs.total-created-deployments }}"
-          echo "Total deleted deployments: ${{ steps.datarobot-custom-models-action.outputs.total-deleted-deployments }}"
+          echo "Total affected deployments: ${{ steps.datarobot-custom-models-step.outputs.total-affected-deployments }}"
+          echo "Total created deployments: ${{ steps.datarobot-custom-models-step.outputs.total-created-deployments }}"
+          echo "Total deleted deployments: ${{ steps.datarobot-custom-models-step.outputs.total-deleted-deployments }}"
 
-          echo "Message: ${{ steps.datarobot-custom-models-action.outputs.message }}"
+          echo "Message: ${{ steps.datarobot-custom-models-step.outputs.message }}"
 ```
 
 # Copyright and License
