@@ -3,7 +3,7 @@
 > **Note**: This repository is still a work in progress
 
 The custom models action manages custom inference models and deployments in DataRobot via GitHub CI/CD workflows. 
-These workflows enable users to create or delete models and deployments and modify settings. Metadata defined in 
+These workflows allow you to create or delete models and deployments and modify settings. Metadata defined in 
 YAML files enables the custom model action's control over models and deployments. Most YAML files for this action 
 can reside in any folder within your custom model's repository. The YAML is searched, collected, and tested against 
 a schema to determine if it contains the entities used in these workflows.
@@ -123,6 +123,31 @@ repository in GitHub, take the following steps:
 > For example, you add a model definition with a training dataset, make a commit, and push to the remote. 
 > Then, you immediately delete the model definition, make a commit, and push to the remote.
 > The training data upload action may begin after model deletion, resulting in an error.
+
+## Custom Model Action Commit Information in DataRobot
+
+After your workflow creates a model and a deployment in DataRobot, you can access the commit information 
+from the model's version info and the deployment's overview:
+
+### Model Version Info
+
+1. In the **Model Registry**, click **Custom Model Workshop**.
+
+2. On the **Models** tab, click a GitHub-sourced model from the list and then click the **Versions** tab.
+
+3. Under **Manage Versions**, click the version you want to view the commit for.
+
+4. Under **Version Info**, find the **Git Commit Reference** and then click the commit hash (or commit ID) 
+   to open the commit that created the current version.
+
+### Deployment overview
+
+1. In the **Deployments** inventory, click a GitHub-sourced deployment from the list.
+
+2. On the deployment's **Overview** tab, review the model and deployment information provided by your workflow.
+
+3. In the **Content** group box, find the **Git Commit Reference** and click the commit hash (or commit ID) 
+   to open the commit that created the deployment.
 
 ## Custom Model Action Reference
 
