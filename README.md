@@ -124,8 +124,6 @@ repository in GitHub, take the following steps:
 > Then, you immediately delete the model definition, make a commit, and push to the remote.
 > The training data upload action may begin after model deletion, resulting in an error.
 
-This results in an execution of the action that deletes the related model.
-
 ## Custom Model Action Reference
 
 ### Datasets
