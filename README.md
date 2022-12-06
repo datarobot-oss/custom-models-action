@@ -2,17 +2,18 @@
 
 > **Note**: This repository is still a work in progress
 
-The custom models action manages custom inference models and deployments in DataRobot via GitHub CI/CD
-workflows. It enables users to create or delete models and deployments and modify settings. Metadata 
-defined in YAML files enables the custom model action's control over models and deployments. The YAML
-files for this action can generally be located in any folder within your custom model's repository. 
-The YAML files are searched, collected, and tested against a schema to determine if they contain the 
-related definitions for each of these entities.
+The custom models action manages custom inference models and deployments in DataRobot via GitHub CI/CD workflows. 
+These workflows enable users to create or delete models and deployments and modify settings. Metadata defined in 
+YAML files enables the custom model action's control over models and deployments. Most YAML files for this action 
+can reside in any folder within your custom model's repository. The YAML is searched, collected, and tested against 
+a schema to determine if it contains the entities used in these workflows.
 
 ## Custom Model Action Quick Start
 
-To use the custom models action to create a custom inference model and deployment in DataRobot from your
-custom model repository in GitHub:
+This quickstart example uses a [Python Scikit-Learn model template](https://github.com/datarobot/datarobot-user-models/tree/master/model_templates/python3_sklearn) 
+from the [datarobot-user-model repository](https://github.com/datarobot/datarobot-user-models/tree/master/model_templates). 
+To set up a custom models action that will create a custom inference model and deployment in DataRobot from a custom model 
+repository in GitHub, take the following steps:
 
 1. In the `.github/workflows` directory of your custom model repository, create a YAML file (with any filename) 
    containing the following YAML:
@@ -55,6 +56,8 @@ custom model repository in GitHub:
     
     Configure the following fields:
 
+    - `branches`: Provide the name of your repository's main branch (either `master` or `main`) for `pull_request` and `push`. If you created your repository in GitHub, you likely need to update these fields to `main`.
+
     - `api-token`: Provide a value for the `${{ secrets.DATAROBOT_API_TOKEN }}` variable by creating an 
       [Encrypted secret for GitHub Actions](https://docs.github.com/en/actions/security-guides/encrypted-secrets#creating-encrypted-secrets-for-a-repository)
       containing your [DataRobot API key](https://docs.datarobot.com/en/docs/platform/account-mgmt/acct-settings/api-key-mgmt.html#api-key-management).
@@ -92,7 +95,7 @@ custom model repository in GitHub:
     - `target_type`: Provide the correct target type for your custom model.
     - `target_name`: Provide the correct target name for your custom model.
     - `model_environment_id`: Provide the DataRobot execution environment required for your custom model.
-      You can find these environments in the DataRobot application, under 
+      You can find these environments in the DataRobot application under 
       [**Model Registry** > **Custom Model Workshop** > **Environments**](https://docs.datarobot.com/en/docs/mlops/deployment/custom-models/custom-env.html).
 
 4. In any directory in your repository, add a deployment definition YAML file (with any filename) 
@@ -110,12 +113,18 @@ custom model repository in GitHub:
 
 5. Commit these changes and push to the remote:
 
-- Navigate to your custom model repository in GitHub and click the `Actions` tab. You'll notice
-  that the action is being executed.
+    - Navigate to your custom model repository in GitHub and click the `Actions` tab. You'll notice
+      that the action is being executed.
 
-- Navigate to the DataRobot application. You'll notice that a new custom model was
-  created along with an associated deployment. This action can take a few minutes.
+    - Navigate to the DataRobot application. You'll notice that a new custom model was
+      created along with an associated deployment. This action can take a few minutes.
 
+> **Note**: Creating two commits (or merging two pull requests) in quick succession can result in a `ResourceNotFoundError`. 
+> For example, you add a model definition with a training dataset, make a commit, and push to the remote. 
+> Then, you immediately delete the model definition, make a commit, and push to the remote.
+> The training data upload action may begin after model deletion, resulting in an error.
+
+This results in an execution of the action that deletes the related model.
 
 ## Custom Model Action Reference
 
