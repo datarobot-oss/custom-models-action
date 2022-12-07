@@ -2,7 +2,7 @@
 
 > **Note**: This repository is still a work in progress
 
-The custom models action manages custom inference models and deployments in DataRobot via GitHub CI/CD workflows. 
+The custom models action manages custom inference models and their associated deployments in DataRobot via GitHub CI/CD workflows. 
 These workflows allow you to create or delete models and deployments and modify settings. Metadata defined in 
 YAML files enables the custom model action's control over models and deployments. Most YAML files for this action 
 can reside in any folder within your custom model's repository. The YAML is searched, collected, and tested against 
@@ -36,12 +36,12 @@ repository in GitHub, take the following steps:
         # will be taken care of by the push event.
         if: ${{ github.event.pull_request.merged != true }}
 
-            runs-on: ubuntu-latest
+        runs-on: ubuntu-latest
 
-            steps:
-              - uses: actions/checkout@v3
-                with:
-                  fetch-depth: 0
+        steps:
+          - uses: actions/checkout@v3
+            with:
+              fetch-depth: 0
 
               - name: DataRobot Custom Models Step
                 id: datarobot-custom-models-step
@@ -144,7 +144,7 @@ from the model's version info and the deployment's overview:
 3. Under **Manage Versions**, click the version you want to view the commit for.
 
 4. Under **Version Info**, find the **Git Commit Reference** and then click the commit hash (or commit ID) 
-   to open the commit that created the current version.
+   to open the commit in GitHub that created the current version.
 
 ### Model Package Info
 
@@ -168,9 +168,9 @@ from the model's version info and the deployment's overview:
 
 ### Datasets
 
-Datasets referenced in custom models action YAML files are expected to exist in the DataRobot catalog 
+Datasets referenced in custom models action YAML files are expected to exist in the DataRobot AI catalog 
 before configuring the action in GitHub. You should upload these datasets to the DataRobot 
-catalog (via the UI or any other client) prior to configuring the GitHub action.
+AI catalog (via the UI or any other client) prior to configuring the GitHub action.
 
 ### Drop-In Environments
 
@@ -206,7 +206,7 @@ The action supports the following optional input arguments:
 | `--models-only`               | Determines whether to manage custom inference models only or also deployments <br> **Default**: `false` |
 | `--skip-cert-verification`    | Determines whether a request to an HTTPS URL is made without a certificate verification. <br> **Default**: `false` |
 
-### The GitHub Action's Output Statistics
+### The GitHub Action's Output Metrics
 
 The GitHub action supports the following output arguments, which can later be used by follow-up
 steps in the same GitHub job (refer to the workflow example below):
@@ -356,7 +356,7 @@ GitHub workflow definition:
     by the 'push' event.
   - `actions/checkout@v3`: The action scans the repository files; therefore, it requires the checkout
     action a step before the DataRobot action.
-  - `custom-models-action@1.1.1`: This link refers to a specific historic release. You might want
+  - `custom-models-action@1.1.4`: This link refers to a specific historic release. You might want
     to look at newer versions in the [RELEASES.md](RELEASES.md).
   - Two input arguments are used to establish communication with DataRobot. 
     These arguments should be defined in the repository **Secrets** section:
@@ -410,10 +410,10 @@ sequentially:
 * Linter
 * Code style checks
 * Unit-tests.
-* A single functional test
+* Functional test(s).
 
 > **Note**: To enable the full execution of the functional test, the two related
-> variables (`DATAROBOT_WEBSERVER` and `DATAROBOT_API_TOKEN`) must be set in the
+> variables (`DATAROBOT_WEBSERVER` and `DATAROBOT_API_TOKEN`) were set in the
 > **Secrets** section of the GitHub repository. These are read by the workflow, which 
 > sets the proper environment variables.
 
