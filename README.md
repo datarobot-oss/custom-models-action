@@ -56,7 +56,10 @@ repository in GitHub, take the following steps:
     
     Configure the following fields:
 
-    - `branches`: Provide the name of your repository's main branch (either `master` or `main`) for `pull_request` and `push`. If you created your repository in GitHub, you likely need to update these fields to `main`.
+    - `branches`: Provide the name of your repository's main branch (usually either `master` or `main`) for `pull_request` and `push`. 
+      If you created your repository in GitHub, you likely need to update these fields to `main`. 
+      While `master` and `main` are the most common branch names, you can target any branch; 
+      for example, you could run the workflow on a `release` branch or a `test` branch.
 
     - `api-token`: Provide a value for the `${{ secrets.DATAROBOT_API_TOKEN }}` variable by creating an 
       [Encrypted secret for GitHub Actions](https://docs.github.com/en/actions/security-guides/encrypted-secrets#creating-encrypted-secrets-for-a-repository)
@@ -68,8 +71,10 @@ repository in GitHub, take the following steps:
     - `webserver`: Provide your DataRobot webserver value here if it isn't the default DataRobot 
       US server (`https://app.datarobot.com/`)
 
-    - `branch`: Provide the name of your repository's main branch (either `master` or `main`). If you created your
-      repository in GitHub, you likely need to update this field to `main`.
+    - `branch`: Provide the name of your repository's main branch (usually either `master` or `main`). 
+      If you created your repository in GitHub, you likely need to update this field to `main`. 
+      While `master` and `main` are the most common branch names, you can target any branch; 
+      for example, you could run the workflow on a `release` branch or a `test` branch.
 
 2. Commit the workflow YAML file and push it to the remote. After you complete this step, any
    push to the remote (or merged pull request) triggers the action.
@@ -123,6 +128,7 @@ repository in GitHub, take the following steps:
 > For example, you add a model definition with a training dataset, make a commit, and push to the remote. 
 > Then, you immediately delete the model definition, make a commit, and push to the remote.
 > The training data upload action may begin after model deletion, resulting in an error.
+> To avoid this scenario, wait for an action's execution to complete before pushing new commits or merging new pull requests to the remote repository.
 
 ## Custom Model Action Commit Information in DataRobot
 
@@ -139,6 +145,15 @@ from the model's version info and the deployment's overview:
 
 4. Under **Version Info**, find the **Git Commit Reference** and then click the commit hash (or commit ID) 
    to open the commit that created the current version.
+
+### Model Package Info
+
+  1. In the **Model Registry**, click **Model Packages**.
+  
+  2. On the **Model Packages** tab, click a GitHub-sourced model package from the list.
+
+  2. Under **Package Info**, review the model information provided by your workflow, find the **Git Commit Reference**, 
+     and then click the commit hash (or commit ID) to open the commit that created the current model package. 
 
 ### Deployment overview
 
@@ -272,7 +287,7 @@ below.
 
 <details><summary>Notes</summary>
 
- * Changes to deployments in DataRobot are made only upon merging a pull request
+ * Changes to deployments in DataRobot are made upon making a commit or merging a pull request
    to the configured main branch. During a pull request, the GitHub action only performs
    integrity checks.
  * Every new version of the associated custom inference model will result in a new challenger
@@ -312,27 +327,27 @@ GitHub workflow definition:
 
     ```yaml
     jobs:
-        datarobot-custom-models:
-            # Run this job on any action of a PR, but skip the job upon merging to the main branch.
-            # This will be taken care of by the push event.
-            if: ${{ github.event.pull_request.merged != true }}
+      datarobot-custom-models:
+        # Run this job on any action of a PR, but skip the job upon merging to the main branch.
+        # This will be taken care of by the push event.
+        if: ${{ github.event.pull_request.merged != true }}
 
-                runs-on: ubuntu-latest
+          runs-on: ubuntu-latest
 
-                steps:
-                  - uses: actions/checkout@v3
-                    with:
-                      fetch-depth: 0
+          steps:
+            - uses: actions/checkout@v3
+              with:
+                fetch-depth: 0
 
-                - name: DataRobot Custom Models Step
-                  id: datarobot-custom-models-step
-                  uses: datarobot-oss/custom-models-action@v1.1.4
-                  with:
-                    api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
-                    webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
-                    branch: master
-                    allow-model-deletion: true
-                    allow-deployment-deletion: true
+          - name: DataRobot Custom Models Step
+            id: datarobot-custom-models-step
+            uses: datarobot-oss/custom-models-action@v1.1.4
+            with:
+              api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
+              webserver: ${{ secrets.DATAROBOT_WEBSERVER }}
+              branch: master
+              allow-model-deletion: true
+              allow-deployment-deletion: true
     ```
   <details><summary>Notes</summary>
 
