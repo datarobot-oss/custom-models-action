@@ -16,7 +16,7 @@ To set up a custom models action that will create a custom inference model and d
 repository in GitHub, take the following steps:
 
 1. In the `.github/workflows` directory of your custom model repository, create a YAML file (with any filename) 
-   containing the following YAML:
+   containing the following:
 
     ```yaml
     name: Workflow CI/CD
@@ -62,14 +62,14 @@ repository in GitHub, take the following steps:
       for example, you could run the workflow on a `release` branch or a `test` branch.
 
     - `api-token`: Provide a value for the `${{ secrets.DATAROBOT_API_TOKEN }}` variable by creating an 
-      [Encrypted secret for GitHub Actions](https://docs.github.com/en/actions/security-guides/encrypted-secrets#creating-encrypted-secrets-for-a-repository)
+      [encrypted secret for GitHub Actions](https://docs.github.com/en/actions/security-guides/encrypted-secrets#creating-encrypted-secrets-for-a-repository)
       containing your [DataRobot API key](https://docs.datarobot.com/en/docs/platform/account-mgmt/acct-settings/api-key-mgmt.html#api-key-management).
       Alternatively, you can set the token string directly to this field; however, this method is
       highly discouraged because your API key is extremely sensitive data. If you use this method, 
       anyone with access to your repository can access your API key.
 
     - `webserver`: Provide your DataRobot webserver value here if it isn't the default DataRobot 
-      US server (`https://app.datarobot.com/`)
+      US server (`https://app.datarobot.com/`).
 
     - `branch`: Provide the name of your repository's main branch (usually either `master` or `main`). 
       If you created your repository in GitHub, you likely need to update this field to `main`. 
