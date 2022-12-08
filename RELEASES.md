@@ -1,5 +1,8 @@
 # RELEASES
 
+## 1.1.5 [2022-12-08]
+  * Improve documentation in the README.md file
+
 ## 1.1.4 [2022-12-05]
   * Internal improvements to the development environment
   * Bug fixes
