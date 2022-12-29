@@ -1022,8 +1022,8 @@ class DrClient:
         model_package = self._create_model_package_from_custom_model_version(
             custom_model_version["id"]
         )
-        deployment_id = self._create_deployment_from_model_package(model_package, deployment_info)
-        deployment = self.update_deployment_settings(deployment_id, deployment_info)
+        deployment = self._create_deployment_from_model_package(model_package, deployment_info)
+        deployment = self.update_deployment_settings(deployment, deployment_info)
         return deployment
 
     def _create_model_package_from_custom_model_version(self, custom_model_version_id):
@@ -1069,7 +1069,7 @@ class DrClient:
             )
         location = self._wait_for_async_resolution(response.headers["Location"])
         response = self._http_requester.get(location, raw=True)
-        return response.json()["id"]
+        return response.json()
 
     def _get_prediction_environment_id(self, model_package, deployment_info):
         prediction_environment_name = deployment_info.get_value(
@@ -1085,7 +1085,7 @@ class DrClient:
             )
         return prediction_envs[0]["id"]
 
-    def update_deployment_settings(self, deployment_id, deployment_info, actual_settings=None):
+    def update_deployment_settings(self, deployment, deployment_info, actual_settings=None):
         """
         This method updates the deployment setting. It can be called with the actual deployment
         settings in order to avoid submission of unneeded settings. The reason for not always
@@ -1096,8 +1096,8 @@ class DrClient:
 
         Parameters
         ----------
-        deployment_id : str
-            The DataRobot deployment ID.
+        deployment : dict
+            A DataRobot raw deployment.
         deployment_info :  DeploymentInfo
             An information about a deployment, which was read from the local source tree.
         actual_settings : dict
@@ -1109,8 +1109,9 @@ class DrClient:
             The updated deployment from DataRobot.
         """
 
-        payload = {}
+        self._update_deployment(deployment, deployment_info)
 
+        payload = {}
         desired_association_section = deployment_info.get_settings_value(
             DeploymentSchema.ASSOCIATION_KEY
         )
@@ -1155,6 +1156,7 @@ class DrClient:
 
         payload["challengerModels"] = {"enabled": deployment_info.is_challenger_enabled}
 
+        deployment_id = deployment["id"]
         response = self._http_requester.patch(
             self.DEPLOYMENT_SETTINGS_ROUTE.format(deployment_id=deployment_id), json=payload
         )
@@ -1170,6 +1172,42 @@ class DrClient:
         location = self._wait_for_async_resolution(response.headers["Location"])
         response = self._http_requester.get(location, raw=True)
         return response.json()
+
+    def _update_deployment(self, deployment, deployment_info):
+        """
+        Updates attributes in the deployment entity.
+
+        Parameters
+        ----------
+        deployment : dict
+            The DataRobot raw deployment.
+        deployment_info : DeploymentInfo
+            An information about a deployment, which was read from the local source tree.
+        """
+
+        payload = {}
+        desired_label = deployment_info.get_settings_value(DeploymentSchema.LABEL_KEY)
+        if desired_label and desired_label != deployment["label"]:
+            payload["label"] = desired_label
+
+        desired_description = deployment_info.get_settings_value(DeploymentSchema.DESCRIPTION_KEY)
+        if desired_description != deployment["description"]:
+            payload["description"] = desired_description
+
+        importance = deployment_info.get_settings_value(DeploymentSchema.IMPORTANCE_KEY)
+        if importance and importance != deployment["importance"]:
+            payload["importance"] = importance
+
+        if payload:
+            deployment_id = deployment["id"]
+            response = self._http_requester.patch(
+                self.DEPLOYMENT_ROUTE.format(deployment_id=deployment_id), json=payload
+            )
+            if response.status_code != 204:
+                raise DataRobotClientError(
+                    f"Failed to update deployment. Error: {response.text}.",
+                    code=response.status_code,
+                )
 
     @classmethod
     def _setup_association_payload(cls, deployment_info, actual_settings):
@@ -1321,27 +1359,6 @@ class DrClient:
         location = self._wait_for_async_resolution(response.headers["Location"])
         response = self._http_requester.get(location, raw=True)
         return response.json()
-
-    def update_deployment_label(self, deployment_id, label):
-        """
-        Update a deployment label in DataRobot.
-
-        Parameters
-        ----------
-        deployment_id : str
-            A DataRobot deployment ID.
-        label : str
-            A label to set.
-        """
-
-        response = self._http_requester.patch(
-            self.DEPLOYMENT_ROUTE.format(deployment_id=deployment_id), json={"label": label}
-        )
-        if response.status_code != 204:
-            raise DataRobotClientError(
-                f"Failed to update deployment label. Error: {response.text}.",
-                code=response.status_code,
-            )
 
     def delete_all_deployments(self, return_on_error=True):
         """Delete all the deployments that are accessed by the user in DataRobot."""

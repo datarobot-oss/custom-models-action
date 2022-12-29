@@ -17,7 +17,7 @@ from common.github_env import GitHubEnv
 def unique_str():
     """Generate a unique 10-chars long string."""
 
-    return f"{random.randint(1, 2 ** 32): 010}"
+    return f"{random.randint(1, 2 ** 32):010}"
 
 
 @pytest.fixture

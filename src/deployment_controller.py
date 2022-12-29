@@ -218,12 +218,14 @@ class DeploymentController(ControllerBase):
             deployment_info.user_provided_model_id
         )
         deployment = self._dr_client.create_deployment(custom_model.latest_version, deployment_info)
+        self.datarobot_deployments[deployment_info.user_provided_id] = DataRobotDeployment(
+            deployment, custom_model.latest_version
+        )
         logger.info(
             "A new deployment was created, git_id: %s, id: %s.",
             deployment_info.user_provided_id,
             deployment["id"],
         )
-
         self._handle_follow_up_deployment_settings(deployment_info, deployment)
 
         self.stats.total_created += 1
@@ -331,11 +333,6 @@ class DeploymentController(ControllerBase):
         return challengers[-1]["model"]["id"] == model_latest_version["id"]
 
     def _handle_deployment_changes(self, deployment_info, datarobot_deployment):
-        desired_label = deployment_info.get_settings_value(DeploymentSchema.LABEL_KEY)
-        if desired_label and desired_label != datarobot_deployment.deployment["label"]:
-            datarobot_deployment_id = datarobot_deployment.deployment["id"]
-            self._dr_client.update_deployment_label(datarobot_deployment_id, desired_label)
-
         self._handle_deployment_settings(deployment_info, datarobot_deployment)
 
     def _handle_deployment_settings(self, deployment_info, datarobot_deployment):
@@ -344,9 +341,8 @@ class DeploymentController(ControllerBase):
             datarobot_deployment_id, deployment_info
         )
         self._dr_client.update_deployment_settings(
-            datarobot_deployment_id, deployment_info, actual_deployment_settings
+            datarobot_deployment.deployment, deployment_info, actual_deployment_settings
         )
-
         if self._dr_client.should_submit_new_actuals(deployment_info, actual_deployment_settings):
             self._submit_actuals(deployment_info, datarobot_deployment)
 
