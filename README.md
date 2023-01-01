@@ -572,9 +572,9 @@ settings:
   description: "This is a more detailed description."
   importance: LOW
   association:
-    prediction_id: Animal
+    association_id_column: id
     required_in_pred_request: true
-    actuals_id: Animal
+    actual_values_column: Animal
     actuals_dataset_id: 6d8c889607389fe0f466c72e
   enable_target_drift: true
   enable_feature_drift: true

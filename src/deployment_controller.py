@@ -22,7 +22,6 @@ from common.github_env import GitHubEnv
 from deployment_info import DeploymentInfo
 from model_controller import ControllerBase
 from schema_validator import DeploymentSchema
-from schema_validator import ModelSchema
 
 logger = logging.getLogger()
 
@@ -235,26 +234,26 @@ class DeploymentController(ControllerBase):
         self._submit_actuals(deployment_info, deployment)
 
     def _submit_actuals(self, deployment_info, deployment):
-        desired_association_id = deployment_info.get_settings_value(
-            DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_ACTUALS_ID_KEY
+        desired_association_id_column = deployment_info.get_settings_value(
+            DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_ASSOCIATION_ID_COLUMN_KEY
         )
         desired_dataset_id = deployment_info.get_settings_value(
             DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_ACTUALS_DATASET_ID_KEY
         )
-        if desired_association_id and desired_dataset_id:
+        if desired_association_id_column and desired_dataset_id:
             logger.info(
                 "Submitting actuals for a deployment."
-                "Git deployment ID: %s, actuals association ID: %s, actuals dataset ID: %s.",
+                "Git deployment ID: %s, actuals association ID column: %s, actuals dataset ID: %s.",
                 deployment_info.user_provided_id,
-                desired_association_id,
+                desired_association_id_column,
                 desired_dataset_id,
             )
-            model_info = self._model_controller.models_info.get(
-                deployment_info.user_provided_model_id
+            actual_values_column = deployment_info.get_settings_value(
+                DeploymentSchema.ASSOCIATION_KEY,
+                DeploymentSchema.ASSOCIATION_ACTUAL_VALUES_COLUMN_KEY,
             )
-            target_name = model_info.get_settings_value(ModelSchema.TARGET_NAME_KEY)
             self._dr_client.submit_deployment_actuals(
-                target_name, desired_association_id, desired_dataset_id, deployment
+                actual_values_column, desired_association_id_column, desired_dataset_id, deployment
             )
 
     @staticmethod
