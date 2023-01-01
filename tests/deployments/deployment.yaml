@@ -2,6 +2,7 @@ user_provided_deployment_id: my-awesome-deployment-id-04941f36-2f44-11ed-99fd-9b
 user_provided_model_id: my-awesome-model-id-ef2de33e-2f43-11ed-8a31-1357d73ba08a
 
 settings:
+  description: This is a test deployment.
   association:
     # In order to enable the accuracy, make sure the 'actuals_dataset_id' exist in DataRobot
     # catalogue. The 'actuals_dataset_id' will be replaced during the functional tests.

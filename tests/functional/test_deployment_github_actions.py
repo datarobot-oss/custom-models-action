@@ -28,7 +28,6 @@ from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import printout
 from tests.functional.conftest import run_github_action
 from tests.functional.conftest import temporarily_replace_schema
-from tests.functional.conftest import temporarily_replace_schema_value
 from tests.functional.conftest import (
     temporarily_upload_training_dataset_for_structured_model,
 )
@@ -435,7 +434,10 @@ class TestDeploymentGitHubActions:
                 deployment = dr_client.fetch_deployment_by_git_id(local_user_provided_id)
                 assert deployment is not None
 
-                for check_func in [self._test_deployment_label, self._test_deployment_settings]:
+                for check_func in [
+                    self._test_deployment_entity_update,
+                    self._test_deployment_settings,
+                ]:
                     with check_func(
                         dr_client,
                         deployment,
@@ -457,27 +459,38 @@ class TestDeploymentGitHubActions:
 
     @staticmethod
     @contextlib.contextmanager
-    def _test_deployment_label(
+    def _test_deployment_entity_update(
         dr_client, deployment, deployment_metadata, deployment_metadata_yaml_file, event_name
     ):
-        printout("Change deployment name")
-        old_name = deployment["label"]
-        new_name = f"{old_name} - NEW"
-        with temporarily_replace_schema_value(
-            deployment_metadata_yaml_file,
-            DeploymentSchema.SETTINGS_SECTION_KEY,
-            DeploymentSchema.LABEL_KEY,
-            new_value=new_name,
-        ):
+        printout("Update deployment entity")
+
+        origin_deployment = deployment
+        deployment_info = DeploymentInfo(deployment_metadata_yaml_file, deployment_metadata)
+
+        deployment_attrs = [
+            (DeploymentSchema.LABEL_KEY, "label"),
+            (DeploymentSchema.DESCRIPTION_KEY, "description"),
+            (DeploymentSchema.IMPORTANCE_KEY, "importance"),
+        ]
+        for schema_attr, dr_attr in deployment_attrs:
+            old_value = origin_deployment[dr_attr]
+            if schema_attr == DeploymentSchema.IMPORTANCE_KEY:
+                new_value = "HIGH" if old_value == "LOW" else "LOW"
+            else:
+                new_value = f"{old_value} - NEW"
+            deployment_info.set_settings_value(schema_attr, value=new_value)
+
+        with temporarily_replace_schema(deployment_metadata_yaml_file, deployment_info.metadata):
             yield
 
-        deployment = dr_client.fetch_deployment_by_git_id(
-            deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
-        )
+        new_deployment = dr_client.fetch_deployment_by_git_id(deployment_info.user_provided_id)
+
         if event_name == "push":
-            assert deployment["label"] == new_name
+            for schema_attr, dr_attr in deployment_attrs:
+                assert new_deployment[dr_attr] == deployment_info.get_settings_value(schema_attr)
         elif event_name == "pull_request":
-            assert deployment["label"] == old_name
+            for _, dr_attr in deployment_attrs:
+                assert new_deployment[dr_attr] == origin_deployment[dr_attr]
         else:
             assert False, f"Unsupported GitHub event name: {event_name}"
 
