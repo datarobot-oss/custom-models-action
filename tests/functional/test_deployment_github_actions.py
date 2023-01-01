@@ -95,13 +95,13 @@ class TestDeploymentGitHubActions:
         self, event_name, dr_client, deployment_metadata, deployment_metadata_yaml_file
     ):
         if event_name == "push":
-            association_id = DeploymentSchema.get_value(
+            association_id_column = DeploymentSchema.get_value(
                 deployment_metadata,
                 DeploymentSchema.SETTINGS_SECTION_KEY,
                 DeploymentSchema.ASSOCIATION_KEY,
-                DeploymentSchema.ASSOCIATION_ACTUALS_ID_KEY,
+                DeploymentSchema.ASSOCIATION_ASSOCIATION_ID_COLUMN_KEY,
             )
-            if association_id:
+            if association_id_column:
                 actuals_filepath = (
                     Path(__file__).parent
                     / ".."

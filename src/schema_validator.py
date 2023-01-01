@@ -625,9 +625,9 @@ class DeploymentSchema(SharedSchema):
     ENABLE_PREDICTIONS_COLLECTION_KEY = "enable_predictions_collection"  # Settings, Optional
 
     ASSOCIATION_KEY = "association"
-    ASSOCIATION_PRED_ID_KEY = "prediction_id"
+    ASSOCIATION_ASSOCIATION_ID_COLUMN_KEY = "association_id_column"
     ASSOCIATION_REQUIRED_IN_PRED_REQUEST_KEY = "required_in_pred_request"
-    ASSOCIATION_ACTUALS_ID_KEY = "actuals_id"
+    ASSOCIATION_ACTUAL_VALUES_COLUMN_KEY = "actual_values_column"
     ASSOCIATION_ACTUALS_DATASET_ID_KEY = "actuals_dataset_id"
 
     ENABLE_CHALLENGER_MODELS_KEY = "enable_challenger_models"
@@ -655,12 +655,13 @@ class DeploymentSchema(SharedSchema):
                     IMPORTANCE_LOW_VALUE,
                 ),
                 Optional(ASSOCIATION_KEY): {
-                    Optional(ASSOCIATION_PRED_ID_KEY): And(str, len),
+                    Optional(ASSOCIATION_ASSOCIATION_ID_COLUMN_KEY): And(str, len),
                     Optional(ASSOCIATION_REQUIRED_IN_PRED_REQUEST_KEY): bool,
                     # NOTE: The ACTUALS dataset is submitted when the deployment is created.
-                    # If the user changes it, later on, in his yaml definition, it'll not be
-                    # uploaded, unless the association ASSOCIATION_PRED_ID_KEY will be changed too.
-                    Optional(ASSOCIATION_ACTUALS_ID_KEY): And(str, len),
+                    # If the user changes it afterwards in his yaml definition, it'll not be
+                    # uploaded, unless the `ASSOCIATION_ASSOCIATION_ID_COLUMN_KEY` will be changed
+                    # too.
+                    Optional(ASSOCIATION_ACTUAL_VALUES_COLUMN_KEY): And(str, len),
                     Optional(ASSOCIATION_ACTUALS_DATASET_ID_KEY): And(str, ObjectId.is_valid),
                 },
                 Optional(ENABLE_TARGET_DRIFT_KEY): bool,  # Update settings

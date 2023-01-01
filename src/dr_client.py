@@ -1214,7 +1214,8 @@ class DrClient:
         association_payload = {}
         if cls.should_submit_new_actuals(deployment_info, actual_settings):
             association_col_name = deployment_info.get_settings_value(
-                DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_PRED_ID_KEY
+                DeploymentSchema.ASSOCIATION_KEY,
+                DeploymentSchema.ASSOCIATION_ASSOCIATION_ID_COLUMN_KEY,
             )
             association_payload["columnNames"] = [association_col_name]
 
@@ -1253,7 +1254,7 @@ class DrClient:
         """
 
         desired_association_pred_id = deployment_info.get_settings_value(
-            DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_PRED_ID_KEY
+            DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_ASSOCIATION_ID_COLUMN_KEY
         )
         if desired_association_pred_id is not None:
             actuals_cols = (
@@ -1322,16 +1323,16 @@ class DrClient:
         return response.json()
 
     def submit_deployment_actuals(
-        self, target_name, association_id, actuals_dataset_id, datarobot_deployment
+        self, actual_values_column, association_id_column, actuals_dataset_id, datarobot_deployment
     ):
         """
         Set a deployment actuals information in DataRobot.
 
         Parameters
         ----------
-        target_name : str
+        actual_values_column : str
             The target column name in the Actuals dataset.
-        association_id : str
+        association_id_column : str
             The column name that is used to associate a prediction with the Actuals.
         actuals_dataset_id : str
             A dataset ID from the DataRobot catalogue.
@@ -1346,8 +1347,8 @@ class DrClient:
 
         payload = {
             "datasetId": actuals_dataset_id,
-            "actualValueColumn": target_name,
-            "associationIdColumn": association_id,
+            "actualValueColumn": actual_values_column,
+            "associationIdColumn": association_id_column,
         }
         url = self.DEPLOYMENT_ACTUALS_UPDATE_ROUTE.format(deployment_id=datarobot_deployment["id"])
         response = self._http_requester.post(url, json=payload)

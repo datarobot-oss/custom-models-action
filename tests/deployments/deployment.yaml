@@ -6,7 +6,7 @@ settings:
   association:
     # In order to enable the accuracy, make sure the 'actuals_dataset_id' exist in DataRobot
     # catalogue. The 'actuals_dataset_id' will be replaced during the functional tests.
-    prediction_id: id
+    association_id_column: id
     required_in_pred_request: false
-    actuals_id: id
+    actual_values_column: Grade 2014
     actuals_dataset_id: 62f0f226bc397a932a9c0c0f
