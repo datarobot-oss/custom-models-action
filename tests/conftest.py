@@ -34,6 +34,9 @@ def github_output():
             os.environ, {"GITHUB_OUTPUT": str(github_output_filepath)}
         ):
             yield github_output_filepath
-        os.remove(github_output_filepath)
+
+        # Just in case the file was not deleted by a certain functional test
+        if github_output_filepath.is_file():
+            github_output_filepath.unlink()
     else:
         yield github_output_env

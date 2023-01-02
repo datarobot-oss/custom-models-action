@@ -565,11 +565,11 @@ class TestDeploymentChanges:
             create_deployment_method.assert_called_once()
 
     @pytest.fixture
-    def _patch_handle_deployment_changes(self):
-        with patch.object(DeploymentController, "_handle_deployment_changes"):
+    def _patch_handle_deployment_settings(self):
+        with patch.object(DeploymentController, "_handle_deployment_settings"):
             yield
 
-    @pytest.mark.usefixtures("_patch_handle_deployment_changes")
+    @pytest.mark.usefixtures("_patch_handle_deployment_settings")
     def test_model_id_change_in_existing_deployment(
         self, options, _mock_datarobot_model_factory, _mock_deployment_info_factory
     ):
@@ -610,7 +610,7 @@ class TestDeploymentChanges:
 
             create_challenger_in_deployment_method.assert_called_once()
 
-    @pytest.mark.usefixtures("_patch_handle_deployment_changes")
+    @pytest.mark.usefixtures("_patch_handle_deployment_settings")
     def test_new_model_version_in_existing_deployment(
         self, options, _mock_datarobot_model_factory, _mock_deployment_info_factory
     ):

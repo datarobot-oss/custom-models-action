@@ -50,6 +50,7 @@ class DeploymentInfo:
     def is_challenger_enabled(self):
         """Whether a model challenger is enabled for the given deployment"""
         challenger_enabled = self.get_settings_value(DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY)
+        # A special case, in which the default is to enable challengers
         return True if challenger_enabled is None else challenger_enabled
 
     def get_value(self, key, *sub_keys):

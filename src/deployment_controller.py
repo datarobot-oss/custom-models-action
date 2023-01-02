@@ -186,7 +186,7 @@ class DeploymentController(ControllerBase):
                 # NOTE: settings changes should be applied before a replacement or a challenger
                 # takes place, because we should first reflect the desired setting in DataRobot
                 # and only then carry out these related actions.
-                self._handle_deployment_changes(deployment_info, datarobot_deployment)
+                updated = self._handle_deployment_settings(deployment_info, datarobot_deployment)
 
                 active_datarobot_model_id = datarobot_deployment.model_version["customModelId"]
                 desired_datarobot_model = self._model_controller.datarobot_models.get(
@@ -207,6 +207,9 @@ class DeploymentController(ControllerBase):
                         self._replace_model_version_in_deployment(
                             desired_datarobot_model.latest_version, datarobot_deployment
                         )
+                    updated = True
+
+                if updated:
                     self.stats.total_affected += 1
 
     def _create_deployment(self, deployment_info):
@@ -331,19 +334,18 @@ class DeploymentController(ControllerBase):
         challengers = self._dr_client.fetch_challengers(deployment_id)
         return challengers[-1]["model"]["id"] == model_latest_version["id"]
 
-    def _handle_deployment_changes(self, deployment_info, datarobot_deployment):
-        self._handle_deployment_settings(deployment_info, datarobot_deployment)
-
     def _handle_deployment_settings(self, deployment_info, datarobot_deployment):
         datarobot_deployment_id = datarobot_deployment.deployment["id"]
         actual_deployment_settings = self._dr_client.fetch_deployment_settings(
             datarobot_deployment_id, deployment_info
         )
-        self._dr_client.update_deployment_settings(
+        _, updated = self._dr_client.update_deployment_settings(
             datarobot_deployment.deployment, deployment_info, actual_deployment_settings
         )
         if self._dr_client.should_submit_new_actuals(deployment_info, actual_deployment_settings):
             self._submit_actuals(deployment_info, datarobot_deployment)
+            updated = True
+        return updated
 
     def handle_deleted_deployments(self):
         """Delete deployments in DataRobot. Deletion takes place only within a push GitHub event."""
