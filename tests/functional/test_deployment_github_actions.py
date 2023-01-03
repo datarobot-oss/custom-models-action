@@ -12,6 +12,7 @@ DataRobot application. If DataRobot is not accessible, the functional tests are 
 
 import contextlib
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ import yaml
 
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
+from deployment_controller import DeploymentController
 from deployment_info import DeploymentInfo
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
@@ -418,6 +420,7 @@ class TestDeploymentGitHubActions:
         deployment_metadata_yaml_file,
         main_branch_name,
         event_name,
+        github_output,
     ):
         """An end-to-end case to test changes in deployment settings."""
 
@@ -449,13 +452,38 @@ class TestDeploymentGitHubActions:
                             f"Update settings by {check_func.__name__}", event_name, git_repo
                         )
 
+                        self._reset_github_output_metrics(github_output)
                         printout(f"Run the GitHub action ({event_name}")
                         run_github_action(
                             workspace_path, git_repo, main_branch_name, event_name, is_deploy=True
                         )
+                        self._validate_total_affected_deployments_metric(event_name, github_output)
             finally:
                 cleanup_deployment(dr_client, deployment_metadata)
                 cleanup_models(dr_client, workspace_path)
+
+    @staticmethod
+    def _reset_github_output_metrics(github_output_filepath):
+        github_output_filepath = Path(github_output_filepath)
+        if github_output_filepath.is_file():
+            github_output_filepath.unlink()
+        with open(github_output_filepath, "w", encoding="utf-8"):
+            pass
+
+    @staticmethod
+    def _validate_total_affected_deployments_metric(event_name, github_output_filepath):
+        with open(github_output_filepath, "r", encoding="utf-8") as file:
+            github_output_content = file.read()
+        label = DeploymentController.DEPLOYMENTS_LABEL
+        pattern = f"total-affected-{label}=(.*)"
+        items = re.findall(pattern, github_output_content)
+        assert len(items) == 1, (
+            "Unexpected occurrences number for "
+            f"pattern '{pattern}' in content: {github_output_content}"
+        )
+        total_affected = int(items[0])
+        expected_affected = 1 if event_name == "push" else 0
+        assert expected_affected == total_affected
 
     @staticmethod
     @contextlib.contextmanager

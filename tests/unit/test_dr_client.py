@@ -21,11 +21,13 @@ from mock import patch
 
 from common.exceptions import DataRobotClientError
 from common.http_requester import HttpRequester
+from deployment_info import DeploymentInfo
 from dr_api_attrs import DrApiAttrs
 from dr_client import DrClient
 from dr_client import logger as dr_client_logger
 from model_file_path import ModelFilePath
 from model_info import ModelInfo
+from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 
 
@@ -1085,3 +1087,270 @@ class TestDeploymentRoutes:
 
         for fetched_deployment in total_deployments_response:
             assert fetched_deployment in total_expected_deployments
+
+
+class TestDeploymentPayloadConstruction:
+    """A class to test the deployment's payload construction method."""
+
+    def test_deployment_update_payload_construction_full(self, dr_client):
+        """A case to test a deployment update payload construction, with all config changes."""
+
+        attr_map = {
+            DeploymentSchema.LABEL_KEY: {"desired": "New label", "actual": "Origin label"},
+            DeploymentSchema.DESCRIPTION_KEY: {
+                "desired": "New description",
+                "actual": "Origin description",
+            },
+            DeploymentSchema.IMPORTANCE_KEY: {
+                "desired": DeploymentSchema.IMPORTANCE_MODERATE_VALUE,
+                "actual": DeploymentSchema.IMPORTANCE_LOW_VALUE,
+            },
+        }
+        deployment = {attr: body["actual"] for attr, body in attr_map.items()}
+        payload = dr_client._construct_deployment_update_payload(
+            deployment, self._deployment_info(attr_map)
+        )
+        assert payload == {attr: body["desired"] for attr, body in attr_map.items()}
+
+    @staticmethod
+    def _deployment_info(attr_map):
+        deployment_metadata = {
+            DeploymentSchema.SETTINGS_SECTION_KEY: {
+                attr: body["desired"] for attr, body in attr_map.items()
+            }
+        }
+        return DeploymentInfo("dummy.yaml", deployment_metadata)
+
+    def test_deployment_update_payload_construction_no_changes(self, dr_client):
+        """A case to test a deployment update payload construction when no config changes."""
+
+        label_value = "Origin label"
+        description_value = "Origin description"
+        importance_value = DeploymentSchema.IMPORTANCE_LOW_VALUE
+        attr_map = {
+            DeploymentSchema.LABEL_KEY: {"desired": label_value, "actual": label_value},
+            DeploymentSchema.DESCRIPTION_KEY: {
+                "desired": description_value,
+                "actual": description_value,
+            },
+            DeploymentSchema.IMPORTANCE_KEY: {
+                "desired": importance_value,
+                "actual": importance_value,
+            },
+        }
+        deployment = {attr: body["actual"] for attr, body in attr_map.items()}
+        payload = dr_client._construct_deployment_update_payload(
+            deployment, self._deployment_info(attr_map)
+        )
+        assert not payload
+
+    @pytest.mark.parametrize("empty_label", [None, ""], ids=["none", "empty"])
+    def test_deployment_update_payload_construction_empty_label(self, dr_client, empty_label):
+        """A case to test a deployment update payload construction with empty label."""
+
+        attr_map = {
+            DeploymentSchema.LABEL_KEY: {"desired": empty_label, "actual": "Origin label"},
+            DeploymentSchema.DESCRIPTION_KEY: {
+                "desired": "Origin description",
+                "actual": "Origin description",
+            },
+            DeploymentSchema.IMPORTANCE_KEY: {
+                "desired": DeploymentSchema.IMPORTANCE_LOW_VALUE,
+                "actual": DeploymentSchema.IMPORTANCE_LOW_VALUE,
+            },
+        }
+        deployment = {attr: body["actual"] for attr, body in attr_map.items()}
+        payload = dr_client._construct_deployment_update_payload(
+            deployment, self._deployment_info(attr_map)
+        )
+        assert not payload
+
+    @pytest.mark.parametrize("description", [None, "", "Some new description"])
+    def test_deployment_update_payload_construction_description(self, dr_client, description):
+        """
+        A case to test a deployment update payload construction with different description
+        attribute values.
+        """
+
+        attr_map = {
+            DeploymentSchema.LABEL_KEY: {"desired": None, "actual": "Origin label"},
+            DeploymentSchema.DESCRIPTION_KEY: {
+                "desired": description,
+                "actual": "Origin description",
+            },
+            DeploymentSchema.IMPORTANCE_KEY: {
+                "desired": None,
+                "actual": DeploymentSchema.IMPORTANCE_LOW_VALUE,
+            },
+        }
+        deployment = {attr: body["actual"] for attr, body in attr_map.items()}
+        payload = dr_client._construct_deployment_update_payload(
+            deployment, self._deployment_info(attr_map)
+        )
+        assert payload[DeploymentSchema.DESCRIPTION_KEY] == description
+
+    @pytest.mark.parametrize("empty_importance", [None, ""], ids=["none", "empty"])
+    def test_deployment_update_payload_construction_empty_importance(
+        self, dr_client, empty_importance
+    ):
+        """
+        A case to test a deployment update payload construction with empty importance attribute
+        value.
+        """
+
+        attr_map = {
+            DeploymentSchema.LABEL_KEY: {"desired": None, "actual": "Origin label"},
+            DeploymentSchema.DESCRIPTION_KEY: {
+                "desired": "Origin description",
+                "actual": "Origin description",
+            },
+            DeploymentSchema.IMPORTANCE_KEY: {
+                "desired": empty_importance,
+                "actual": DeploymentSchema.IMPORTANCE_LOW_VALUE,
+            },
+        }
+        deployment = {attr: body["actual"] for attr, body in attr_map.items()}
+        payload = dr_client._construct_deployment_update_payload(
+            deployment, self._deployment_info(attr_map)
+        )
+        assert not payload
+
+
+class TestDeploymentSettingsPayloadConstruction:
+    """A class to test the deployment's settings payload contruction method."""
+
+    CHALLENGER_ENABLED_SUB_PAYLOAD = {
+        "challengerModels": {"enabled": True},
+        "predictionsDataCollection": {"enabled": True},
+    }
+
+    def test_empty_settings__none_actual_settings(self, dr_client):
+        """A case to test an empty settings with no actual settings."""
+
+        deployment_info_no_settings = DeploymentInfo("dummy.yaml", {})
+        payload = dr_client._construct_deployment_settings_payload(deployment_info_no_settings)
+        assert payload == self.CHALLENGER_ENABLED_SUB_PAYLOAD
+
+    @pytest.mark.parametrize("challenger_enabled", [None, True, False])
+    @pytest.mark.parametrize("prediction_data_collection_enabled", [None, True, False])
+    def test_challenger_and_pred_data_collection_config__none_actual_settings(
+        self, dr_client, challenger_enabled, prediction_data_collection_enabled
+    ):
+        """
+        A case to test the challenger and prediction data collection configuration, when
+        no actual settings.
+        """
+
+        deployment_info = DeploymentInfo(
+            "dummy.yaml",
+            {
+                DeploymentSchema.SETTINGS_SECTION_KEY: {
+                    DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY: challenger_enabled,
+                    DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY: (
+                        prediction_data_collection_enabled
+                    ),
+                },
+            },
+        )
+        payload = dr_client._construct_deployment_settings_payload(deployment_info)
+        if challenger_enabled or challenger_enabled is None:
+            assert payload == self.CHALLENGER_ENABLED_SUB_PAYLOAD
+        else:
+            if not prediction_data_collection_enabled:
+                assert not payload
+            else:
+                assert payload == {"predictionsDataCollection": {"enabled": True}}
+
+    @pytest.mark.parametrize("desired_challenger_enabled", [None, True, False])
+    @pytest.mark.parametrize("actual_challenger_enabled", [None, True, False])
+    @pytest.mark.parametrize("desired_pred_data_collection_enabled", [None, True, False])
+    @pytest.mark.parametrize("actual_pred_data_collection_enabled", [None, True, False])
+    def test_challenger_and_pred_data_collection_config_with_actual_settings(
+        self,
+        dr_client,
+        desired_challenger_enabled,
+        actual_challenger_enabled,
+        desired_pred_data_collection_enabled,
+        actual_pred_data_collection_enabled,
+    ):
+        """
+        A case to test the challenger and prediction data collection configuration when actual
+        settings are available.
+        """
+
+        deployment_info_no_settings = DeploymentInfo(
+            "dummy.yaml",
+            {
+                DeploymentSchema.SETTINGS_SECTION_KEY: {
+                    DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY: desired_challenger_enabled,
+                    DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY: (
+                        desired_pred_data_collection_enabled
+                    ),
+                },
+            },
+        )
+        actual_settings = self._actual_settings(
+            actual_challenger_enabled, actual_pred_data_collection_enabled
+        )
+        payload = dr_client._construct_deployment_settings_payload(
+            deployment_info_no_settings, actual_settings
+        )
+        effective_desired_challenger = (
+            desired_challenger_enabled or desired_challenger_enabled is None
+        )
+        effective_actual_challenger = actual_settings and actual_settings.get(
+            "challengerModels", {}
+        ).get("enabled")
+        if effective_actual_challenger:
+            if effective_desired_challenger:
+                if actual_settings.get("predictionsDataCollection", {}).get("enabled"):
+                    # Actual and desired are enabled for both challenger and prediction data
+                    # collection
+                    assert not payload
+                else:
+                    # Only actual and desired challenger are enabled
+                    assert payload == {"predictionsDataCollection": {"enabled": True}}
+            else:
+                expected_payload = {"challengerModels": {"enabled": False}}
+                if desired_pred_data_collection_enabled != actual_settings.get(
+                    "predictionsDataCollection", {}
+                ).get("enabled"):
+                    expected_payload["predictionsDataCollection"] = {
+                        "enabled": bool(desired_pred_data_collection_enabled)
+                    }
+                assert payload == expected_payload
+        else:
+            if effective_desired_challenger:
+                if actual_pred_data_collection_enabled:
+                    assert payload == {"challengerModels": {"enabled": True}}
+                else:
+                    assert payload == self.CHALLENGER_ENABLED_SUB_PAYLOAD
+            else:
+                if bool(desired_pred_data_collection_enabled) != bool(
+                    actual_pred_data_collection_enabled
+                ):
+                    assert payload == {
+                        "predictionsDataCollection": {
+                            "enabled": bool(desired_pred_data_collection_enabled)
+                        }
+                    }
+                else:
+                    assert not payload
+
+    @staticmethod
+    def _actual_settings(challenger_enabled, pred_data_collection_enabled):
+        if challenger_enabled is None and pred_data_collection_enabled is None:
+            return None
+
+        actual_settings = {}
+        if challenger_enabled is not None:
+            actual_settings = {"challengerModels": {"enabled": challenger_enabled}}
+
+        if challenger_enabled:
+            actual_settings["predictionsDataCollection"] = {"enabled": True}
+        else:
+            if pred_data_collection_enabled is not None:
+                actual_settings["predictionsDataCollection"] = {
+                    "enabled": pred_data_collection_enabled
+                }
+        return actual_settings
