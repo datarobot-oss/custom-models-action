@@ -1,5 +1,13 @@
 # RELEASES
 
+## 1.1.6 [2023-01-05]
+  * Change attribute names in a deployment schema:
+    * `prediction_id` ==> `association_id_column`
+    * `actuals_id` ==> `actual_values_column`
+  * Update README.md regarding `importance` attribute in a deployment.
+  * Update README.md regarding the user's provided ID.
+  * Bug fixes.
+
 ## 1.1.5 [2022-12-08]
   * Improve documentation in the README.md file
 
