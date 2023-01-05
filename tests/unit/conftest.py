@@ -213,12 +213,13 @@ def fixture_models_factory(workspace_path, single_model_factory):
         with_include_glob=True,
         with_exclude_glob=True,
         include_main_prog=True,
+        is_absolute_path=False,
+        root_prefix=None,
     ):
         models_metadata = []
         for counter in range(num_models):
-            model_name = f"model_multi_{counter}" if is_multi else f"model_{counter}"
             model_metadata, _ = single_model_factory(
-                model_name,
+                name=f"model_multi_{counter}" if is_multi else f"model_{counter}",
                 write_metadata=not is_multi,
                 with_include_glob=with_include_glob,
                 with_exclude_glob=with_exclude_glob,
@@ -232,14 +233,21 @@ def fixture_models_factory(workspace_path, single_model_factory):
                 name = ModelSchema.get_value(
                     model_metadata, ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.NAME_KEY
                 )
+                if is_absolute_path:
+                    model_path = f"{root_prefix}{name}"
+                else:
+                    model_path = f"../{name}"
                 multi_models_yaml_content[ModelSchema.MULTI_MODELS_KEY].append(
                     {
-                        ModelSchema.MODEL_ENTRY_PATH_KEY: f"./{name}",
+                        ModelSchema.MODEL_ENTRY_PATH_KEY: model_path,
                         ModelSchema.MODEL_ENTRY_META_KEY: model_metadata,
                     }
                 )
             multi_models_content = yaml.dump(multi_models_yaml_content)
-            write_to_file(workspace_path / "models.yaml", multi_models_content)
+            models_metadata_dir_path = workspace_path / "metadata"
+            if not os.path.exists(models_metadata_dir_path):
+                os.makedirs(models_metadata_dir_path)
+            write_to_file(models_metadata_dir_path / "models.yaml", multi_models_content)
 
         return models_metadata
 

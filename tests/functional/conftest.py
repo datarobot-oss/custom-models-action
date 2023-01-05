@@ -13,6 +13,7 @@ import copy
 import logging
 import os
 import shutil
+from collections import namedtuple
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -67,10 +68,17 @@ def cleanup_models(dr_client_tool, workspace_path):
 
     custom_models = dr_client_tool.fetch_custom_models()
     if custom_models:
+        models_metadata = []
         for model_yaml_file in workspace_path.rglob("**/model.yaml"):
             with open(model_yaml_file, encoding="utf-8") as fd:
-                model_metadata = yaml.safe_load(fd)
+                models_metadata.append(yaml.safe_load(fd))
+        for model_yaml_file in workspace_path.rglob("**/models.yaml"):
+            with open(model_yaml_file, encoding="utf-8") as fd:
+                multi_models_metadata = yaml.safe_load(fd)
+                for model_entry in multi_models_metadata[ModelSchema.MULTI_MODELS_KEY]:
+                    models_metadata.append(model_entry[ModelSchema.MODEL_ENTRY_META_KEY])
 
+        for model_metadata in models_metadata:
             try:
                 dr_client_tool.delete_custom_model_by_user_provided_id(
                     model_metadata[ModelSchema.MODEL_ID_KEY]
@@ -136,18 +144,20 @@ def fixture_git_repo(workspace_path):
     return repo
 
 
-@pytest.fixture(name="build_repo_for_testing")
-def fixture_build_repo_for_testing(workspace_path, git_repo):
+@pytest.fixture(name="build_repo_for_testing_factory")
+def fixture_build_repo_for_testing_factory(workspace_path, git_repo):
     """
     A fixture to build a complete source stree with model and deployment definitions in it. Then
     commit everything into the repository that was initialized in that root dir.
     """
 
-    def _setup_model(src_model_filepath, dst_models_root_dir, model_index):
-        dst_model_path = dst_models_root_dir / f"model_{model_index}"
-        shutil.copytree(src_model_filepath, dst_model_path)
+    def _setup_model(
+        src_model_filepath, dst_models_root_dir, model_index, dedicated_definition=True
+    ):
+        dst_model_dir_path = dst_models_root_dir / f"model_{model_index}"
+        shutil.copytree(src_model_filepath, dst_model_dir_path)
 
-        model_metadata_yaml_filepath = next(dst_model_path.rglob("**/model.yaml"))
+        model_metadata_yaml_filepath = next(dst_model_dir_path.rglob("**/model.yaml"))
         with open(model_metadata_yaml_filepath, encoding="utf-8") as reader:
             model_metadata = yaml.safe_load(reader)
 
@@ -165,42 +175,92 @@ def fixture_build_repo_for_testing(workspace_path, git_repo):
             value=new_model_name,
         )
 
-        with open(model_metadata_yaml_filepath, "w", encoding="utf-8") as writer:
-            yaml.safe_dump(model_metadata, writer)
+        if dedicated_definition:
+            with open(model_metadata_yaml_filepath, "w", encoding="utf-8") as writer:
+                yaml.safe_dump(model_metadata, writer)
+        else:
+            # The definition will be written in a single multi-models definition.
+            os.remove(model_metadata_yaml_filepath)
 
-        return model_metadata
+        return model_metadata, dst_model_dir_path
 
-    # source model filepath
-    src_models_root_dir = Path(__file__).parent / ".." / "models"
-    src_model_path = next(
-        p for p in src_models_root_dir.glob("**") if not p.samefile(src_models_root_dir)
-    )
-    dst_models_root_dir = workspace_path / "models"
+    def _setup_deployment(src_deployments_dir, dst_deployments_dir, models_meta):
+        shutil.copytree(src_deployments_dir, dst_deployments_dir)
 
-    first_model_metadata = _setup_model(src_model_path, dst_models_root_dir, 1)
-    _setup_model(src_model_path, dst_models_root_dir, 2)
+        deployment_yaml_filepath = next(dst_deployments_dir.glob("deployment.yaml"))
+        with open(deployment_yaml_filepath, encoding="utf-8") as fd:
+            deployment_metadata = yaml.safe_load(fd)
+        DeploymentSchema.set_value(
+            deployment_metadata,
+            DeploymentSchema.MODEL_ID_KEY,
+            value=models_meta[0].metadata[ModelSchema.MODEL_ID_KEY],
+        )
+        with open(deployment_yaml_filepath, "w", encoding="utf-8") as fd:
+            yaml.safe_dump(deployment_metadata, fd)
 
-    # 7. Copy deployments
-    deployments_src_root_dir = Path(__file__).parent / ".." / "deployments"
-    dst_deployments_dir = workspace_path / deployments_src_root_dir.name
-    shutil.copytree(deployments_src_root_dir, dst_deployments_dir)
+    def _save_multi_models_metadata_yaml_file(
+        dst_deployments_dir, models_meta, is_absolute_model_path, model_path_prefix
+    ):
+        multi_models_definition = {ModelSchema.MULTI_MODELS_KEY: []}
+        for model_meta in models_meta:
+            relative_model_dir_path = os.path.relpath(
+                model_meta.dst_model_dir_path, dst_deployments_dir
+            )
+            if is_absolute_model_path:
+                model_path = relative_model_dir_path.replace("../", model_path_prefix)
+            else:
+                model_path = relative_model_dir_path
+            multi_models_definition[ModelSchema.MULTI_MODELS_KEY].append(
+                {
+                    ModelSchema.MODEL_ENTRY_META_KEY: model_meta.metadata,
+                    ModelSchema.MODEL_ENTRY_PATH_KEY: model_path,
+                }
+            )
+        with open(dst_deployments_dir / "models.yaml", "w", encoding="utf-8") as fd:
+            yaml.safe_dump(multi_models_definition, fd)
 
-    deployment_yaml_filepath = next(dst_deployments_dir.glob("deployment.yaml"))
-    with open(deployment_yaml_filepath, encoding="utf-8") as fd:
-        deployment_metadata = yaml.safe_load(fd)
-    DeploymentSchema.set_value(
-        deployment_metadata,
-        DeploymentSchema.MODEL_ID_KEY,
-        value=first_model_metadata[ModelSchema.MODEL_ID_KEY],
-    )
-    with open(deployment_yaml_filepath, "w", encoding="utf-8") as fd:
-        yaml.safe_dump(deployment_metadata, fd)
+    def _inner(dedicated_model_definition, is_absolute_model_path=False, model_path_prefix=None):
+        src_models_root_dir = Path(__file__).parent / ".." / "models"
+        src_model_path = next(
+            p for p in src_models_root_dir.glob("**") if not p.samefile(src_models_root_dir)
+        )
+        dst_models_root_dir = workspace_path / "models"
 
-    # 8. Add files to repo in multiple commits in order to avoid a use case of too few commits
-    #    that can be regarded as not a merge branch
-    os.chdir(workspace_path)
-    git_repo.git.add("--all")
-    git_repo.git.commit("-m", "Initial commit", "--no-verify")
+        ModelMeta = namedtuple("ModelMeta", ["metadata", "dst_model_dir_path"])
+        models_meta = []
+        for counter in range(1, 3):
+            metadata, dst_model_dir_path = _setup_model(
+                src_model_path, dst_models_root_dir, counter, dedicated_model_definition
+            )
+            models_meta.append(ModelMeta(metadata, dst_model_dir_path))
+
+        src_deployments_dir = Path(__file__).parent / ".." / "deployments"
+        dst_deployments_dir = workspace_path / src_deployments_dir.name
+        _setup_deployment(src_deployments_dir, dst_deployments_dir, models_meta)
+
+        if not dedicated_model_definition:
+            _save_multi_models_metadata_yaml_file(
+                dst_deployments_dir, models_meta, is_absolute_model_path, model_path_prefix
+            )
+
+        # 8. Add files to repo in multiple commits in order to avoid a use case of too few commits
+        #    that can be regarded as not a merge branch
+        os.chdir(workspace_path)
+        git_repo.git.add("--all")
+        git_repo.git.commit("-m", "Initial commit", "--no-verify")
+
+    return _inner
+
+
+@pytest.fixture(name="build_repo_for_testing")
+def fixture_build_repo_for_testing(build_repo_for_testing_factory):
+    """
+    A fixture to build a complete source stree with model and deployment definitions in it. Each
+    model has its own metadata definition in a dedicated YAML file. Then commit everything into
+    the repository that was initialized in that root dir.
+    """
+
+    build_repo_for_testing_factory(dedicated_model_definition=True)
 
 
 @pytest.fixture
