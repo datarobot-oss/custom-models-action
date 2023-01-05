@@ -258,12 +258,12 @@ class ModelController(ControllerBase):
             excluded_normpaths = [os.path.normpath(p) for p in excluded_paths]
         else:
             excluded_normpaths = []
-        model_root_dir = str(model_info.model_path.absolute())
+        model_normpath = os.path.normpath(model_info.model_path)
         for included_path in included_paths:
             included_normpath = os.path.normpath(included_path)
             if included_normpath in excluded_normpaths:
                 continue
-            if included_normpath == model_root_dir:
+            if included_normpath == model_normpath:
                 continue
             if os.path.isdir(included_normpath):
                 continue

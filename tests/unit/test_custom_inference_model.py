@@ -430,28 +430,40 @@ class TestGlobPatterns:
                 assert readme_file_path.absolute() in model_file_paths
 
     @pytest.mark.parametrize(
-        "included_paths, excluded_paths, expected_num_model_files",
+        "model_path, included_paths, excluded_paths, expected_num_model_files",
         [
-            ({"/m/custom.py", "/m", "/m/score/bbb.md"}, {}, 2),
-            ({"/m/custom.py", "/m/.", "/m/score/bbb.md"}, {}, 2),
-            ({"/m/custom.py", "/m/bbb.py", "/m/score/bbb.md"}, {}, 3),
-            ({"/m/./custom.py", "/m/./bbb.py", "/m/./score/bbb.md"}, {"/m/bbb.py"}, 2),
-            ({"/m/./custom.py", "/m/.//bbb.py", "/m/score/bbb.md"}, {"/m/bbb.py"}, 2),
-            ({"/m/./custom.py", "/m/bbb.py", "/m/score/bbb.py"}, {"/m/bbb.py"}, 2),
-            ({"/m/./custom.py", "/m/bbb.py", "/m/score/bbb.py"}, {"bbb.sh"}, 3),
-            ({"/m/./custom.py", "/m/bbb.py", "/m/score/./bbb.py"}, {"/m/score/bbb.py"}, 2),
-            ({"/m/./custom.py", "/m/bbb.py", "/m/score//bbb.py"}, {"/m/score/bbb.py"}, 2),
-            ({"/m/./custom.py", "/m/.//bbb.py", "/m/score/./bbb.py"}, {"/m/score/bbb.py"}, 2),
-            ({"/m/./custom.py", "/m/score/../bbb.py"}, {"/m/score/bbb.py"}, 2),
-            ({"/m/./custom.py", "/m/score/../bbb.py"}, {"/m/bbb.py"}, 1),
-            ({"/m/./custom.py", "/m//score/bbb.py"}, {"/m//score/bbb.py"}, 1),
-            ({"/m/./custom.py", "/m//score/./bbb.py"}, {"/m/score/bbb.py"}, 1),
+            ("/m", {"/m/custom.py", "/m", "/m/score/bbb.md"}, {}, 2),
+            ("/m", {"/m/custom.py", "/m/.", "/m/score/bbb.md"}, {}, 2),
+            ("/m", {"/m/custom.py", "/m/bbb.py", "/m/score/bbb.md"}, {}, 3),
+            ("/m", {"/m/./custom.py", "/m/./bbb.py", "/m/./score/bbb.md"}, {"/m/bbb.py"}, 2),
+            ("/m", {"/m/./custom.py", "/m/.//bbb.py", "/m/score/bbb.md"}, {"/m/bbb.py"}, 2),
+            ("/m", {"/m/./custom.py", "/m/bbb.py", "/m/score/bbb.py"}, {"/m/bbb.py"}, 2),
+            ("/m", {"/m/./custom.py", "/m/bbb.py", "/m/score/bbb.py"}, {"bbb.sh"}, 3),
+            ("/m", {"/m/./custom.py", "/m/bbb.py", "/m/score/./bbb.py"}, {"/m/score/bbb.py"}, 2),
+            ("/m", {"/m/./custom.py", "/m/bbb.py", "/m/score//bbb.py"}, {"/m/score/bbb.py"}, 2),
+            ("/m", {"/m/./custom.py", "/m/.//bbb.py", "/m/score/./bbb.py"}, {"/m/score/bbb.py"}, 2),
+            ("/m", {"/m/./custom.py", "/m/score/../bbb.py"}, {"/m/score/bbb.py"}, 2),
+            ("/m", {"/m/./custom.py", "/m/score/../bbb.py"}, {"/m/bbb.py"}, 1),
+            ("/m", {"/m/./custom.py", "/m//score/bbb.py"}, {"/m//score/bbb.py"}, 1),
+            ("/m", {"/m/./custom.py", "/m//score/./bbb.py"}, {"/m/score/bbb.py"}, 1),
+            (
+                "/deployments/../m",
+                {
+                    "/deployments/../m/custom.py",
+                    "/deployments/../m",
+                    "/deployments/../m/score/bbb.py",
+                },
+                {"/deployments/../m/score/bbb.py"},
+                1,
+            ),
         ],
     )
-    def test_filtered_model_paths(self, included_paths, excluded_paths, expected_num_model_files):
+    def test_filtered_model_paths(
+        self, model_path, included_paths, excluded_paths, expected_num_model_files
+    ):
         """Test excluded Glob patterns in a given model definition."""
 
-        model_info = ModelInfo("yaml-path", "/m", None)
+        model_info = ModelInfo("yaml-file-path", model_path, None)
         with patch("common.git_tool.Repo.init"), patch("model_controller.DrClient"), patch(
             "model_controller.ModelInfo.user_provided_id", new_callable=PropertyMock("123")
         ):
