@@ -88,15 +88,22 @@ class TestCustomInferenceModel:
             model_controller.scan_and_load_models_metadata()
 
     @pytest.mark.parametrize("num_models", [0, 1, 3])
+    @pytest.mark.parametrize(
+        "is_absolute_path, root_prefix", [(True, "/"), (True, "$ROOT/"), (False, None)]
+    )
     def test_scan_and_load_models_from_one_multi_models_yaml_file(
-        self, options, models_factory, num_models
+        self, options, models_factory, num_models, is_absolute_path, root_prefix
     ):
         """Test models' scanning and load from a single multi-models yaml definition."""
 
-        models_factory(num_models, is_multi=True)
+        models_factory(
+            num_models, is_multi=True, is_absolute_path=is_absolute_path, root_prefix=root_prefix
+        )
         model_controller = ModelController(options, None)
         model_controller.scan_and_load_models_metadata()
         assert len(model_controller.models_info) == num_models
+        for model_info in model_controller.models_info.values():
+            assert model_info.model_path.is_dir()
 
     @pytest.mark.parametrize("num_single_models", [0, 1, 3])
     @pytest.mark.parametrize("num_multi_models", [0, 2])
@@ -416,7 +423,7 @@ class TestGlobPatterns:
             readme_file_path = model_path / "README.md"
             assert readme_file_path.is_file()
 
-            model_file_paths = model_info.model_file_paths
+            model_file_paths = [path.filepath for path in model_info.model_file_paths.values()]
             assert excluded_src_path not in model_file_paths
 
             if with_include_glob:
