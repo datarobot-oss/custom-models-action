@@ -648,6 +648,10 @@ class DeploymentSchema(SharedSchema):
                     And(str, len): And(str, len)
                 },  # fromModelPackage
                 Optional(DESCRIPTION_KEY): And(str, len),  # fromModelPackage
+                # NOTE: a higher importance value than "LOW" will trigger a review process for any
+                # operation, such as 'create', 'update', 'delete', etc. So, practically
+                # the user will need to wait for approval from a reviewer in order to be able
+                # to apply new changes and merge them to the main branch.
                 Optional(IMPORTANCE_KEY): Or(  # fromModelPackage
                     IMPORTANCE_CRITICAL_VALUE,
                     IMPORTANCE_HIGH_VALUE,

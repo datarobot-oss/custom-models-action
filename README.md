@@ -574,7 +574,10 @@ prediction_environment_name: "https://eks-test.orm.company.com"
 settings:
   label: "My Awesome Deployment (model-2)"
   description: "This is a more detailed description."
-  importance: LOW
+  importance: LOW  # NOTE: a higher importance value than "LOW" will trigger a review process
+                   # for any operation, such as 'create', 'update', 'delete', etc. So, practically
+                   # the user will need to wait for approval from a reviewer in order to be able
+                   # to apply new changes and merge them to the main branch.
   association:
     association_id_column: id
     required_in_pred_request: true
