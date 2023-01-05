@@ -83,7 +83,7 @@ repository in GitHub, take the following steps:
    containing the following YAML and update the field values according to your model's characteristics:
 
     ```yaml
-    user_provided_model_id: model-unique-id-1
+    user_provided_model_id: company/user/model-unique-id-1
     target_type: Regression
     settings:
       name: My Awesome GitHub Model 1 [GitHub CI/CD]
@@ -96,7 +96,8 @@ repository in GitHub, take the following steps:
     ```
     Configure the following fields:
 
-    - `user_provided_model_id`: Provide any descriptive and unique string value.
+    - `user_provided_model_id`: Provide any descriptive and unique string value. The value must be
+      globally unique. A good practice is to use this pattern: `<company>/<user>/<model-unique-id>`.
     - `target_type`: Provide the correct target type for your custom model.
     - `target_name`: Provide the correct target name for your custom model.
     - `model_environment_id`: Provide the DataRobot execution environment required for your custom model.
@@ -107,14 +108,17 @@ repository in GitHub, take the following steps:
    containing the following YAML:
 
     ```yaml
-    user_provided_deployment_id: my-awesome-deployment-id
-    user_provided_model_id: model-unique-id-1
+    user_provided_deployment_id: company/user/my-awesome-deployment-id
+    user_provided_model_id: company/user/model-unique-id-1
     ```
 
     Configure the following fields:
 
-    - `user_provided_deployment_id`: Provide any descriptive and unique string value.
-    - `user_provided_model_id`: Provide the exact `user_provided_model_id` you set in the model definition YAML file.
+    - `user_provided_deployment_id`: Provide any descriptive and unique string value. The value
+      must be globally unique. A good practice is to use this pattern:
+      `<company>/<user>/<deployment-unique-id>`.
+    - `user_provided_model_id`: Provide the exact `user_provided_model_id` you set in the model
+      definition YAML file.
 
 5. Commit these changes and push to the remote:
 
@@ -426,7 +430,7 @@ sequentially:
 Below is an example of a minimal model's definition, which includes only mandatory fields:
 
 ```yaml
-user_provided_model_id: any-model-unique-id-1
+user_provided_model_id: company/user/any-model-unique-id-1
 target_type: Regression
 settings:
   name: My Awsome GitHub Model 1 [GitHub CI/CD]
@@ -445,7 +449,7 @@ version:
 Below is an example of a full model's definition, which includes both mandatory and optional fields:
 
 ```yaml
-user_provided_model_id: any-model-unique-id-1
+user_provided_model_id: company/user/any-model-unique-id-1
 target_type: Binary
 settings:
   name: My Awsome GitHub Model 1 [GitHub CI/CD]
@@ -518,7 +522,7 @@ Below is an example of a multi-models definition, which includes only mandatory 
 datarobot_models:
   - model_path: ./models/model_1
     model_metadata:
-      user_provided_model_id: any-model-unique-id-1
+      user_provided_model_id: company/user/any-model-unique-id-1
       target_type: Regression
       settings:
         name: My Awsome GitHub Model 1 [GitHub CI/CD]
@@ -531,7 +535,7 @@ datarobot_models:
 
   - model_path: ./models/model_2
     model_metadata:
-      user_provided_model_id: any-model-unique-string-2
+      user_provided_model_id: company/user/any-model-unique-string-2
       target_type: Regression
       settings:
         name: My Awsome GitHub Model 2 [GitHub CI/CD]
@@ -552,8 +556,8 @@ datarobot_models:
 Below is an example of a minimal deployment's definition, which includes only mandatory fields:
 
 ```yaml
-user_provided_deployment_id: my-awesome-deployment-id
-user_provided_model_id: any-model-unique-id-1
+user_provided_deployment_id: company/user/my-awesome-deployment-id
+user_provided_model_id: company/user/any-model-unique-id-1
 ```
 
 </details>
@@ -564,8 +568,8 @@ Below is an example of a full deployment's definition, which includes both manda
 fields:
 
 ```yaml
-user_provided_deployment_id: my-awesome-deployment-id
-user_provided_model_id: any-model-unique-string-2
+user_provided_deployment_id: company/user/my-awesome-deployment-id
+user_provided_model_id: company/user/any-model-unique-string-2
 prediction_environment_name: "https://eks-test.orm.company.com"
 settings:
   label: "My Awesome Deployment (model-2)"
@@ -594,14 +598,14 @@ settings:
 Below is an example of a multi-deployments definition, which includes only mandatory fields:
 
 ```yaml
-- user_provided_deployment_id: any-deployment-unique-id-1
-  user_provided_model_id: any-model-unique-id-1
+- user_provided_deployment_id: company/user/any-deployment-unique-id-1
+  user_provided_model_id: company/user/any-model-unique-id-1
 
-- user_provided_deployment_id: any-deployment-unique-id-2
-  user_provided_model_id: any-model-unique-string-2
+- user_provided_deployment_id: company/user/any-deployment-unique-id-2
+  user_provided_model_id: company/user/any-model-unique-string-2
 
-- user_provided_deployment_id: any-deployment-unique-id-3
-  user_provided_model_id: any-model-unique-id-3
+- user_provided_deployment_id: company/user/any-deployment-unique-id-3
+  user_provided_model_id: company/user/any-model-unique-id-3
 ```
 
 </details>
