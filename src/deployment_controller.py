@@ -219,24 +219,28 @@ class DeploymentController(ControllerBase):
         custom_model = self._model_controller.datarobot_models.get(
             deployment_info.user_provided_model_id
         )
+        # 1. Create a deployment
         deployment = self._dr_client.create_deployment(custom_model.latest_version, deployment_info)
         self.datarobot_deployments[deployment_info.user_provided_id] = DataRobotDeployment(
             deployment, custom_model.latest_version
         )
+
+        # 2. Submit actuals if required
+        self._submit_actuals_if_required(deployment_info, deployment)
+
+        # 3. Update deployment's settings (NOTE: it's important to upload the learning-data/actuals
+        # before updating the deployment's settings).
+        deployment, _ = self._dr_client.update_deployment_settings(deployment, deployment_info)
+
         logger.info(
             "A new deployment was created, git_id: %s, id: %s.",
             deployment_info.user_provided_id,
             deployment["id"],
         )
-        self._handle_follow_up_deployment_settings(deployment_info, deployment)
-
         self.stats.total_created += 1
         self.stats.total_affected += 1
 
-    def _handle_follow_up_deployment_settings(self, deployment_info, deployment):
-        self._submit_actuals(deployment_info, deployment)
-
-    def _submit_actuals(self, deployment_info, deployment):
+    def _submit_actuals_if_required(self, deployment_info, deployment):
         desired_association_id_column = deployment_info.get_settings_value(
             DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_ASSOCIATION_ID_COLUMN_KEY
         )
@@ -245,7 +249,7 @@ class DeploymentController(ControllerBase):
         )
         if desired_association_id_column and desired_dataset_id:
             logger.info(
-                "Submitting actuals for a deployment."
+                "Set actuals (learning data) in a deployment. "
                 "Git deployment ID: %s, actuals association ID column: %s, actuals dataset ID: %s.",
                 deployment_info.user_provided_id,
                 desired_association_id_column,
@@ -258,6 +262,8 @@ class DeploymentController(ControllerBase):
             self._dr_client.submit_deployment_actuals(
                 actual_values_column, desired_association_id_column, desired_dataset_id, deployment
             )
+            return True
+        return False
 
     @staticmethod
     def _user_replaced_the_model_in_a_deployment(
@@ -339,13 +345,18 @@ class DeploymentController(ControllerBase):
         actual_deployment_settings = self._dr_client.fetch_deployment_settings(
             datarobot_deployment_id, deployment_info
         )
-        _, updated = self._dr_client.update_deployment_settings(
+
+        actuals_uploaded = False
+        if self._dr_client.should_submit_new_actuals(deployment_info, actual_deployment_settings):
+            actuals_uploaded = self._submit_actuals_if_required(
+                deployment_info, datarobot_deployment
+            )
+
+        _, settings_updated = self._dr_client.update_deployment_settings(
             datarobot_deployment.deployment, deployment_info, actual_deployment_settings
         )
-        if self._dr_client.should_submit_new_actuals(deployment_info, actual_deployment_settings):
-            self._submit_actuals(deployment_info, datarobot_deployment)
-            updated = True
-        return updated
+
+        return actuals_uploaded or settings_updated
 
     def handle_deleted_deployments(self):
         """Delete deployments in DataRobot. Deletion takes place only within a push GitHub event."""

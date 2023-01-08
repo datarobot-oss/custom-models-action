@@ -1254,26 +1254,26 @@ class DrClient:
             )
             association_payload["columnNames"] = [association_col_name]
 
-        desired_required = deployment_info.get_settings_value(
+        desired_req_in_pred_request = deployment_info.get_settings_value(
             DeploymentSchema.ASSOCIATION_KEY,
             DeploymentSchema.ASSOCIATION_REQUIRED_IN_PRED_REQUEST_KEY,
         )
-        if desired_required is not None:
+        if desired_req_in_pred_request is not None:
             actual_required = (
                 actual_settings["associationId"]["requiredInPredictionRequests"]
                 if actual_settings
                 else None
             )
-            if desired_required != actual_required:
+            if desired_req_in_pred_request != actual_required:
                 # NOTE: this is a simplified alternative, which supports a single association ID
-                association_payload["requiredInPredictionRequests"] = desired_required
+                association_payload["requiredInPredictionRequests"] = desired_req_in_pred_request
 
         return association_payload
 
     @staticmethod
     def should_submit_new_actuals(deployment_info, actual_settings):
         """
-        New actuals are assumed to be submitted only if the association ID was changed.
+        New actuals are assumed to be submitted only if the association ID column was changed.
 
         Parameters
         ----------
@@ -1288,15 +1288,15 @@ class DrClient:
             Whether the actuals should be submitted or not
         """
 
-        desired_association_pred_id = deployment_info.get_settings_value(
+        desired_association_id_column = deployment_info.get_settings_value(
             DeploymentSchema.ASSOCIATION_KEY, DeploymentSchema.ASSOCIATION_ASSOCIATION_ID_COLUMN_KEY
         )
-        if desired_association_pred_id is not None:
+        if desired_association_id_column is not None:
             actuals_cols = (
                 actual_settings["associationId"]["columnNames"] if actual_settings else None
             )
-            desired_association_pred_id = [desired_association_pred_id]
-            return desired_association_pred_id != actuals_cols
+            desired_association_id_column = [desired_association_id_column]
+            return desired_association_id_column != actuals_cols
         return False
 
     @staticmethod
