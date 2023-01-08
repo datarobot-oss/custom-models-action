@@ -586,6 +586,12 @@ class DrClient:
         ):
             return
 
+        logger.info(
+            "Building a dependency environment ... model ID: %s, model version ID: %s",
+            datarobot_custom_model_version["customModelId"],
+            datarobot_custom_model_version["id"],
+        )
+
         url = self.CUSTOM_MODELS_VERSION_DEPENDENCY_BUILD_ROUTE.format(
             model_id=datarobot_custom_model_version["customModelId"],
             model_ver_id=datarobot_custom_model_version["id"],
@@ -1121,10 +1127,10 @@ class DrClient:
             )
             if response.status_code != 202:
                 raise DataRobotClientError(
-                    "Failed to update deployment settings."
+                    "Failed to update deployment settings. "
                     f"User provided deployment id: {deployment_info.user_provided_id}, "
                     f"Deployment id: {deployment_id}, "
-                    f"Response status: {response.status_code} "
+                    f"Response status: {response.status_code}, "
                     f"Response body: {response.text}",
                     code=response.status_code,
                 )
