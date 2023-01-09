@@ -8,11 +8,14 @@ YAML files enables the custom model action's control over models and deployments
 can reside in any folder within your custom model's repository. The YAML is searched, collected, and tested against 
 a schema to determine if it contains the entities used in these workflows.
 
-## Prerequisites
+## Prerequisite
 The following feature flags must be enabled in DataRobot:
 * ENABLE_MLOPS
 * ENABLE_CUSTOM_INFERENCE_MODEL
 * ENABLE_CUSTOM_MODEL_GITHUB_CI_CD
+
+The following feature flag is optional, for extended information:
+* EXPERIMENTAL_API_ACCESS
 
 (Please contact [DataRobot support](mailto:support@datarobot.com) for more information)
 
