@@ -621,12 +621,14 @@ class TestDeploymentGitHubActions:
 
         printout("Run the GitHub action to create an erroneous model and deployment")
         with self._simulate_model_error(model_metadata_yaml_file):
-            with caplog.at_level(logging.WARNING):
-                run_github_action(
-                    workspace_path, git_repo, main_branch_name, "push", is_deploy=True
-                )
+            with pytest.raises(DataRobotClientError) as exec_info:
+                with caplog.at_level(logging.WARNING):
+                    run_github_action(
+                        workspace_path, git_repo, main_branch_name, "push", is_deploy=True
+                    )
 
             assert any(record.levelname in ("WARNING", "ERROR") for record in caplog.records)
+            assert "WARNING" in str(exec_info.value) or "WARNING" in str(exec_info.value)
         printout("Done")
 
     @contextlib.contextmanager
