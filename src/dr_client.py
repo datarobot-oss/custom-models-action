@@ -45,6 +45,7 @@ class DrClient:
     )
     CUSTOM_MODELS_TEST_ROUTE = "customModelTests/"
     CUSTOM_MODEL_DEPLOYMENTS_ROUTE = "customModelDeployments/"
+    CUSTOM_MODEL_DEPLOYMENT_LOG_ROUTE = CUSTOM_MODEL_DEPLOYMENTS_ROUTE + "{deployment_id}/logs/"
     CUSTOM_MODEL_TRAINING_DATA = CUSTOM_MODEL_ROUTE + "trainingData/"
     DATASETS_ROUTE = "datasets/"
     DATASET_UPLOAD_ROUTE = DATASETS_ROUTE + "fromFile/"
@@ -1066,16 +1067,54 @@ class DrClient:
         response = self._http_requester.post(self.DEPLOYMENTS_CREATE_ROUTE, json=payload)
         if response.status_code != 202:
             raise DataRobotClientError(
-                "Failed creating a deployment from model package."
+                "Failed creating a deployment from a model package."
                 f"User provided deployment id: {deployment_info.user_provided_id}, "
                 f"Model package id: {model_package['id']}, "
                 f"Response status: {response.status_code}, "
                 f"Response body: {response.text}",
                 code=response.status_code,
             )
-        location = self._wait_for_async_resolution(response.headers["Location"])
-        response = self._http_requester.get(location, raw=True)
-        return response.json()
+        deployment_id = response.json()["id"]
+        try:
+            location = self._wait_for_async_resolution(response.headers["Location"])
+        except HttpRequesterException as ex:
+            self._report_persistent_deployment_logs_if_any_and_reraise(deployment_id)
+            raise DataRobotClientError(
+                "A certain background job was failing during a deployment's creation. "
+                f"DataRobot deployment id: {deployment_id}, "
+                f"User provided deployment id: {deployment_info.user_provided_id}, "
+                f"Model package id: {model_package['id']}, "
+                f"Exception: {str(ex)}."
+            ) from ex
+        else:
+            self._report_runtime_deployment_logs_if_any(deployment_id)
+            response = self._http_requester.get(location, raw=True)
+            deployment = response.json()
+            return deployment
+
+    def _report_persistent_deployment_logs_if_any_and_reraise(self, deployment_id):
+        deployment_log_url = self.CUSTOM_MODEL_DEPLOYMENT_LOG_ROUTE.format(
+            deployment_id=deployment_id
+        )
+        response = self._http_requester.get(deployment_log_url)
+        if response.status_code == 200 and response.text:
+            logger.error(response.text)
+
+    def _report_runtime_deployment_logs_if_any(self, deployment_id):
+        deployment_log_url = self.CUSTOM_MODEL_DEPLOYMENT_LOG_ROUTE.format(
+            deployment_id=deployment_id
+        )
+        response = self._http_requester.post(deployment_log_url)
+        if response.status_code == 202:
+            location = self._wait_for_async_resolution(response.headers["Location"])
+            response = self._http_requester.get(location, raw=True)
+            if response.status_code == 200 and response.text:
+                if "WARNING" in response.text:
+                    logger.warning(response.text)
+                elif "ERROR" in response.text:
+                    logger.error(response.text)
+                else:
+                    logger.info(response.text)
 
     def _get_prediction_environment_id(self, model_package, deployment_info):
         prediction_environment_name = deployment_info.get_value(
