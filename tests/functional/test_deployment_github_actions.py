@@ -11,6 +11,7 @@ DataRobot application. If DataRobot is not accessible, the functional tests are 
 """
 
 import contextlib
+import logging
 import os
 import re
 from pathlib import Path
@@ -63,6 +64,15 @@ def fixture_deployment_metadata(deployment_metadata_yaml_file):
 
     with open(deployment_metadata_yaml_file, encoding="utf-8") as fd:
         return yaml.safe_load(fd)
+
+
+@pytest.fixture(name="skip_association")
+def fixture_skip_association(deployment_metadata_yaml_file, deployment_metadata):
+    """A fixture to remove the association section from a given deployment metadata."""
+
+    deployment_metadata[DeploymentSchema.SETTINGS_SECTION_KEY].pop(DeploymentSchema.ASSOCIATION_KEY)
+    with open(deployment_metadata_yaml_file, "w", encoding="utf-8") as fd:
+        yaml.safe_dump(deployment_metadata, fd)
 
 
 @pytest.fixture(name="cleanup")
@@ -600,3 +610,34 @@ class TestDeploymentGitHubActions:
             expected_predictions_data_collection
             == new_deployment_settings["predictionsDataCollection"]["enabled"]
         )
+
+    @pytest.mark.usefixtures("cleanup", "skip_model_testing", "skip_association")
+    def test_e2e_deployment_create_failure(
+        self, workspace_path, git_repo, model_metadata_yaml_file, main_branch_name, caplog
+    ):
+        """
+        An end-to-end case to test a failure of a background job during a deployment's creation.
+        """
+
+        printout("Run the GitHub action to create an erroneous model and deployment")
+        with self._simulate_model_error(model_metadata_yaml_file):
+            with pytest.raises(DataRobotClientError) as exec_info:
+                with caplog.at_level(logging.WARNING):
+                    run_github_action(
+                        workspace_path, git_repo, main_branch_name, "push", is_deploy=True
+                    )
+
+            assert any(record.levelname in ("WARNING", "ERROR") for record in caplog.records)
+            assert "WARNING" in str(exec_info.value) or "WARNING" in str(exec_info.value)
+        printout("Done")
+
+    @contextlib.contextmanager
+    def _simulate_model_error(self, model_metadata_yaml_file):
+        model_dir_path = Path(model_metadata_yaml_file).parent
+        try:
+            origin_pickle_file_path = next(model_dir_path.rglob("*.pkl"))
+        except StopIteration:
+            assert False, "Missing model's pickle artifact"
+        tmp_pickle_file_path = origin_pickle_file_path.rename(f"{origin_pickle_file_path}.bak")
+        yield
+        tmp_pickle_file_path.rename(origin_pickle_file_path)
