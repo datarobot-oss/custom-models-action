@@ -330,6 +330,13 @@ class ModelController(ControllerBase):
         datarobot_model = DataRobotModel(model=custom_model, latest_version=latest_version)
         self.datarobot_models[user_provided_id] = datarobot_model
         self._datarobot_models_by_id[custom_model["id"]] = datarobot_model
+        logger.debug(
+            "Cache datarobot model, "
+            "user_provided_id: %s, custom_model_id: %s, latest_cm_ver_id: %s",
+            user_provided_id,
+            custom_model["id"],
+            latest_version["id"] if latest_version else None,
+        )
 
     def lookup_affected_models_by_the_current_action(self):
         """Search for models that were affected byt the current commit."""
@@ -741,20 +748,24 @@ class ModelController(ControllerBase):
     ):
         # Only check that deleted models are not deployed in DataRobot. If so, make sure to
         # report a failure.
-        logger.info("Detecting that deployed models are not deleted ...")
+        logger.info("Validating that deployed models are not being deleted ...")
         if deployments:
             msg = ""
             for deployment in deployments:
                 model_id = deployment["customModel"]["id"]
-                msg += (
-                    f"Deployment: {deployment['id']}, "
-                    f"model_id: {model_id}, "
-                    f"user_provided_id: {missing_locally_id_to_git_id.get(model_id)}"
-                    "\n"
+                # NOTE: apparently, there's a bug in DR at which deployments of non-requests
+                # models are returned. The code below designed to mitigate this issue.
+                if model_id in missing_locally_id_to_git_id:
+                    msg += (
+                        f"Deployment ID: {deployment['id']}, "
+                        f"model_id: {model_id}, "
+                        f"user_provided_id: {missing_locally_id_to_git_id.get(model_id)}"
+                        "\n"
+                    )
+            if msg:
+                raise IllegalModelDeletion(
+                    f"Models cannot be deleted because of existing deployments.\n{msg}"
                 )
-            raise IllegalModelDeletion(
-                f"Models cannot be deleted because of existing deployments.\n{msg}"
-            )
 
     def _actually_delete_models(self, missing_locally_id_to_git_id, deployments):
         logger.info("Deleting models ...")
