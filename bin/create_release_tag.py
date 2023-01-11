@@ -45,6 +45,14 @@ class ReleaseCreator:
         if self._repo.active_branch.name != "master":
             raise Exception("A release can only be created from the 'master' branch.")
 
+        commits_behind = self._repo.iter_commits("master..origin/master")
+        if sum(1 for c in commits_behind) > 0:
+            raise Exception("Local 'master' branch is behind of its remote branch.")
+
+        commits_ahead = self._repo.iter_commits("origin/master..master")
+        if sum(1 for c in commits_ahead) > 0:
+            raise Exception("Local 'master' branch is ahead of its remote branch.")
+
     def _tag_already_exists(self):
         return self._args.tag in self._repo.tags
 
