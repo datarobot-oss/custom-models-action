@@ -1,5 +1,10 @@
 # RELEASES
 
+## 1.1.7 [2023-01-11]
+  * Update README.md
+  * Internal improvements for local utility
+  * Bug fixes
+
 ## 1.1.6 [2023-01-05]
   * Change attribute names in a deployment schema:
     * `prediction_id` ==> `association_id_column`
