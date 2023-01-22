@@ -81,13 +81,21 @@ class DrClient:
         ModelSchema.CLASS_LABELS_KEY: "classLabels",
     }
 
+    DEFAULT_MAX_WAIT_SEC = 600
+
+    # It was detected that deployment creation may take more than 10 minutes when the servers
+    # are super busy.
+    DEPLOYMENT_CREATE_MAX_WAIT_SEC = 2 * DEFAULT_MAX_WAIT_SEC
+
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
             datarobot_webserver = f"{StringUtil.slash_suffix(datarobot_webserver)}api/v2/"
 
         self._http_requester = HttpRequester(datarobot_webserver, datarobot_api_token, verify_cert)
 
-    def _wait_for_async_resolution(self, async_location, max_wait=600, return_on_completed=True):
+    def _wait_for_async_resolution(
+        self, async_location, max_wait=DEFAULT_MAX_WAIT_SEC, return_on_completed=True
+    ):
         start_time = time.time()
 
         while time.time() < start_time + max_wait:
@@ -1073,7 +1081,9 @@ class DrClient:
                 f"Response body: {response.text}",
                 code=response.status_code,
             )
-        location = self._wait_for_async_resolution(response.headers["Location"])
+        location = self._wait_for_async_resolution(
+            response.headers["Location"], max_wait=self.DEPLOYMENT_CREATE_MAX_WAIT_SEC
+        )
         response = self._http_requester.get(location, raw=True)
         return response.json()
 
