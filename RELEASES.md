@@ -1,5 +1,9 @@
 # RELEASES
 
+## 1.1.8 [2023-01-31]
+  * Internal improvements
+  * Bug fixes
+
 ## 1.1.7 [2023-01-11]
   * Update README.md
   * Internal improvements for local utility
