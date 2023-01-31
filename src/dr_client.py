@@ -761,13 +761,7 @@ class DrClient:
                 logger.debug("Check status, check '%s', status: %s.", check, status)
 
     def _post_custom_model_test_request(self, model_id, model_version_id, model_info):
-        payload = {
-            "customModelId": model_id,
-            "customModelVersionId": model_version_id,
-            "environmentId": model_info.get_value(
-                ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_ID_KEY
-            ),
-        }
+        payload = {"customModelId": model_id, "customModelVersionId": model_version_id}
 
         loaded_checks = model_info.get_value(ModelSchema.TEST_KEY, ModelSchema.CHECKS_KEY)
         configuration = self._build_tests_configuration(loaded_checks)
