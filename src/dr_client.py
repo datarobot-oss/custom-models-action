@@ -803,15 +803,15 @@ class DrClient:
             "longRunningService": "fail",
             "errorCheck": "fail",
         }
-        if loaded_checks:
-            for check, info in loaded_checks.items():
-                if not info[ModelSchema.CHECK_ENABLED_KEY]:
-                    continue
-
-                dr_check_name = DrApiAttrs.to_dr_test_check(check)
-                configuration[dr_check_name] = (
-                    "fail" if info[ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY] else "warn"
-                )
+        for local_check_name, dr_check_name in DrApiAttrs.DR_TEST_CHECK_MAP.items():
+            check_config_value = "skip"
+            if loaded_checks:
+                check_info = loaded_checks.get(local_check_name)
+                if check_info[ModelSchema.CHECK_ENABLED_KEY]:
+                    check_config_value = (
+                        "fail" if check_info[ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY] else "warn"
+                    )
+            configuration[dr_check_name] = check_config_value
         return configuration
 
     @classmethod
