@@ -587,12 +587,31 @@ class TestCustomModelVersionRoutes:
     class TestCustomModelsTestingRoute:
         """Contains unit-tests to test custom model testing routes."""
 
+        @pytest.fixture
+        def default_checks_config(self):
+            """
+            A fixture that returns the default configuration for custom model testing checks,
+            when checks are disabled or do not exist in the model's YAML definition.
+            """
+
+            return {
+                "errorCheck": "fail",
+                "longRunningService": "fail",
+                "nullValueImputation": "skip",
+                "performanceCheck": "skip",
+                "predictionVerificationCheck": "skip",
+                "sideEffects": "skip",
+                "stabilityCheck": "skip",
+            }
+
         @pytest.mark.parametrize("loaded_checks", [None, {}], ids=["none", "empty_dict"])
-        def test_minimal_custom_model_testing_configuration(self, loaded_checks):
+        def test_minimal_custom_model_testing_configuration(
+            self, loaded_checks, default_checks_config
+        ):
             """A case to test minimal configuration for a custom model testing."""
 
             configuration = DrClient._build_tests_configuration(loaded_checks)
-            assert configuration == {"longRunningService": "fail", "errorCheck": "fail"}
+            assert configuration == default_checks_config
 
         @pytest.mark.parametrize("loaded_checks", [None, {}], ids=["none", "empty_dict"])
         def test_minimal_custom_model_testing_parameters(self, loaded_checks):
@@ -612,7 +631,7 @@ class TestCustomModelVersionRoutes:
                 assert check in configuration
 
         def test_full_custom_model_testing_configuration_with_all_disabled_checks(
-            self, mock_full_custom_model_checks
+            self, mock_full_custom_model_checks, default_checks_config
         ):
             """
             A case to test a full custom model testing configuration, when all the checks are
@@ -623,7 +642,7 @@ class TestCustomModelVersionRoutes:
             for _, info in mock_full_custom_model_checks.items():
                 info[ModelSchema.CHECK_ENABLED_KEY] = False
             configuration = DrClient._build_tests_configuration(mock_full_custom_model_checks)
-            assert configuration == {"longRunningService": "fail", "errorCheck": "fail"}
+            assert configuration == default_checks_config
 
         def test_full_custom_model_testing_parameters(self, mock_full_custom_model_checks):
             """A case to test a full number of parameters in custom model testing."""
