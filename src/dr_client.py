@@ -59,6 +59,7 @@ class DrClient:
     DEPLOYMENT_MODEL_VALIDATION_ROUTE = DEPLOYMENT_MODEL_ROUTE + "validation/"
     DEPLOYMENT_MODEL_CHALLENGER_ROUTE = DEPLOYMENT_ROUTE + "challengers/"
     DEPLOYMENT_ACTUALS_UPDATE_ROUTE = DEPLOYMENT_ROUTE + "actuals/fromDataset/"
+    ENVIRONMENT_DROP_IN_ROUTE = "executionEnvironments/"
 
     MODEL_TARGET_TYPE_MAP = {
         ModelSchema.TARGET_TYPE_BINARY_KEY: "Binary",
@@ -1740,3 +1741,22 @@ class DrClient:
                 )
             return response.json()
         return None
+
+    def fetch_environment_drop_in(self, search_for=None):
+        """
+        Retrieve environments drop-in from DataRobot.
+
+        Parameters
+        ----------
+        search_for : str or None
+            Optional. A string to filter out environments in DataRobot. The search is done
+            in the name and description of every environment drop-in, and it is case insensitive.
+
+        Returns
+        -------
+        list:
+            A list of environment drop-in environments.
+        """
+
+        payload = {"searchFor": search_for} if search_for else None
+        return self._paginated_fetch(self.ENVIRONMENT_DROP_IN_ROUTE, json=payload)
