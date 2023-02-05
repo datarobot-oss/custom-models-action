@@ -12,8 +12,10 @@ import contextlib
 import copy
 import logging
 import os
+import re
 import shutil
 from collections import namedtuple
+from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -32,6 +34,7 @@ from schema_validator import SharedSchema
 from tests.conftest import unique_str
 
 
+@lru_cache
 def webserver_accessible():
     """Check if DataRobot web server is accessible."""
 
@@ -85,6 +88,34 @@ def cleanup_models(dr_client_tool, workspace_path):
                 )
             except (IllegalModelDeletion, DataRobotClientError):
                 pass
+
+
+@pytest.fixture(name="sklearn_environment_drop_in_id", scope="session")
+def fixture_sklearn_environment_drop_in_id(dr_client):
+    """A fixture to fetch a sklearn environment drop-in to be used by the functional tests."""
+
+    envs = dr_client.fetch_environment_drop_in()
+    if len(envs) == 1:
+        return envs[0]["id"]  # Assuming local dev env
+
+    try:
+        dr_sklearn_env_id = next(
+            e["id"]
+            for e in envs
+            if re.search(r"[DataRobot] Python .* Scikit-Learn Drop-In", e["name"])
+        )
+        if dr_sklearn_env_id:
+            return dr_sklearn_env_id
+    except StopIteration:
+        pass
+
+    any_sklearn_env_id = next(
+        e["id"] for e in envs if re.search(r"scikit-learn|sklearn|scikit", e["name"], re.I)
+    )
+    if any_sklearn_env_id:
+        return any_sklearn_env_id
+
+    assert False, "Scikit-Learn environment drop-in was not found in DR!"
 
 
 def printout(msg):
@@ -145,7 +176,9 @@ def fixture_git_repo(workspace_path):
 
 
 @pytest.fixture(name="build_repo_for_testing_factory")
-def fixture_build_repo_for_testing_factory(workspace_path, git_repo):
+def fixture_build_repo_for_testing_factory(
+    workspace_path, git_repo, sklearn_environment_drop_in_id
+):
     """
     A fixture to build a complete source stree with model and deployment definitions in it. Then
     commit everything into the repository that was initialized in that root dir.
@@ -173,6 +206,14 @@ def fixture_build_repo_for_testing_factory(workspace_path, git_repo):
             ModelSchema.SETTINGS_SECTION_KEY,
             ModelSchema.NAME_KEY,
             value=new_model_name,
+        )
+
+        # Set environment drop-in
+        ModelSchema.set_value(
+            model_metadata,
+            ModelSchema.VERSION_KEY,
+            ModelSchema.MODEL_ENV_ID_KEY,
+            value=sklearn_environment_drop_in_id,
         )
 
         if dedicated_definition:
@@ -456,7 +497,7 @@ def merge_branch_name():
     return "merge-feature-branch"
 
 
-@pytest.fixture(name="dr_client")
+@pytest.fixture(name="dr_client", scope="session")
 def fixture_dr_client():
     """A fixture to create a DataRobot client."""
 
