@@ -10,7 +10,6 @@
 
 import contextlib
 import os
-import re
 from argparse import Namespace
 from pathlib import Path
 
@@ -19,6 +18,7 @@ from bson import ObjectId
 from mock import patch
 from mock.mock import PropertyMock
 
+from common import constants
 from common.data_types import DataRobotModel
 from common.exceptions import IllegalModelDeletion
 from common.exceptions import ModelMainEntryPointNotFound
@@ -33,6 +33,7 @@ from model_controller import ModelController
 from model_file_path import ModelFilePath
 from model_info import ModelInfo
 from tests.unit.conftest import make_a_change_and_commit
+from tests.unit.conftest import validate_metrics
 
 
 class TestCustomInferenceModel:
@@ -205,30 +206,7 @@ class TestCustomInferenceModel:
 
         with patch("dr_client.DrClient"):
             model_controller = ModelController(options, repo=None)
-
-            label = ModelController.MODELS_LABEL
-            model_controller._stats.save(label)
-            with open(github_output, "r", encoding="utf-8") as file:
-                github_output_content = file.read()
-
-            for param in ["total-affected", "total-created", "total-created"]:
-                assert re.search(f"^{param}-{label}=0$", github_output_content, re.M)
-            assert re.search("^total-created-model-versions=0$", github_output_content, re.M)
-
-            desired_value = 5
-            for param in ["total_affected", "total_created", "total_created"]:
-                setattr(model_controller._stats, param, desired_value)
-            setattr(model_controller._stats, "total_created_versions", desired_value)
-
-            model_controller._stats.save(label)
-            with open(github_output, "r", encoding="utf-8") as file:
-                github_output_content = file.read()
-
-            for param in ["total-affected", "total-created", "total-created"]:
-                assert re.search(f"^{param}-{label}={desired_value}$", github_output_content, re.M)
-            assert re.search(
-                f"^total-created-model-versions={desired_value}$", github_output_content, re.M
-            )
+            validate_metrics(github_output, constants.Label.MODELS, model_controller)
 
 
 class TestCustomInferenceModelDeletion:

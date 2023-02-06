@@ -35,7 +35,7 @@ def github_output():
         ):
             yield github_output_filepath
 
-        # Just in case the file was not deleted by a certain functional test
+        # Just in case the file was not deleted by a certain test
         if github_output_filepath.is_file():
             github_output_filepath.unlink()
     else:

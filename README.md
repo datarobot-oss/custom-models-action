@@ -51,15 +51,15 @@ repository in GitHub, take the following steps:
             with:
               fetch-depth: 0
 
-              - name: DataRobot Custom Models Step
-                id: datarobot-custom-models-step
-                uses: datarobot-oss/custom-models-action@v1.1.8
-                with:
-                  api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
-                  webserver: https://app.datarobot.com/
-                  branch: master
-                  allow-model-deletion: true
-                  allow-deployment-deletion: true
+          - name: DataRobot Custom Models Step
+            id: datarobot-custom-models-step
+            uses: datarobot-oss/custom-models-action@v1.1.8
+            with:
+              api-token: ${{ secrets.DATAROBOT_API_TOKEN }}
+              webserver: https://app.datarobot.com/
+              branch: master
+              allow-model-deletion: true
+              allow-deployment-deletion: true
     ```
     
     Configure the following fields:
@@ -223,16 +223,18 @@ The action supports the following optional input arguments:
 The GitHub action supports the following output arguments, which can later be used by follow-up
 steps in the same GitHub job (refer to the workflow example below):
 
-|    Argument   |                   Description                  |
-|---------------|------------------------------------------------|
-| `total-affected-models`        | The number of models affected by this action. |
-| `total-created-models`         | The number of new models created by this action. |
-| `total-deleted-models`         | The number of models deleted by this action. |
-| `total-created-model-versions` | The number of new model versions created by this action. |
-| `total-affected-deployments`   | The number of deployments affected by this action. |
-| `total-created-deployments`    | The number of new deployments created by this action. |
-| `total-deleted-deployments`    | The number of deployments deleted by this action. |
-| `message`                      | The output message from the GitHub action. |
+| Argument                              | Description                                              |
+|---------------------------------------|----------------------------------------------------------|
+| `models--total-affected`              | The number of models affected by this action.            |
+| `models--total-created`               | The number of new models created by this action.         |
+| `models--total-deleted`               | The number of models deleted by this action.             |
+| `models--total-updated-settings`      | The number of models whose settings were updated.        |
+| `models--total-created-versions`      | The number of new model versions created by this action. |
+| `deployments--total-affected`         | The number of deployments affected by this action.       |
+| `deployments--total-created`          | The number of new deployments created by this action.    |
+| `deployments--total-deleted`          | The number of deployments deleted by this action.        |
+| `deployments--total-updated-settings` | The number of deployments whose settings were updated.   |
+| `message`                             | The output message from the GitHub action.               |
 
 ### Model Definition
 
@@ -344,12 +346,12 @@ GitHub workflow definition:
         # This will be taken care of by the push event.
         if: ${{ github.event.pull_request.merged != true }}
 
-          runs-on: ubuntu-latest
+        runs-on: ubuntu-latest
 
-          steps:
-            - uses: actions/checkout@v3
-              with:
-                fetch-depth: 0
+        steps:
+          - uses: actions/checkout@v3
+            with:
+              fetch-depth: 0
 
           - name: DataRobot Custom Models Step
             id: datarobot-custom-models-step
@@ -663,16 +665,18 @@ jobs:
           allow-model-deletion: true
           allow-deployment-deletion: true
 
-      - name: DataRobot Custom Models Action Results
+      - name: DataRobot Custom Models Action Metrics
         run: |
-          echo "Total affected models: ${{ steps.datarobot-custom-models-step.outputs.total-affected-models }}"
-          echo "Total created models: ${{ steps.datarobot-custom-models-step.outputs.total-created-models }}"
-          echo "Total deleted models: ${{ steps.datarobot-custom-models-step.outputs.total-deleted-models }}"
-          echo "Total created model versions: ${{ steps.datarobot-custom-models-step.outputs.total-created-model-versions }}"
+          echo "Total affected models: ${{ steps.datarobot-custom-models-step.outputs.models--total-affected }}"
+          echo "Total created models: ${{ steps.datarobot-custom-models-step.outputs.models--total-created }}"
+          echo "Total deleted models: ${{ steps.datarobot-custom-models-step.outputs.models--total-deleted }}"
+          echo "Total models whose settings were updated: ${{ steps.datarobot-custom-models-step.outputs.models--total-updated-settings }}"
+          echo "Total created model versions: ${{ steps.datarobot-custom-models-step.outputs.models--total-created-versions }}"
 
-          echo "Total affected deployments: ${{ steps.datarobot-custom-models-step.outputs.total-affected-deployments }}"
-          echo "Total created deployments: ${{ steps.datarobot-custom-models-step.outputs.total-created-deployments }}"
-          echo "Total deleted deployments: ${{ steps.datarobot-custom-models-step.outputs.total-deleted-deployments }}"
+          echo "Total affected deployments: ${{ steps.datarobot-custom-models-step.outputs.deployments--total-affected }}"
+          echo "Total created deployments: ${{ steps.datarobot-custom-models-step.outputs.deployments--total-created }}"
+          echo "Total deleted deployments: ${{ steps.datarobot-custom-models-step.outputs.deployments--total-deleted }}"
+          echo "Total deployments whose settings were updated: ${{ steps.datarobot-custom-models-step.outputs.deployments--total-updated-settings }}"
 
           echo "Message: ${{ steps.datarobot-custom-models-step.outputs.message }}"
 ```

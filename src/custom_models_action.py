@@ -125,6 +125,6 @@ class CustomModelsAction:
         return True
 
     def _save_statistics(self):
-        self.model_controller.save_statistics()
+        self.model_controller.save_metrics()
         if self.deployment_controller:
-            self.deployment_controller.save_statistics()
+            self.deployment_controller.save_metrics()

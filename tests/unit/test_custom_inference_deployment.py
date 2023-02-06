@@ -9,7 +9,6 @@
 """A module that contains unit-tests for the custom inference model deployment GitHub action."""
 
 import contextlib
-import re
 import uuid
 
 import pytest
@@ -18,6 +17,7 @@ from bson import ObjectId
 from mock import PropertyMock
 from mock import patch
 
+from common import constants
 from common.data_types import DataRobotDeployment
 from common.data_types import DataRobotModel
 from common.exceptions import AssociatedModelNotFound
@@ -35,6 +35,7 @@ from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 from schema_validator import SharedSchema
 from tests.conftest import unique_str
+from tests.unit.conftest import validate_metrics
 from tests.unit.conftest import write_to_file
 
 
@@ -389,31 +390,7 @@ class TestCustomInferenceDeployment:
 
         with patch("dr_client.DrClient"):
             deployment_controller = DeploymentController(options, None, None)
-
-            label = DeploymentController.DEPLOYMENTS_LABEL
-            deployment_controller._stats.save(label)
-            with open(github_output, "r", encoding="utf-8") as file:
-                github_output_content = file.read()
-
-            for param in ["total-affected", "total-created", "total-created"]:
-                assert re.search(f"^{param}-{label}=0$", github_output_content, flags=re.M)
-            assert not re.search(
-                "^total-created-model-versions=0$", github_output_content, flags=re.M
-            )
-
-            desired_value = 5
-            for param in ["total_affected", "total_created", "total_created"]:
-                setattr(deployment_controller._stats, param, desired_value)
-
-            deployment_controller._stats.save(label)
-            with open(github_output, "r", encoding="utf-8") as file:
-                github_output_content = file.read()
-
-            for param in ["total-affected", "total-created", "total-created"]:
-                assert re.search(f"{param}-{label}={desired_value}$", github_output_content, re.M)
-            assert not re.search(
-                f"^total-created-model-versions={desired_value}$", github_output_content, flags=re.M
-            )
+            validate_metrics(github_output, constants.Label.DEPLOYMENTS, deployment_controller)
 
     @pytest.mark.usefixtures("workspace_path", "mock_github_env_variables")
     def test_deployments_integrity_validation_no_associated_models(

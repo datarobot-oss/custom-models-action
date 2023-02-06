@@ -9,6 +9,7 @@
 
 import logging
 import os
+import re
 import uuid
 from argparse import Namespace
 from pathlib import Path
@@ -20,7 +21,10 @@ import yaml
 from bson import ObjectId
 from git import Repo
 
+from common import constants
 from custom_models_action import CustomModelsAction
+from metrics import Metric
+from metrics import Metrics
 from model_controller import ModelController
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
@@ -464,3 +468,30 @@ def paginated_url_factory(webserver):
         return f"{webserver}/api/v2/{base_url}{suffix}"
 
     return _inner
+
+
+# pylint: disable=protected-access
+def validate_metrics(github_output, entity_label, controller):
+    """A method to validate models/deployments metrics."""
+
+    controller._metrics.save()
+    with open(github_output, "r", encoding="utf-8") as file:
+        github_output_content = file.read()
+
+    for metric_label in Metrics.metric_labels(entity_label):
+        assert re.search(f"^{metric_label}=0$", github_output_content, re.M)
+
+    desired_value = 5
+    for metric in Metrics._get_metrics(entity_label):
+        current_metric_value = getattr(controller._metrics, metric.name)
+        desired_metric_value = Metric(current_metric_value.label, desired_value)
+        setattr(controller._metrics, metric.name, desired_metric_value)
+
+    controller._metrics.save()
+    with open(github_output, "r", encoding="utf-8") as file:
+        github_output_content = file.read()
+
+    for metric_label in Metrics.metric_labels(entity_label):
+        assert re.search(f"^{metric_label}={desired_value}$", github_output_content, re.M)
+
+    assert not re.search(f"^.*{constants.Label.DEPLOYMENTS}.*$", github_output_content, flags=re.M)
