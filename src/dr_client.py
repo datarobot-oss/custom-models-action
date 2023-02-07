@@ -69,6 +69,7 @@ class DrClient:
         ModelSchema.TARGET_TYPE_MULTICLASS_KEY: "Multiclass",
         ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY: "Multiclass",
         ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY: "Unstructured",
+        ModelSchema.TARGET_TYPE_ANOMALY_DETECTION_KEY: "Anomaly",
     }
 
     MODEL_SETTINGS_KEYS_MAP = {
@@ -230,7 +231,6 @@ class DrClient:
     @classmethod
     def _setup_payload_for_custom_model_creation(cls, model_info):
         target_type = model_info.get_value(ModelSchema.TARGET_TYPE_KEY)
-
         payload = {
             "customModelType": constants.CUSTOM_MODEL_TYPE,
             "targetType": cls.MODEL_TARGET_TYPE_MAP.get(target_type),
