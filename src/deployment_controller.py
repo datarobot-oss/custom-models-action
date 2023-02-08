@@ -12,6 +12,7 @@ validations and then applies actions in DataRobot.
 import logging
 from pathlib import Path
 
+from common import constants
 from common.data_types import DataRobotDeployment
 from common.exceptions import AssociatedModelNotFound
 from common.exceptions import AssociatedModelVersionNotFound
@@ -39,7 +40,7 @@ class DeploymentController(ControllerBase):
         self._datarobot_deployments = {}
 
     def _label(self):
-        return self.DEPLOYMENTS_LABEL
+        return constants.Label.DEPLOYMENTS
 
     @property
     def deployments_info(self):
@@ -210,7 +211,7 @@ class DeploymentController(ControllerBase):
                     updated = True
 
                 if updated:
-                    self.stats.total_affected += 1
+                    self.metrics.total_affected.value += 1
 
     def _create_deployment(self, deployment_info):
         logger.info(
@@ -237,8 +238,8 @@ class DeploymentController(ControllerBase):
             deployment_info.user_provided_id,
             deployment["id"],
         )
-        self.stats.total_created += 1
-        self.stats.total_affected += 1
+        self.metrics.total_created.value += 1
+        self.metrics.total_affected.value += 1
 
     def _submit_actuals_if_required(self, deployment_info, deployment):
         desired_association_id_column = deployment_info.get_settings_value(
@@ -356,7 +357,11 @@ class DeploymentController(ControllerBase):
             datarobot_deployment.deployment, deployment_info, actual_deployment_settings
         )
 
-        return actuals_uploaded or settings_updated
+        settings_were_updated = actuals_uploaded or settings_updated
+        if settings_were_updated:
+            self.metrics.total_updated_settings.value += 1
+
+        return settings_were_updated
 
     def handle_deleted_deployments(self):
         """Delete deployments in DataRobot. Deletion takes place only within a push GitHub event."""
@@ -375,8 +380,8 @@ class DeploymentController(ControllerBase):
                 deployment_id = datarobot_deployment.deployment["id"]
                 try:
                     self._dr_client.delete_deployment_by_id(deployment_id)
-                    self.stats.total_deleted += 1
-                    self.stats.total_affected += 1
+                    self.metrics.total_deleted.value += 1
+                    self.metrics.total_affected.value += 1
                     logger.info(
                         "A deployment was deleted with success. "
                         "user_provided_id: %s, deployment_id: %s.",

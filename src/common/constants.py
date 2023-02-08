@@ -5,5 +5,14 @@
 
 """Contains common constants."""
 
+from enum import Enum
+
 # Only once custom model type is supported
 CUSTOM_MODEL_TYPE = "inference"
+
+
+class Label(Enum):
+    """An enum of entity labels."""
+
+    MODELS = "models"
+    DEPLOYMENTS = "deployments"

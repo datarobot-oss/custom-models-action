@@ -14,13 +14,13 @@ import os
 import re
 from abc import ABC
 from abc import abstractmethod
-from dataclasses import dataclass
 from glob import glob
 from pathlib import Path
 from typing import Dict
 
 import yaml
 
+from common import constants
 from common.data_types import DataRobotModel
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
@@ -31,6 +31,7 @@ from common.exceptions import UnexpectedResult
 from common.git_tool import GitTool
 from common.github_env import GitHubEnv
 from dr_client import DrClient
+from metrics import Metrics
 from model_file_path import ModelFilePath
 from model_info import ModelInfo
 from schema_validator import ModelSchema
@@ -44,30 +45,7 @@ class ControllerBase(ABC):
     inference model and deployment classes.
     """
 
-    MODELS_LABEL = "models"
-    DEPLOYMENTS_LABEL = "deployments"
-
     _models_info: Dict[str, ModelInfo]
-
-    @dataclass
-    class Stats:
-        """Contains statistics attributes that will be exposed by the GitHub actions."""
-
-        total_affected: int = 0
-        total_created: int = 0
-        total_deleted: int = 0
-        total_created_versions: int = 0
-
-        def save(self, label):
-            """Save the statistics to the GitHub environment."""
-
-            GitHubEnv.set_output_param(f"total-affected-{label}", self.total_affected)
-            GitHubEnv.set_output_param(f"total-created-{label}", self.total_created)
-            GitHubEnv.set_output_param(f"total-deleted-{label}", self.total_deleted)
-            if label == ControllerBase.MODELS_LABEL:
-                GitHubEnv.set_output_param(
-                    "total-created-model-versions", self.total_created_versions
-                )
 
     def __init__(self, options, repo):
         self._options = options
@@ -78,7 +56,7 @@ class ControllerBase(ABC):
             self.options.api_token,
             verify_cert=not self.options.skip_cert_verification,
         )
-        self._stats = self.Stats()
+        self._metrics = Metrics(self._label())
         logger.info(
             "GITHUB_EVENT_NAME: %s, GITHUB_SHA: %s, GITHUB_REPOSITORY: %s, GITHUB_REF_NAME: %s",
             GitHubEnv.event_name(),
@@ -94,10 +72,10 @@ class ControllerBase(ABC):
         return self._options
 
     @property
-    def stats(self):
-        """A property to return the Stats instance."""
+    def metrics(self):
+        """A property to return the Metrics instance."""
 
-        return self._stats
+        return self._metrics
 
     def _next_yaml_content_in_repo(self):
         yaml_files = glob(f"{self._workspace_path}/**/*.yaml", recursive=True)
@@ -123,10 +101,10 @@ class ControllerBase(ABC):
             path = f"{parent}/{path}"
         return path
 
-    def save_statistics(self):
-        """Save the statistics that are configured by the GitHub action."""
+    def save_metrics(self):
+        """Save the metrics that are collected by the GitHub action."""
 
-        self.stats.save(self._label())
+        self.metrics.save()
 
     @abstractmethod
     def _label(self):
@@ -143,7 +121,7 @@ class ModelController(ControllerBase):
         self._datarobot_models_by_id = {}
 
     def _label(self):
-        return self.MODELS_LABEL
+        return constants.Label.MODELS
 
     @property
     def models_info(self):
@@ -538,13 +516,13 @@ class ModelController(ControllerBase):
                 if model_info.should_create_new_version(latest_version):
                     if not custom_model:
                         custom_model = self._create_custom_model(model_info)
-                        self.stats.total_created += 1
+                        self.metrics.total_created.value += 1
 
                     custom_model_id = custom_model["id"]
                     latest_version = self._create_custom_model_version(custom_model_id, model_info)
                     self.datarobot_models[user_provided_id].latest_version = latest_version
 
-                    self.stats.total_created_versions += 1
+                    self.metrics.total_created_versions.value += 1
                     logger.info(
                         "Custom inference model version was successfully created. "
                         "user_provided_id: %s, model_id: %s, version_id: %s.",
@@ -573,7 +551,7 @@ class ModelController(ControllerBase):
                         custom_model["id"], latest_version["id"], model_info
                     )
 
-                self.stats.total_affected += 1
+                self.metrics.total_affected.value += 1
 
     def _update_custom_model_version_git_attributes(self, model_info, custom_model_version):
         main_branch_commit_sha = GitHubEnv.github_sha()
@@ -672,6 +650,7 @@ class ModelController(ControllerBase):
         self._update_model_settings(datarobot_custom_model, model_info)
         # NOTE: training/holdout datasets update should always come after model's setting update
         self._update_training_and_holdout_datasets(datarobot_custom_model, model_info)
+        self.metrics.total_updated_settings.value += 1
 
     def _update_training_and_holdout_datasets(self, datarobot_custom_model, model_info):
         if model_info.is_unstructured:
@@ -780,8 +759,8 @@ class ModelController(ControllerBase):
                 continue
             try:
                 self._dr_client.delete_custom_model_by_model_id(model_id)
-                self.stats.total_deleted += 1
-                self.stats.total_affected += 1
+                self.metrics.total_deleted.value += 1
+                self.metrics.total_affected.value += 1
                 logger.info(
                     "Model was deleted with success. user_provided_id: %s, model_id: %s",
                     user_provided_id,
