@@ -12,6 +12,8 @@
 import contextlib
 import json
 import logging
+from abc import ABC
+from abc import abstractmethod
 
 import pytest
 import responses
@@ -153,8 +155,59 @@ def mock_paginated_responses(
     return total_entities
 
 
-class TestCustomModelRoutes:
+# pylint: disable=too-few-public-methods
+class SharedRoutesTestBase(ABC):
+    """
+    A base class (abstract) to hold shared methods that are used by the classes that test
+    model and deployment routes.
+    """
+
+    def _test_fetch_entities_success(
+        self, dr_client, total_num_entities, num_entities_in_page, url_factory, response_factory
+    ):
+        expected_entities_in_all_pages = mock_paginated_responses(
+            total_num_entities, num_entities_in_page, url_factory, response_factory
+        )
+        total_entities_response = self._fetch_entities(dr_client)
+
+        total_expected_entities = []
+        for entities_per_page in expected_entities_in_all_pages.values():
+            total_expected_entities.extend(entities_per_page)
+
+        for fetched_entity in total_entities_response:
+            assert fetched_entity in total_expected_entities
+
+    @abstractmethod
+    def _fetch_entities(self, dr_client):
+        raise NotImplementedError("Only derived classes should implement this.")
+
+    def _test_fetch_mixed_entities_from_github_and_others(
+        self, dr_client, url_factory, mixed_response_factory
+    ):
+        total_entities = 5
+        num_entities_in_page = 2
+        expected_entities_in_all_pages = mock_paginated_responses(
+            total_entities, num_entities_in_page, url_factory, mixed_response_factory
+        )
+        all_entities = [e for page in expected_entities_in_all_pages.values() for e in page]
+        assert len(all_entities) == total_entities
+
+        total_entities_response = self._fetch_entities(dr_client)
+        assert len(total_entities_response) == int((total_entities + 1) / 2)
+
+        total_expected_entities = []
+        for entities_per_page in expected_entities_in_all_pages.values():
+            total_expected_entities.extend([d for d in entities_per_page if "userProvidedId" in d])
+
+        for fetched_entity in total_entities_response:
+            assert fetched_entity in total_expected_entities
+
+
+class TestCustomModelRoutes(SharedRoutesTestBase):
     """Contains cases to test DataRobot custom models routes."""
+
+    def _fetch_entities(self, dr_client):
+        return dr_client.fetch_custom_models()
 
     @pytest.fixture
     def regression_model_response_factory(self):
@@ -171,6 +224,32 @@ class TestCustomModelRoutes:
                 "targetType": "Regression",
                 "predictionThreshold": 0.5,
             }
+
+        return _inner
+
+    @pytest.fixture
+    def mixed_regression_model_response_factory(self):
+        """
+        A factory fixture to generate a custom model whose origin is determined by the model
+        id suffix. For even numbers the response will contain the `userProvidedId`, which means
+        that the model was created by the GitHub action. For odds it'll be missing, which means
+        the model was created by other means.
+        """
+
+        def _inner(model_id):
+            model = {
+                "id": model_id,
+                "customModelType": "inference",
+                "supportsBinaryClassification": False,
+                "supportsRegression": True,
+                "supportsAnomalyDetection": False,
+                "targetType": "Regression",
+                "predictionThreshold": 0.5,
+            }
+            index = int(model_id.split("-")[-1])
+            if index % 2 == 0:
+                model["userProvidedId"] = f"user-provided-id-{model_id}"
+            return model
 
         return _inner
 
@@ -303,21 +382,26 @@ class TestCustomModelRoutes:
     ):
         """A case to test a successful custom model retrieval."""
 
-        expected_models_in_all_pages = mock_paginated_responses(
+        self._test_fetch_entities_success(
+            dr_client,
             total_num_models,
             num_models_in_page,
             custom_models_url_factory,
             regression_model_response_factory,
         )
-        total_models_response = dr_client.fetch_custom_models()
-        assert len(total_models_response) == total_num_models
 
-        total_expected_models = []
-        for models_per_page in expected_models_in_all_pages.values():
-            total_expected_models.extend(models_per_page)
+    @responses.activate
+    def test_fetch_custom_models_with_mixed_origin(
+        self, dr_client, custom_models_url_factory, mixed_regression_model_response_factory
+    ):
+        """
+        A case to test a successful retrieval of models that were created by both the GitHub
+        action and other clients (.e.g UI)
+        """
 
-        for fetched_model in total_models_response:
-            assert fetched_model in total_expected_models
+        self._test_fetch_mixed_entities_from_github_and_others(
+            dr_client, custom_models_url_factory, mixed_regression_model_response_factory
+        )
 
 
 class TestCustomModelVersionRoutes:
@@ -1048,8 +1132,11 @@ class TestCustomModelVersionDependencies:
             assert response_obj.call_count == 1
 
 
-class TestDeploymentRoutes:
+class TestDeploymentRoutes(SharedRoutesTestBase):
     """Contains unit-tests to test the DataRobot deployment routes."""
+
+    def _fetch_entities(self, dr_client):
+        return dr_client.fetch_deployments()
 
     @pytest.fixture
     def deployment_response_factory(self):
@@ -1057,6 +1144,23 @@ class TestDeploymentRoutes:
 
         def _inner(deployment_id):
             return {"id": deployment_id, "userProvidedId": f"user-provided-id-{deployment_id}"}
+
+        return _inner
+
+    @pytest.fixture
+    def mixed_deployment_response_factory(self):
+        """
+        A factory fixture to create a deployment whose origin is dictated by the deployment id
+        suffix. Its origin can be the GitHub action or not. The GitHub origin is determined
+        by having the `userProvidedId` attribute in the deployment.
+        """
+
+        def _inner(deployment_id):
+            deployment = {"id": deployment_id}
+            index = int(deployment_id.split("-")[-1])
+            if index % 2 == 0:
+                deployment["userProvidedId"] = f"user-provided-id-{deployment_id}"
+            return deployment
 
         return _inner
 
@@ -1091,21 +1195,26 @@ class TestDeploymentRoutes:
     ):
         """A case to test a successful deployments retrieval."""
 
-        expected_deployments_in_all_pages = mock_paginated_responses(
+        self._test_fetch_entities_success(
+            dr_client,
             total_num_deployments,
             num_deployments_in_page,
             deployments_url_factory,
             deployment_response_factory,
         )
-        total_deployments_response = dr_client.fetch_deployments()
-        assert len(total_deployments_response) == total_num_deployments
 
-        total_expected_deployments = []
-        for deployments_per_page in expected_deployments_in_all_pages.values():
-            total_expected_deployments.extend(deployments_per_page)
+    @responses.activate
+    def test_fetch_mixed_github_and_other_deployments(
+        self, dr_client, deployments_url_factory, mixed_deployment_response_factory
+    ):
+        """
+        A case to test a successful retrieval of deployments that were created by both the GitHub
+        action and other clients (.e.g UI)
+        """
 
-        for fetched_deployment in total_deployments_response:
-            assert fetched_deployment in total_expected_deployments
+        self._test_fetch_mixed_entities_from_github_and_others(
+            dr_client, deployments_url_factory, mixed_deployment_response_factory
+        )
 
 
 class TestDeploymentPayloadConstruction:
