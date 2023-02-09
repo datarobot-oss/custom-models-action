@@ -688,5 +688,5 @@ class TestMultiModelsOneDefinitionGitHubAction:
         assert len(multi_models_yaml_filepath) == 1
         multi_models_yaml_filepath = multi_models_yaml_filepath[0]
         with open(multi_models_yaml_filepath, encoding="utf-8") as fd:
-            multi_models_metadata = yaml.safe_load(fd)
+            multi_models_metadata = ModelSchema.validate_and_transform_multi(yaml.safe_load(fd))
         return multi_models_metadata

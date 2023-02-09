@@ -114,3 +114,15 @@ class AssociatedModelVersionNotFound(GenericException):
 
 class EmptyKey(GenericException):
     """Raised when an invalid empty key is provided to get a value from a metadata."""
+
+
+class NamespaceAlreadySet(GenericException):
+    """Raised when trying to set a namespace more than once."""
+
+
+class InvalidEmptyArgument(GenericException):
+    """Raise when a None or empty input argument is provided to a method."""
+
+
+class IllegalDeletion(GenericException):
+    """Raised when trying to delete a model or deployment, when it is not eligible for deletion."""

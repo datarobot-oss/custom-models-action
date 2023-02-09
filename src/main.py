@@ -17,6 +17,7 @@ import sys
 
 from common.exceptions import GenericException
 from common.github_env import GitHubEnv
+from common.namepsace import Namespace
 from custom_models_action import CustomModelsAction
 
 logger = logging.getLogger()
@@ -44,6 +45,9 @@ def argparse_options(args=None):
     )
     parser.add_argument(
         "--branch", required=True, help="The branch against which the program will function."
+    )
+    parser.add_argument(
+        "--namespace", help="It is used to group and isolate models and deployments."
     )
     parser.add_argument(
         "--allow-model-deletion",
@@ -101,7 +105,8 @@ def main(args=None):
 
     setup_log_configuration()
     options = argparse_options(args)
-
+    if options.namespace:
+        Namespace.set_namespace(options.namespace)
     try:
         CustomModelsAction(options).run()
         GitHubEnv.set_output_param(

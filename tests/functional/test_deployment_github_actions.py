@@ -21,6 +21,7 @@ import yaml
 from common import constants
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
+from common.namepsace import Namespace
 from deployment_info import DeploymentInfo
 from metrics import Metrics
 from schema_validator import DeploymentSchema
@@ -38,9 +39,11 @@ from tests.functional.conftest import upload_and_update_dataset
 from tests.functional.conftest import webserver_accessible
 
 
+# pylint: disable=unused-argument
 @pytest.fixture(name="deployment_metadata_yaml_file")
-@pytest.mark.usefixtures("build_repo_for_testing")
-def fixture_deployment_metadata_yaml_file(workspace_path, git_repo, model_metadata):
+def fixture_deployment_metadata_yaml_file(
+    workspace_path, git_repo, build_repo_for_testing, model_metadata
+):
     """A fixture to return a unique deployment from the temporary created local source tree."""
 
     deployment_yaml_file = next(workspace_path.rglob("**/deployment.yaml"))
@@ -63,7 +66,8 @@ def fixture_deployment_metadata(deployment_metadata_yaml_file):
     """A fixture to load and return a deployment metadata from a given yaml file definition."""
 
     with open(deployment_metadata_yaml_file, encoding="utf-8") as fd:
-        return yaml.safe_load(fd)
+        raw_metadata = yaml.safe_load(fd)
+        return DeploymentSchema.validate_and_transform_single(raw_metadata)
 
 
 @pytest.fixture(name="cleanup")
@@ -668,3 +672,35 @@ class TestDeploymentGitHubActions:
             == new_deployment_settings["predictionsDataCollection"]["enabled"]
         )
         cls._validate_deployments_metric(Metrics.total_updated_settings, event_name, github_output)
+
+    @pytest.mark.usefixtures("cleanup", "skip_model_testing", "set_deployment_actuals_dataset")
+    def test_deployment_and_model_fetch_for_different_namespaces(
+        self, dr_client, workspace_path, git_repo, main_branch_name
+    ):
+        """An end-to-end case to test a deployment deletion."""
+
+        # Create a model and deployment in the functional test namespace. Run the GitHub action.
+        printout("Run the GitHub action (push event) to create a model and deployment")
+        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=True)
+
+        # Validate deployments exist in namespace
+        deployments = dr_client.fetch_deployments()
+        assert len(deployments) > 0
+
+        custom_models = dr_client.fetch_custom_models()
+        assert len(custom_models) > 0
+
+        # Change namespace and verify zero fetched deployments
+        origin_namespace = Namespace.namespace()
+        try:
+            new_namespace = f"/datarobot/gh-functional-tests/non-existing-ns-{unique_str()}"
+            Namespace.set_namespace(new_namespace, force_override=True)
+            assert Namespace.namespace() == new_namespace
+
+            deployments = dr_client.fetch_deployments()
+            assert len(deployments) == 0
+
+            custom_models = dr_client.fetch_custom_models()
+            assert len(custom_models) == 0
+        finally:
+            Namespace.set_namespace(origin_namespace, force_override=True)

@@ -10,8 +10,11 @@
 import pytest
 
 from common.convertors import MemoryConvertor
+from common.exceptions import InvalidEmptyArgument
 from common.exceptions import InvalidMemoryValue
+from common.exceptions import NamespaceAlreadySet
 from common.git_tool import GitTool
+from common.namepsace import Namespace
 from tests.unit.conftest import make_a_change_and_commit
 
 
@@ -100,3 +103,91 @@ class TestGitTool:
         repo_tool = GitTool(workspace_path)
         split_commit_sha = repo_tool.merge_base_commit_sha("master", head_sha)
         assert split_commit_sha == git_repo.heads["master"].commit.hexsha
+
+
+@pytest.fixture
+def namespace_cleanup():
+    """A fixture to clean up a namespace if it was set."""
+
+    Namespace.unset_namespace()
+
+
+@pytest.mark.usefixtures("namespace_cleanup")
+class TestNamespace:
+    """A class to test the namespace module."""
+
+    def test_set_namespace_success(self):
+        """Test a namespace set method."""
+
+        namespace = "dev"
+        Namespace.set_namespace(namespace)
+
+    def test_set_same_namespace_multiple_times_success(self):
+        """Test multiple set up of the same namespace."""
+
+        namespace = "dev"
+        for _ in range(3):
+            Namespace.set_namespace(namespace)
+
+    @pytest.mark.parametrize("namespace", [None, ""], ids=["none", "empty-str"])
+    def test_set_empty_namespace_failure(self, namespace):
+        """Test a failure in an attempt to set an empty namespace."""
+
+        with pytest.raises(InvalidEmptyArgument):
+            Namespace.set_namespace(namespace)
+
+    def test_namespace_already_set_failure(self):
+        """Test a failure in an attempt to set a namespace second time."""
+
+        namespace = "dev-1"
+        Namespace.set_namespace(namespace)
+        with pytest.raises(NamespaceAlreadySet):
+            Namespace.set_namespace(f"{namespace}-2")
+
+    def test_namespace_force_override_already_set_success(self):
+        """Test a failure in an attempt to set a namespace second time."""
+
+        namespace = "dev-1"
+        Namespace.set_namespace(namespace)
+        another_namespace = f"{namespace}-2"
+        Namespace.set_namespace(another_namespace, force_override=True)
+        assert Namespace.namespace() == another_namespace
+
+    def test_unset_namespace_success(self):
+        """Test a successful unset namespace."""
+
+        namespace = "dev"
+        Namespace.set_namespace(namespace)
+        Namespace.unset_namespace()
+        Namespace.set_namespace(namespace)
+
+    def test_is_in_namespace_success(self):
+        """Test a successful check for user provided ID in a namespace."""
+
+        namespace = "dev"
+        user_provided_id = "my-awesome-id"
+        Namespace.set_namespace(namespace)
+        namespaced_user_provided_id = Namespace.namespaced(user_provided_id)
+        assert Namespace.is_in_namespace(namespaced_user_provided_id)
+
+    def test_is_in_namespace_when_no_namespace_success(self):
+        """Test user provided ID in a global namespace when no namespace is provided."""
+
+        user_provided_id = "my-awesome-id"
+        namespaced_user_provided_id = Namespace.namespaced(user_provided_id)
+        assert Namespace.is_in_namespace(namespaced_user_provided_id)
+
+    def test_namespaced_success(self):
+        """Test that user provided ID is successfully tagged with a namespace."""
+
+        namespace = "dev"
+        Namespace.set_namespace(namespace)
+        user_provided_id = "my-awesome-id"
+        assert Namespace.namespaced(user_provided_id).startswith(f"{namespace}/")
+
+    def test_namespaced_when_no_namespace_success(self):
+        """Test that a user provided ID remains unchanged when no namepsace is set."""
+
+        user_provided_id = "my-awesome-id"
+        namespaced_user_provided_id = Namespace.namespaced(user_provided_id)
+        assert namespaced_user_provided_id == user_provided_id

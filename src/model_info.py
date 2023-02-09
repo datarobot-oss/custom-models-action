@@ -9,6 +9,8 @@ source tree.
 """
 
 import logging
+from abc import ABC
+from abc import abstractmethod
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
@@ -21,7 +23,68 @@ from schema_validator import ModelSchema
 logger = logging.getLogger()
 
 
-class ModelInfo:
+class InfoBase(ABC):
+    """An abstract base class for models and deployments information classes."""
+
+    @property
+    @abstractmethod
+    def yaml_filepath(self):
+        """The yaml file path from which the given metadata definition is read from."""
+
+    @property
+    @abstractmethod
+    def metadata(self):
+        """The metadata dictionary."""
+
+    @property
+    @abstractmethod
+    def user_provided_id(self):
+        """
+        A unique ID that is provided by the user to identify a given definition and read from
+        the metadata.
+        """
+
+    @abstractmethod
+    def get_value(self, key, *sub_keys):
+        """
+        Get a value from the model's metadata given a key and sub-keys.
+
+        Parameters
+        ----------
+        key : str
+            A key name from the Schema.
+        sub_keys :
+            An optional dynamic sub-keys from the Schema.
+
+        Returns
+        -------
+        Any or None,
+            The value associated with the provided key (and sub-keys) or None if not exists.
+        """
+
+    @abstractmethod
+    def get_settings_value(self, key, *sub_keys):
+        """
+        Get a value from the metadata settings section, given a key and sub-keys under
+        the settings section.
+
+        Parameters
+        ----------
+        key : str
+            A key name from the Schema, which is supposed to be under the
+            SharedSchema.SETTINGS_SECTION_KEY section.
+        sub_keys :
+            An optional dynamic sub-keys from the ModelSchema, which are under the
+            SharedSchema.SETTINGS_SECTION_KEY section.
+
+        Returns
+        -------
+        Any or None,
+            The value associated with the provided key (and sub-keys) or None if not exists.
+        """
+
+
+class ModelInfo(InfoBase):
     """Holds information about a model from the local source tree."""
 
     _model_file_paths: Dict[Path, ModelFilePath]

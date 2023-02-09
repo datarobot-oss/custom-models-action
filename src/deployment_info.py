@@ -8,11 +8,12 @@ A module that contains information about a deployment that was scanned and loade
 source tree.
 """
 
+from model_info import InfoBase
 from schema_validator import DeploymentSchema
 from schema_validator import SharedSchema
 
 
-class DeploymentInfo:
+class DeploymentInfo(InfoBase):
     """Holds information about a deployment in the local source tree"""
 
     def __init__(self, yaml_path, deployment_metadata):

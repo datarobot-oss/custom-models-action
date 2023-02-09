@@ -22,8 +22,10 @@ from requests_toolbelt import MultipartEncoder
 from common import constants
 from common.exceptions import DataRobotClientError
 from common.exceptions import HttpRequesterException
+from common.exceptions import IllegalDeletion
 from common.exceptions import IllegalModelDeletion
 from common.http_requester import HttpRequester
+from common.namepsace import Namespace
 from common.string_util import StringUtil
 from dr_api_attrs import DrApiAttrs
 from schema_validator import DeploymentSchema
@@ -91,7 +93,6 @@ class DrClient:
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
             datarobot_webserver = f"{StringUtil.slash_suffix(datarobot_webserver)}api/v2/"
-
         self._http_requester = HttpRequester(datarobot_webserver, datarobot_api_token, verify_cert)
 
     def _wait_for_async_resolution(
@@ -145,9 +146,23 @@ class DrClient:
             A list of DataRobot custom models.
         """
 
-        logger.debug("Fetching custom models.")
+        logger.debug("Fetching custom models...")
         models = self._paginated_fetch(self.CUSTOM_MODELS_ROUTE)
-        return [m for m in models if m.get("userProvidedId")]
+        return self._filter_entities(models)
+
+    @staticmethod
+    def _filter_entities(entities):
+        """
+        Filter out entities (models/deployments) by existing userProvidedId and namespace
+        """
+
+        filtered = []
+        for entity in entities:
+            user_provided_id = entity.get("userProvidedId")
+            if user_provided_id:
+                if Namespace.is_in_namespace(user_provided_id):
+                    filtered.append(entity)
+        return filtered
 
     def fetch_custom_model_by_git_id(self, user_provided_id):
         """
@@ -660,6 +675,7 @@ class DrClient:
         """Delete all the custom models that are accessed by the user in DataRobot."""
 
         for custom_model in self.fetch_custom_models():
+            self._validate_legal_deletion(custom_model)
             try:
                 self.delete_custom_model_by_model_id(custom_model["id"])
             except DataRobotClientError:
@@ -989,10 +1005,8 @@ class DrClient:
         """
 
         logger.debug("Fetching deployments.")
-        deployments = self._paginated_fetch(
-            self.DEPLOYMENTS_ROUTE, json={"execution_environment_type": "datarobot"}
-        )
-        return [d for d in deployments if d.get("userProvidedId")]
+        deployments = self._paginated_fetch(self.DEPLOYMENTS_ROUTE)
+        return self._filter_entities(deployments)
 
     def fetch_deployment_by_git_id(self, user_provided_id):
         """
@@ -1415,11 +1429,20 @@ class DrClient:
         """Delete all the deployments that are accessed by the user in DataRobot."""
 
         for deployment in self.fetch_deployments():
+            self._validate_legal_deletion(deployment)
             try:
                 self.delete_deployment_by_id(deployment["id"])
             except DataRobotClientError:
                 if return_on_error:
                     raise
+
+    @staticmethod
+    def _validate_legal_deletion(entity):
+        user_provided_id = entity.get("userProvidedId")
+        if not user_provided_id:
+            raise IllegalDeletion("Cannot delete an entity which doesn't have a user provided ID.")
+        if not Namespace.is_in_namespace(user_provided_id):
+            raise IllegalDeletion("Cannot delete an entity, which is not in a valid namespace.")
 
     def delete_deployment_by_id(self, deployment_id):
         """

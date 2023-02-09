@@ -14,6 +14,11 @@ inputs:
   branch:  # id of input
     description: 'The branch for which pull request and push events will trigger the action.'
     required: true
+  namespace:
+    description: |
+      Determines the namespace under which models and deployments will be created, updated and
+      deleted.
+    required: false
   allow-model-deletion:
     description:  |
       Whether to detected local deleted model definitions and consequently delete them
@@ -68,32 +73,19 @@ runs:
       shell: bash
     - id: custom-models-action
       run: |
-        if ${{ inputs.allow-model-deletion }} == true; then
-          allow_model_deletion_arg="--allow-model-deletion"
-        else
-          allow_model_deletion_arg=""
-        fi
-        if ${{ inputs.allow-deployment-deletion }} == true; then
-          allow_deployment_deletion_arg="--allow-deployment-deletion"
-        else
-          allow_deployment_deletion_arg=""
-        fi
-        if ${{ inputs.models_only }} == true; then
-          models_only_arg="--models-only"
-        else
-          models_only_arg=""
-        fi
-        if ${{ inputs.skip-cert-verification }} == true; then
-          verify_cert_arg="--skip-cert-verification"
-        else
-          verify_cert_arg=""
-        fi 
+        ${{ inputs.namespace != '' }} && namespace_arg='--namespace ${{ inputs.namespace }}'
+        ${{ inputs.allow-model-deletion == 'true' }} && allow_model_deletion_arg='--allow-model-deletion'
+        ${{ inputs.allow-deployment-deletion == 'true' }} && allow_deployment_deletion_arg='--allow-deployment-deletion'
+        ${{ inputs.models_only == 'true' }} && models_only_arg='--models-only'
+        ${{ inputs.skip-cert-verification == 'true' }} && verify_cert_arg='--skip-cert-verification'
+
         python ${GITHUB_ACTION_PATH}/src/main.py \
           --api-token ${{ inputs.api-token }} \
           --webserver ${{ inputs.webserver }} \
           --branch ${{ inputs.branch }} \
+          ${namespace_arg} \
           ${allow_model_deletion_arg} \
           ${allow_deployment_deletion_arg} \
           ${models_only_arg} \
-          ${verify_cert_arg} \
+          ${verify_cert_arg}
       shell: bash
