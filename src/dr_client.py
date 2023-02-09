@@ -137,7 +137,7 @@ class DrClient:
 
     def fetch_custom_models(self):
         """
-        Retrieve custom models from DataRobot.
+        Retrieve custom models from DataRobot, which were created by the GitHub action.
 
         Returns
         -------
@@ -145,8 +145,9 @@ class DrClient:
             A list of DataRobot custom models.
         """
 
-        logger.debug("Fetching custom models...")
-        return self._paginated_fetch(self.CUSTOM_MODELS_ROUTE)
+        logger.debug("Fetching custom models.")
+        models = self._paginated_fetch(self.CUSTOM_MODELS_ROUTE)
+        return [m for m in models if m.get("userProvidedId")]
 
     def fetch_custom_model_by_git_id(self, user_provided_id):
         """
@@ -979,7 +980,7 @@ class DrClient:
 
     def fetch_deployments(self):
         """
-        Retrieve deployments from DataRobot.
+        Retrieve deployments from DataRobot, which were created by the GitHub action.
 
         Returns
         -------
@@ -988,7 +989,10 @@ class DrClient:
         """
 
         logger.debug("Fetching deployments.")
-        return self._paginated_fetch(self.DEPLOYMENTS_ROUTE)
+        deployments = self._paginated_fetch(
+            self.DEPLOYMENTS_ROUTE, json={"execution_environment_type": "datarobot"}
+        )
+        return [d for d in deployments if d.get("userProvidedId")]
 
     def fetch_deployment_by_git_id(self, user_provided_id):
         """
