@@ -211,12 +211,28 @@ This action requires the following input arguments:
 
 The action supports the following optional input arguments:
 
-|    Argument   |                   Description                  |
-|---------------|------------------------------------------------|
+| Argument                      | Description                                                                                                               |
+|-------------------------------|---------------------------------------------------------------------------------------------------------------------------|
+| `--namespace`                 | Determines the namespace under which models and deployments will be created, updated and deleted.                         |
 | `--allow-deployment-deletion` | Determines whether to detect local deleted deployment definitions and delete them in DataRobot. <br> **Default**: `false` |
-| `--allow-model-deletion`      | Determines whether to detect local deleted model definitions and delete them in DataRobot <br> **Default**: `false` |
-| `--models-only`               | Determines whether to manage custom inference models only or also deployments <br> **Default**: `false` |
-| `--skip-cert-verification`    | Determines whether a request to an HTTPS URL is made without a certificate verification. <br> **Default**: `false` |
+| `--allow-model-deletion`      | Determines whether to detect local deleted model definitions and delete them in DataRobot <br> **Default**: `false`       |
+| `--models-only`               | Determines whether to manage custom inference models only or also deployments <br> **Default**: `false`                   |
+| `--skip-cert-verification`    | Determines whether a request to an HTTPS URL is made without a certificate verification. <br> **Default**: `false`        |
+
+### A Namespace (Optional)
+
+A namespace is a unique string that can be provided as input argument to the action. The purpose is
+to guarantee that the custom model action only handles models and deployments that exist in the
+configured namespace. Any other models and deployments that are not in the configured namespace
+will remain untouched.
+
+By default, a namespace is not configured, which means all entities created by a custom model action
+will be processed during execution.
+
+The namespace enable users to work with the same model and deployment definition files on different
+branches, as long as they configure a different namespaces to the custom models action in the GitHub
+workflow. This means that each user will have its own models and definitions, which will reside
+in different namespaces.
 
 ### The GitHub Action's Output Metrics
 

@@ -35,7 +35,9 @@ from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 from schema_validator import SharedSchema
 from tests.conftest import unique_str
+from tests.unit.conftest import set_namespace
 from tests.unit.conftest import validate_metrics
+from tests.unit.conftest import validate_namespaced_user_provided_id
 from tests.unit.conftest import write_to_file
 
 
@@ -71,9 +73,9 @@ class TestCustomInferenceDeployment:
 
         yield common_path_with_code
 
+    # pylint: disable=unused-argument
     @pytest.fixture
-    @pytest.mark.usefixtures("common_path_with_code")
-    def deployments_factory(self, workspace_path, models_factory):
+    def deployments_factory(self, common_path_with_code, workspace_path, models_factory):
         """A factory fixture to create deployments with associated models."""
 
         def _inner(num_deployments=2, is_multi=False):
@@ -132,30 +134,40 @@ class TestCustomInferenceDeployment:
         with pytest.raises(DeploymentMetadataAlreadyExists):
             deployment_controller.scan_and_load_deployments_metadata()
 
+    @pytest.mark.parametrize("namespace", [None, "dev1"], ids=["no-namespace", "dev1-namespace"])
     @pytest.mark.parametrize("num_deployments", [1, 2, 3])
     def test_scan_and_load_deployments_from_multi_separate_yaml_files(
-        self, options, single_deployment_factory, num_deployments
+        self, options, single_deployment_factory, namespace, num_deployments
     ):
         """Test scanning and loading of deployments from multi separated yaml files."""
 
-        for counter in range(1, num_deployments + 1):
-            single_deployment_factory(str(counter), write_metadata=True)
-        deployment_controller = DeploymentController(options, None, None)
-        deployment_controller.scan_and_load_deployments_metadata()
-        assert len(deployment_controller._deployments_info) == num_deployments
+        with set_namespace(namespace):
+            for counter in range(1, num_deployments + 1):
+                single_deployment_factory(str(counter), write_metadata=True)
+            deployment_controller = DeploymentController(options, None, None)
+            deployment_controller.scan_and_load_deployments_metadata()
+            assert len(deployment_controller._deployments_info) == num_deployments
+            validate_namespaced_user_provided_id(
+                deployment_controller._deployments_info.values(), namespace
+            )
 
+    @pytest.mark.parametrize("namespace", [None, "dev1"], ids=["no-namespace", "dev1-namespace"])
     @pytest.mark.parametrize("num_deployments", [0, 1, 3])
     def test_scan_and_load_deployments_from_one_multi_deployments_yaml_file(
-        self, options, deployments_factory, num_deployments
+        self, options, deployments_factory, namespace, num_deployments
     ):
         """
         Test scanning and loading of deployments from one multi-deployment definition yaml file.
         """
 
-        deployments_factory(num_deployments, is_multi=True)
-        deployment_controller = DeploymentController(options, None, None)
-        deployment_controller.scan_and_load_deployments_metadata()
-        assert len(deployment_controller._deployments_info) == num_deployments
+        with set_namespace(namespace):
+            deployments_factory(num_deployments, is_multi=True)
+            deployment_controller = DeploymentController(options, None, None)
+            deployment_controller.scan_and_load_deployments_metadata()
+            assert len(deployment_controller._deployments_info) == num_deployments
+            validate_namespaced_user_provided_id(
+                deployment_controller._deployments_info.values(), namespace
+            )
 
     @pytest.mark.parametrize("num_single_deployments", [0, 1, 3])
     @pytest.mark.parametrize("num_multi_deployments", [0, 2])

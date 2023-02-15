@@ -22,6 +22,7 @@ from common.exceptions import EmptyKey
 from common.exceptions import InvalidModelSchema
 from common.exceptions import InvalidSchema
 from common.exceptions import UnexpectedType
+from common.namepsace import Namespace
 
 logger = logging.getLogger()
 
@@ -270,7 +271,7 @@ class ModelSchema(SharedSchema):
 
     MODEL_SCHEMA = Schema(
         {
-            SharedSchema.MODEL_ID_KEY: And(str, len),
+            SharedSchema.MODEL_ID_KEY: And(str, len, Use(Namespace.namespaced)),
             TARGET_TYPE_KEY: Or(
                 TARGET_TYPE_BINARY_KEY,
                 TARGET_TYPE_REGRESSION_KEY,
@@ -638,8 +639,8 @@ class DeploymentSchema(SharedSchema):
 
     DEPLOYMENT_SCHEMA = Schema(
         {
-            DEPLOYMENT_ID_KEY: And(str, len),
-            SharedSchema.MODEL_ID_KEY: And(str, len),
+            DEPLOYMENT_ID_KEY: And(str, len, Use(Namespace.namespaced)),
+            SharedSchema.MODEL_ID_KEY: And(str, len, Use(Namespace.namespaced)),
             # fromCustomModel + fromModelPackage
             Optional(PREDICTION_ENVIRONMENT_NAME_KEY): And(str, len),
             Optional(SharedSchema.SETTINGS_SECTION_KEY): {

@@ -6,12 +6,12 @@
 # pylint: disable=too-many-arguments
 
 """A configuration test module for unit-tests."""
-
+import argparse
+import contextlib
 import logging
 import os
 import re
 import uuid
-from argparse import Namespace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -22,6 +22,7 @@ from bson import ObjectId
 from git import Repo
 
 from common import constants
+from common.namepsace import Namespace
 from custom_models_action import CustomModelsAction
 from metrics import Metric
 from metrics import Metrics
@@ -125,9 +126,9 @@ def fixture_common_filepath(common_path):
     return common_path / "common.py"
 
 
-@pytest.mark.usefixtures("workspace_path")
+# pylint: disable=unused-argument
 @pytest.fixture(name="common_path_with_code")
-def fixture_common_path_with_code(common_path, common_filepath):
+def fixture_common_path_with_code(workspace_path, common_path, common_filepath):
     """
     A fixture to create a common path under the repository root dire and occupies it with
     source code.
@@ -206,9 +207,9 @@ def fixture_single_model_factory(workspace_path, common_path_with_code):
     yield _inner
 
 
-@pytest.mark.usefixtures("common_path_with_code")
+# pylint: disable=unused-argument
 @pytest.fixture(name="models_factory")
-def fixture_models_factory(workspace_path, single_model_factory):
+def fixture_models_factory(common_path_with_code, workspace_path, single_model_factory):
     """A fixture to create multiple model definitions."""
 
     def _inner(
@@ -265,9 +266,9 @@ def fixture_single_model_root_path(workspace_path):
     return workspace_path / "model_0"
 
 
-@pytest.mark.usefixtures("workspace_path")
+# pylint: disable=unused-argument
 @pytest.fixture(name="single_model_file_paths")
-def fixture_single_model_file_paths(models_factory, single_model_root_path):
+def fixture_single_model_file_paths(workspace_path, models_factory, single_model_root_path):
     """A fixture to return all the file paths below to a just created model."""
 
     models_factory(1)
@@ -279,7 +280,7 @@ def options(workspace_path):
     """A fixture to mock a parse args namespace options."""
 
     with patch.dict(os.environ, {"GITHUB_WORKSPACE": str(workspace_path)}):
-        yield Namespace(
+        yield argparse.Namespace(
             webserver="http://www.dummy.com",
             api_token="abc123",
             branch="master",
@@ -495,3 +496,41 @@ def validate_metrics(github_output, entity_label, controller):
         assert re.search(f"^{metric_label}={desired_value}$", github_output_content, re.M)
 
     assert not re.search(f"^.*{constants.Label.DEPLOYMENTS}.*$", github_output_content, flags=re.M)
+
+
+@contextlib.contextmanager
+def set_namespace(namespace):
+    """
+    A helper to set namespace and clean it up.
+
+    Parameters
+    ----------
+    namespace : str
+        A non-empty namespace name.
+    """
+
+    if namespace:
+        Namespace.set_namespace(namespace)
+    try:
+        yield
+    finally:
+        if namespace:
+            Namespace.unset_namespace()
+
+
+def validate_namespaced_user_provided_id(info_bases, namespace):
+    """
+    A helper method to validate user provided IDs in a given namespace.
+
+    Parameters
+    ----------
+    info_bases :  list[InfoBase]
+        A list of entities, which can be one of ModelInfo or DeploymentInfo.
+    namespace : str or None
+        A valid namespace name or None.
+    """
+
+    for info in info_bases:
+        assert Namespace.is_in_namespace(info.user_provided_id)
+        if namespace:
+            assert info.user_provided_id.startswith(f"{namespace}/")

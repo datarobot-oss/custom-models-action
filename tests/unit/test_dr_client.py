@@ -23,6 +23,7 @@ from mock import patch
 
 from common.exceptions import DataRobotClientError
 from common.http_requester import HttpRequester
+from common.namepsace import Namespace
 from deployment_info import DeploymentInfo
 from dr_api_attrs import DrApiAttrs
 from dr_client import DrClient
@@ -31,6 +32,7 @@ from model_file_path import ModelFilePath
 from model_info import ModelInfo
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
+from tests.unit.conftest import set_namespace
 
 
 @pytest.fixture(name="webserver")
@@ -48,7 +50,7 @@ def fixture_api_token():
 
 
 @pytest.fixture(name="dr_client")
-def fixture_dr_client(webserver, api_token):
+def dr_client_fixture(webserver, api_token):
     """A fixture to create the DataRobot client."""
 
     return DrClient(datarobot_webserver=webserver, datarobot_api_token=api_token, verify_cert=False)
@@ -156,11 +158,12 @@ def mock_paginated_responses(
 
 
 # pylint: disable=too-few-public-methods
-class SharedRoutesTestBase(ABC):
-    """
-    A base class (abstract) to hold shared methods that are used by the classes that test
-    model and deployment routes.
-    """
+class SharedRouteTests(ABC):
+    """A base class for the model and deployment routes tests."""
+
+    @abstractmethod
+    def _fetch_entities(self, dr_client):
+        raise NotImplementedError("Only derived classes should implement this.")
 
     def _test_fetch_entities_success(
         self, dr_client, total_num_entities, num_entities_in_page, url_factory, response_factory
@@ -177,33 +180,38 @@ class SharedRoutesTestBase(ABC):
         for fetched_entity in total_entities_response:
             assert fetched_entity in total_expected_entities
 
-    @abstractmethod
-    def _fetch_entities(self, dr_client):
-        raise NotImplementedError("Only derived classes should implement this.")
-
-    def _test_fetch_mixed_entities_from_github_and_others(
-        self, dr_client, url_factory, mixed_response_factory
+    def _test_fetch_entities_with_multiple_namespace_success(
+        self, url_factory_fn, response_factory_fn, fetch_fn
     ):
-        total_entities = 5
-        num_entities_in_page = 2
-        expected_entities_in_all_pages = mock_paginated_responses(
-            total_entities, num_entities_in_page, url_factory, mixed_response_factory
+        num_entities_in_each_namespace = 3
+        total_entities = []
+        for namespace in [None, "dev-1", "dev-2"]:
+            for index in range(num_entities_in_each_namespace):
+                total_entities.append(response_factory_fn(index, namespace))
+        responses.add(
+            responses.GET,
+            url_factory_fn(0),
+            json={
+                "totalCount": len(total_entities),
+                "count": len(total_entities),
+                "next": None,
+                "data": total_entities,
+            },
+            status=200,
         )
-        all_entities = [e for page in expected_entities_in_all_pages.values() for e in page]
-        assert len(all_entities) == total_entities
-
-        total_entities_response = self._fetch_entities(dr_client)
-        assert len(total_entities_response) == int((total_entities + 1) / 2)
-
-        total_expected_entities = []
-        for entities_per_page in expected_entities_in_all_pages.values():
-            total_expected_entities.extend([d for d in entities_per_page if "userProvidedId" in d])
-
-        for fetched_entity in total_entities_response:
-            assert fetched_entity in total_expected_entities
+        for namespace in [None, "dev-1", "dev-2"]:
+            with set_namespace(namespace):
+                total_entities_response = fetch_fn()
+                if namespace is None:
+                    assert len(total_entities_response) == len(total_entities)
+                else:
+                    assert len(total_entities_response) == num_entities_in_each_namespace
+            assert all(
+                Namespace.is_in_namespace(e["userProvidedId"]) for e in total_entities_response
+            )
 
 
-class TestCustomModelRoutes(SharedRoutesTestBase):
+class TestCustomModelRoutes(SharedRouteTests):
     """Contains cases to test DataRobot custom models routes."""
 
     def _fetch_entities(self, dr_client):
@@ -213,10 +221,14 @@ class TestCustomModelRoutes(SharedRoutesTestBase):
     def regression_model_response_factory(self):
         """A factory fixture to generate a regression custom model response."""
 
-        def _inner(model_id):
+        def _inner(model_id, namespace=None):
             return {
                 "id": model_id,
-                "userProvidedId": f"user-provided-id-{model_id}",
+                "userProvidedId": (
+                    f"user-provided-id-{model_id}"
+                    if namespace is None
+                    else f"{namespace}/user-provided-id-{model_id}"
+                ),
                 "customModelType": "inference",
                 "supportsBinaryClassification": False,
                 "supportsRegression": True,
@@ -224,32 +236,6 @@ class TestCustomModelRoutes(SharedRoutesTestBase):
                 "targetType": "Regression",
                 "predictionThreshold": 0.5,
             }
-
-        return _inner
-
-    @pytest.fixture
-    def mixed_regression_model_response_factory(self):
-        """
-        A factory fixture to generate a custom model whose origin is determined by the model
-        id suffix. For even numbers the response will contain the `userProvidedId`, which means
-        that the model was created by the GitHub action. For odds it'll be missing, which means
-        the model was created by other means.
-        """
-
-        def _inner(model_id):
-            model = {
-                "id": model_id,
-                "customModelType": "inference",
-                "supportsBinaryClassification": False,
-                "supportsRegression": True,
-                "supportsAnomalyDetection": False,
-                "targetType": "Regression",
-                "predictionThreshold": 0.5,
-            }
-            index = int(model_id.split("-")[-1])
-            if index % 2 == 0:
-                model["userProvidedId"] = f"user-provided-id-{model_id}"
-            return model
 
         return _inner
 
@@ -391,16 +377,15 @@ class TestCustomModelRoutes(SharedRoutesTestBase):
         )
 
     @responses.activate
-    def test_fetch_custom_models_with_mixed_origin(
-        self, dr_client, custom_models_url_factory, mixed_regression_model_response_factory
+    def test_fetch_custom_models_with_multiple_namespaces_success(
+        self, dr_client, custom_models_url_factory, regression_model_response_factory
     ):
-        """
-        A case to test a successful retrieval of models that were created by both the GitHub
-        action and other clients (.e.g UI)
-        """
+        """A case to test a successful custom model retrieval with multiple namespaces."""
 
-        self._test_fetch_mixed_entities_from_github_and_others(
-            dr_client, custom_models_url_factory, mixed_regression_model_response_factory
+        self._test_fetch_entities_with_multiple_namespace_success(
+            custom_models_url_factory,
+            regression_model_response_factory,
+            dr_client.fetch_custom_models,
         )
 
 
@@ -1132,7 +1117,7 @@ class TestCustomModelVersionDependencies:
             assert response_obj.call_count == 1
 
 
-class TestDeploymentRoutes(SharedRoutesTestBase):
+class TestDeploymentRoutes(SharedRouteTests):
     """Contains unit-tests to test the DataRobot deployment routes."""
 
     def _fetch_entities(self, dr_client):
@@ -1142,25 +1127,15 @@ class TestDeploymentRoutes(SharedRoutesTestBase):
     def deployment_response_factory(self):
         """A factory fixture to create a deployment response."""
 
-        def _inner(deployment_id):
-            return {"id": deployment_id, "userProvidedId": f"user-provided-id-{deployment_id}"}
-
-        return _inner
-
-    @pytest.fixture
-    def mixed_deployment_response_factory(self):
-        """
-        A factory fixture to create a deployment whose origin is dictated by the deployment id
-        suffix. Its origin can be the GitHub action or not. The GitHub origin is determined
-        by having the `userProvidedId` attribute in the deployment.
-        """
-
-        def _inner(deployment_id):
-            deployment = {"id": deployment_id}
-            index = int(deployment_id.split("-")[-1])
-            if index % 2 == 0:
-                deployment["userProvidedId"] = f"user-provided-id-{deployment_id}"
-            return deployment
+        def _inner(deployment_id, namespace=None):
+            return {
+                "id": deployment_id,
+                "userProvidedId": (
+                    f"user-provided-id-{deployment_id}"
+                    if namespace is None
+                    else f"{namespace}/user-provided-id-{deployment_id}"
+                ),
+            }
 
         return _inner
 
@@ -1204,16 +1179,18 @@ class TestDeploymentRoutes(SharedRoutesTestBase):
         )
 
     @responses.activate
-    def test_fetch_mixed_github_and_other_deployments(
-        self, dr_client, deployments_url_factory, mixed_deployment_response_factory
+    def test_fetch_deployments_with_multiple_namespaces_success(
+        self,
+        dr_client,
+        deployments_url_factory,
+        deployment_response_factory,
     ):
-        """
-        A case to test a successful retrieval of deployments that were created by both the GitHub
-        action and other clients (.e.g UI)
-        """
+        """A case to test a successful deployments retrieval with multiple namespaces."""
 
-        self._test_fetch_mixed_entities_from_github_and_others(
-            dr_client, deployments_url_factory, mixed_deployment_response_factory
+        self._test_fetch_entities_with_multiple_namespace_success(
+            deployments_url_factory,
+            deployment_response_factory,
+            dr_client.fetch_deployments,
         )
 
 

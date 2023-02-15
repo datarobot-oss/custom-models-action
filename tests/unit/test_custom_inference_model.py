@@ -7,10 +7,9 @@
 # pylint: disable=too-many-arguments
 
 """A module that contains unit-tests for the custom inference model GitHub action."""
-
+import argparse
 import contextlib
 import os
-from argparse import Namespace
 from pathlib import Path
 
 import pytest
@@ -33,7 +32,9 @@ from model_controller import ModelController
 from model_file_path import ModelFilePath
 from model_info import ModelInfo
 from tests.unit.conftest import make_a_change_and_commit
+from tests.unit.conftest import set_namespace
 from tests.unit.conftest import validate_metrics
+from tests.unit.conftest import validate_namespaced_user_provided_id
 
 
 class TestCustomInferenceModel:
@@ -64,17 +65,20 @@ class TestCustomInferenceModel:
         model_controller.scan_and_load_models_metadata()
         assert len(model_controller.models_info) == 0
 
+    @pytest.mark.parametrize("namespace", [None, "dev1"], ids=["no-namespace", "dev1-namespace"])
     @pytest.mark.parametrize("num_models", [1, 2, 3])
     def test_scan_and_load_models_from_multi_separate_yaml_files(
-        self, options, single_model_factory, num_models
+        self, options, single_model_factory, namespace, num_models
     ):
         """Test models' scanning and loading from multiple separated yaml files."""
 
-        for counter in range(1, num_models + 1):
-            single_model_factory(f"model-{counter}", write_metadata=True)
-        model_controller = ModelController(options, None)
-        model_controller.scan_and_load_models_metadata()
-        assert len(model_controller.models_info) == num_models
+        with set_namespace(namespace):
+            for counter in range(1, num_models + 1):
+                single_model_factory(f"model-{counter}", write_metadata=True)
+            model_controller = ModelController(options, None)
+            model_controller.scan_and_load_models_metadata()
+            assert len(model_controller.models_info) == num_models
+            validate_namespaced_user_provided_id(model_controller.models_info.values(), namespace)
 
     def test_scan_and_load_models_with_same_user_provided_id_failure(
         self, options, single_model_factory
@@ -88,23 +92,29 @@ class TestCustomInferenceModel:
         with pytest.raises(ModelMetadataAlreadyExists):
             model_controller.scan_and_load_models_metadata()
 
+    @pytest.mark.parametrize("namespace", [None, "dev1"], ids=["no-namespace", "dev1-namespace"])
     @pytest.mark.parametrize("num_models", [0, 1, 3])
     @pytest.mark.parametrize(
         "is_absolute_path, root_prefix", [(True, "/"), (True, "$ROOT/"), (False, None)]
     )
     def test_scan_and_load_models_from_one_multi_models_yaml_file(
-        self, options, models_factory, num_models, is_absolute_path, root_prefix
+        self, options, models_factory, namespace, num_models, is_absolute_path, root_prefix
     ):
         """Test models' scanning and load from a single multi-models yaml definition."""
 
-        models_factory(
-            num_models, is_multi=True, is_absolute_path=is_absolute_path, root_prefix=root_prefix
-        )
-        model_controller = ModelController(options, None)
-        model_controller.scan_and_load_models_metadata()
-        assert len(model_controller.models_info) == num_models
-        for model_info in model_controller.models_info.values():
-            assert model_info.model_path.is_dir()
+        with set_namespace(namespace):
+            models_factory(
+                num_models,
+                is_multi=True,
+                is_absolute_path=is_absolute_path,
+                root_prefix=root_prefix,
+            )
+            model_controller = ModelController(options, None)
+            model_controller.scan_and_load_models_metadata()
+            assert len(model_controller.models_info) == num_models
+            for model_info in model_controller.models_info.values():
+                assert model_info.model_path.is_dir()
+            validate_namespaced_user_provided_id(model_controller.models_info.values(), namespace)
 
     @pytest.mark.parametrize("num_single_models", [0, 1, 3])
     @pytest.mark.parametrize("num_multi_models", [0, 2])
@@ -499,7 +509,7 @@ class TestGlobPatterns:
         """Test collisions between local and shared file paths in a given model definition."""
 
         workspace_path = "/repo"
-        options = Namespace(
+        options = argparse.Namespace(
             webserver="www.dummy.com",
             api_token="abc",
             skip_cert_verification=True,

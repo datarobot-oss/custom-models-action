@@ -26,6 +26,7 @@ from git import Repo
 from common.convertors import MemoryConvertor
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
+from common.namepsace import Namespace
 from dr_client import DrClient
 from main import main
 from schema_validator import DeploymentSchema
@@ -33,16 +34,23 @@ from schema_validator import ModelSchema
 from schema_validator import SharedSchema
 from tests.conftest import unique_str
 
+FUNCTIONAL_TESTS_NAMESPACE = "/datarobot/gh-action/functional-tests-63e89e5656215589ef3cd3b5"
 
-@lru_cache
-def webserver_accessible():
-    """Check if DataRobot web server is accessible."""
 
-    webserver = os.environ.get("DATAROBOT_WEBSERVER")
-    api_token = os.environ.get("DATAROBOT_API_TOKEN")
-    if webserver and api_token:
-        return DrClient(webserver, api_token, verify_cert=False).is_accessible()
-    return False
+# pylint: disable=unused-argument
+@pytest.fixture(name="setup_functional_tests_namespace", scope="session")
+def setup_functional_tests_namespace_fixture():
+    """
+    A fixture to set up the GitHub action functional tests' namespace. Please note that this is
+    required because there could be direct access to modules from the functional tests, such
+    as the `dr_client`, `model_schema`, etc.
+    """
+
+    try:
+        Namespace.set_namespace(FUNCTIONAL_TESTS_NAMESPACE)
+        yield
+    finally:
+        Namespace.unset_namespace()
 
 
 def create_dr_client():
@@ -50,18 +58,35 @@ def create_dr_client():
 
     webserver = os.environ.get("DATAROBOT_WEBSERVER")
     api_token = os.environ.get("DATAROBOT_API_TOKEN")
-    return DrClient(webserver, api_token, verify_cert=False)
+    if webserver and api_token:
+        return DrClient(webserver, api_token, verify_cert=False)
+    return None
 
 
+@pytest.fixture(name="dr_client", scope="session")
+def fixture_dr_client(setup_functional_tests_namespace):
+    """A fixture to create a DataRobot client."""
+
+    return create_dr_client()
+
+
+@lru_cache
+def webserver_accessible():
+    """Check if DataRobot web server is accessible."""
+
+    dr_client = create_dr_client()
+    return dr_client and dr_client.is_accessible()
+
+
+# pylint: disable=unused-argument
 @pytest.fixture(scope="session", autouse=True)
-def setup_clean_datarobot_environment():
+def setup_clean_datarobot_environment(setup_functional_tests_namespace, dr_client):
     """
     A fixture to delete deployments and custom models in DataRobot. There might be such remainders
     if a workflow is stopped in the middle.
     """
 
     if webserver_accessible():
-        dr_client = create_dr_client()
         dr_client.delete_all_deployments(return_on_error=False)
         dr_client.delete_all_custom_models(return_on_error=False)
 
@@ -74,10 +99,11 @@ def cleanup_models(dr_client_tool, workspace_path):
         models_metadata = []
         for model_yaml_file in workspace_path.rglob("**/model.yaml"):
             with open(model_yaml_file, encoding="utf-8") as fd:
-                models_metadata.append(yaml.safe_load(fd))
+                raw_metadata = yaml.safe_load(fd)
+                models_metadata.append(ModelSchema.validate_and_transform_single(raw_metadata))
         for model_yaml_file in workspace_path.rglob("**/models.yaml"):
             with open(model_yaml_file, encoding="utf-8") as fd:
-                multi_models_metadata = yaml.safe_load(fd)
+                multi_models_metadata = ModelSchema.validate_and_transform_multi(yaml.safe_load(fd))
                 for model_entry in multi_models_metadata[ModelSchema.MULTI_MODELS_KEY]:
                     models_metadata.append(model_entry[ModelSchema.MODEL_ENTRY_META_KEY])
 
@@ -459,7 +485,7 @@ def skip_model_testing(model_metadata, model_metadata_yaml_file):
 
 
 # NOTE: it was rather better to use the pytest.mark.usefixture for 'build_repo_for_testing'
-# but, apparently it cannot be used with fixtures.
+# but, it turns out that it doesn't work with fixtures.
 @pytest.fixture(name="model_metadata_yaml_file")
 def fixture_model_metadata_yaml_file(build_repo_for_testing, workspace_path, git_repo):
     """A fixture to load and return the first defined model in the local source tree."""
@@ -473,7 +499,8 @@ def fixture_model_metadata(model_metadata_yaml_file):
     """A fixture to load and return model metadata from a given yaml definition."""
 
     with open(model_metadata_yaml_file, encoding="utf-8") as fd:
-        return yaml.safe_load(fd)
+        raw_metadata = yaml.safe_load(fd)
+        return ModelSchema.validate_and_transform_single(raw_metadata)
 
 
 @pytest.fixture(name="main_branch_name")
@@ -495,13 +522,6 @@ def merge_branch_name():
     """A fixture to return the merge branch name."""
 
     return "merge-feature-branch"
-
-
-@pytest.fixture(name="dr_client", scope="session")
-def fixture_dr_client():
-    """A fixture to create a DataRobot client."""
-
-    return create_dr_client()
 
 
 def increase_model_memory_by_1mb(model_yaml_file):
@@ -573,6 +593,8 @@ def run_github_action(
             os.environ.get("DATAROBOT_API_TOKEN"),
             "--branch",
             main_branch_name,
+            "--namespace",
+            FUNCTIONAL_TESTS_NAMESPACE,
             "--allow-model-deletion",
         ]
 
