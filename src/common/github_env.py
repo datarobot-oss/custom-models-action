@@ -52,7 +52,7 @@ class GitHubEnv:
 
     @staticmethod
     def base_ref():
-        """The name of the base ref or target branch of the pull request in a workflow run.o"""
+        """The name of the base ref or target branch of the pull request in a workflow run."""
 
         return os.environ.get("GITHUB_BASE_REF")
 
@@ -61,6 +61,12 @@ class GitHubEnv:
         """The default location of the repository when using the checkout action."""
 
         return Path(os.environ.get("GITHUB_WORKSPACE"))
+
+    @staticmethod
+    def repository_id():
+        """The ID of the repository."""
+
+        return os.environ.get("GITHUB_REPOSITORY_ID")
 
     @staticmethod
     def github_output():

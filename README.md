@@ -221,18 +221,17 @@ The action supports the following optional input arguments:
 
 ### A Namespace (Optional)
 
-A namespace is a unique string that can be provided as input argument to the action. The purpose is
-to guarantee that the custom model action only handles models and deployments that exist in the
-configured namespace. Any other models and deployments that are not in the configured namespace
-will remain untouched.
+A namespace is a unique string that can be provided as an input argument to the action. The
+purpose is to guarantee that the custom model action handles models and deployments that only exist
+in the configured namespace. Any other models and deployments that are not in the configured
+namespace will remain untouched.
 
-By default, a namespace is not configured, which means all entities created by a custom model action
-will be processed during execution.
+If not provided, the GitHub repository ID will be used as the namespace. It means that the custom
+models action will process models and deployments that were created from this repository only.
 
-The namespace enable users to work with the same model and deployment definition files on different
-branches, as long as they configure a different namespaces to the custom models action in the GitHub
-workflow. This means that each user will have its own models and definitions, which will reside
-in different namespaces.
+If, for instance, users would like to work with the same model and deployment definitions from
+different branches and still make sure that each will have its own isolated models and deployments,
+they can simply configure a different namespace to the custom models action in the GitHub workflow.
 
 ### The GitHub Action's Output Metrics
 

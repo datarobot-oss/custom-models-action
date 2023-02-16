@@ -359,7 +359,7 @@ class ModelController(ControllerBase):
         latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
         git_model_version = latest_version.get("gitModelVersion")
         if not git_model_version:
-            # Either the model has never provisioned of the user created a version with a non
+            # Either the model has never provisioned or the user created a version with a non
             # GitHub action client.
             return False
 

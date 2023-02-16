@@ -105,8 +105,7 @@ def main(args=None):
 
     setup_log_configuration()
     options = argparse_options(args)
-    if options.namespace:
-        Namespace.set_namespace(options.namespace)
+    Namespace.init(options.namespace)
     try:
         CustomModelsAction(options).run()
         GitHubEnv.set_output_param(

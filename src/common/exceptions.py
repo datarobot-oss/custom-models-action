@@ -120,8 +120,8 @@ class NamespaceAlreadySet(GenericException):
     """Raised when trying to set a namespace more than once."""
 
 
-class InvalidEmptyArgument(GenericException):
-    """Raise when a None or empty input argument is provided to a method."""
+class NamespaceNotInitialized(GenericException):
+    """Raise when trying to use the namespace methods without first initializing it."""
 
 
 class IllegalDeletion(GenericException):

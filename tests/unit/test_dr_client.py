@@ -180,35 +180,35 @@ class SharedRouteTests(ABC):
         for fetched_entity in total_entities_response:
             assert fetched_entity in total_expected_entities
 
+    @staticmethod
     def _test_fetch_entities_with_multiple_namespace_success(
-        self, url_factory_fn, response_factory_fn, fetch_fn
+        url_factory_fn, response_factory_fn, fetch_fn
     ):
         num_entities_in_each_namespace = 3
         total_entities = []
         for namespace in [None, "dev-1", "dev-2"]:
-            for index in range(num_entities_in_each_namespace):
-                total_entities.append(response_factory_fn(index, namespace))
-        responses.add(
-            responses.GET,
-            url_factory_fn(0),
-            json={
-                "totalCount": len(total_entities),
-                "count": len(total_entities),
-                "next": None,
-                "data": total_entities,
-            },
-            status=200,
-        )
-        for namespace in [None, "dev-1", "dev-2"]:
             with set_namespace(namespace):
+                for index in range(num_entities_in_each_namespace):
+                    total_entities.append(response_factory_fn(index))
+                responses.add(
+                    responses.GET,
+                    url_factory_fn(0),
+                    json={
+                        "totalCount": len(total_entities),
+                        "count": len(total_entities),
+                        "next": None,
+                        "data": total_entities,
+                    },
+                    status=200,
+                )
                 total_entities_response = fetch_fn()
                 if namespace is None:
                     assert len(total_entities_response) == len(total_entities)
                 else:
                     assert len(total_entities_response) == num_entities_in_each_namespace
-            assert all(
-                Namespace.is_in_namespace(e["userProvidedId"]) for e in total_entities_response
-            )
+                assert all(
+                    Namespace.is_in_namespace(e["userProvidedId"]) for e in total_entities_response
+                )
 
 
 class TestCustomModelRoutes(SharedRouteTests):
@@ -221,14 +221,10 @@ class TestCustomModelRoutes(SharedRouteTests):
     def regression_model_response_factory(self):
         """A factory fixture to generate a regression custom model response."""
 
-        def _inner(model_id, namespace=None):
+        def _inner(model_id):
             return {
                 "id": model_id,
-                "userProvidedId": (
-                    f"user-provided-id-{model_id}"
-                    if namespace is None
-                    else f"{namespace}/user-provided-id-{model_id}"
-                ),
+                "userProvidedId": Namespace.namespaced(f"user-provided-id-{model_id}"),
                 "customModelType": "inference",
                 "supportsBinaryClassification": False,
                 "supportsRegression": True,
@@ -1127,14 +1123,10 @@ class TestDeploymentRoutes(SharedRouteTests):
     def deployment_response_factory(self):
         """A factory fixture to create a deployment response."""
 
-        def _inner(deployment_id, namespace=None):
+        def _inner(deployment_id):
             return {
                 "id": deployment_id,
-                "userProvidedId": (
-                    f"user-provided-id-{deployment_id}"
-                    if namespace is None
-                    else f"{namespace}/user-provided-id-{deployment_id}"
-                ),
+                "userProvidedId": Namespace.namespaced(f"user-provided-id-{deployment_id}"),
             }
 
         return _inner
