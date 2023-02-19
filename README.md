@@ -2,11 +2,13 @@
 
 > **Note**: This repository is still a work in progress
 
-The custom models action manages custom inference models and their associated deployments in DataRobot via GitHub CI/CD workflows. 
-These workflows allow you to create or delete models and deployments and modify settings. Metadata defined in 
-YAML files enables the custom model action's control over models and deployments. Most YAML files for this action 
-can reside in any folder within your custom model's repository. The YAML is searched, collected, and tested against 
-a schema to determine if it contains the entities used in these workflows.
+The custom models action manages custom inference models and their associated deployments in
+DataRobot via GitHub CI/CD workflows.
+These workflows allow you to create or delete models and deployments and modify settings. Metadata
+defined in YAML files enables the custom model action's control over models and deployments. Most
+YAML files for this action can reside in any folder within your custom model's repository. The YAML
+is searched, collected, and tested against a schema to determine if it contains the entities used
+in these workflows.
 
 ## Prerequisites
 The following feature flags must be enabled in DataRobot:
@@ -20,11 +22,11 @@ The following feature flags must be enabled in DataRobot:
 
 This quickstart example uses a [Python Scikit-Learn model template](https://github.com/datarobot/datarobot-user-models/tree/master/model_templates/python3_sklearn) 
 from the [datarobot-user-model repository](https://github.com/datarobot/datarobot-user-models/tree/master/model_templates). 
-To set up a custom models action that will create a custom inference model and deployment in DataRobot from a custom model 
-repository in GitHub, take the following steps:
+To set up a custom models action that will create a custom inference model and deployment in
+DataRobot from a custom model repository in GitHub, take the following steps:
 
-1. In the `.github/workflows` directory of your custom model repository, create a YAML file (with any filename) 
-   containing the following:
+1. In the `.github/workflows` directory of your custom model repository, create a YAML file
+   (with any filename) containing the following:
 
     ```yaml
     name: Workflow CI/CD
@@ -64,13 +66,14 @@ repository in GitHub, take the following steps:
     
     Configure the following fields:
 
-    - `branches`: Provide the name of your repository's main branch (usually either `master` or `main`) for `pull_request` and `push`. 
+    - `branches`: Provide the name of your repository's main branch (usually either `master`
+      or `main`) for `pull_request` and `push`.
       If you created your repository in GitHub, you likely need to update these fields to `main`. 
       While `master` and `main` are the most common branch names, you can target any branch; 
       for example, you could run the workflow on a `release` branch or a `test` branch.
 
-    - `api-token`: Provide a value for the `${{ secrets.DATAROBOT_API_TOKEN }}` variable by creating an 
-      [encrypted secret for GitHub Actions](https://docs.github.com/en/actions/security-guides/encrypted-secrets#creating-encrypted-secrets-for-a-repository)
+    - `api-token`: Provide a value for the `${{ secrets.DATAROBOT_API_TOKEN }}` variable by creating
+      an [encrypted secret for GitHub Actions](https://docs.github.com/en/actions/security-guides/encrypted-secrets#creating-encrypted-secrets-for-a-repository)
       containing your [DataRobot API key](https://docs.datarobot.com/en/docs/platform/account-mgmt/acct-settings/api-key-mgmt.html#api-key-management).
       Alternatively, you can set the token string directly to this field; however, this method is
       highly discouraged because your API key is extremely sensitive data. If you use this method, 
@@ -79,19 +82,20 @@ repository in GitHub, take the following steps:
     - `webserver`: Provide your DataRobot webserver value here if it isn't the default DataRobot 
       US server (`https://app.datarobot.com/`).
 
-    - `branch`: Provide the name of your repository's main branch (usually either `master` or `main`). 
-      If you created your repository in GitHub, you likely need to update this field to `main`. 
-      While `master` and `main` are the most common branch names, you can target any branch; 
+    - `branch`: Provide the name of your repository's main branch (usually either `master` or
+      `main`). If you created your repository in GitHub, you likely need to update this field to
+      `main`. While `master` and `main` are the most common branch names, you can target any branch; 
       for example, you could run the workflow on a `release` branch or a `test` branch.
 
 2. Commit the workflow YAML file and push it to the remote. After you complete this step, any
    push to the remote (or merged pull request) triggers the action.
 
-3. In the folder for your DataRobot custom model, add a model definition YAML file (e.g., `model.yaml`)
-   containing the following YAML and update the field values according to your model's characteristics:
+3. In the folder for your DataRobot custom model, add a model definition YAML file
+   (e.g., `model.yaml`) containing the following YAML and update the field values according to your
+   model's characteristics:
 
     ```yaml
-    user_provided_model_id: company/user/model-unique-id-1
+    user_provided_model_id: user/model-unique-id-1
     target_type: Regression
     settings:
       name: My Awesome GitHub Model 1 [GitHub CI/CD]
@@ -104,27 +108,32 @@ repository in GitHub, take the following steps:
     ```
     Configure the following fields:
 
-    - `user_provided_model_id`: Provide any descriptive and unique string value. The value must be
-      globally unique. A good practice is to use this pattern: `<company>/<user>/<model-unique-id>`.
+    - `user_provided_model_id`: Provide any descriptive and unique string value.
+      A good practice could be this kind of pattern: `<user>/<model-unique-id>`.
+      Please note that, by default, this ID will reside in a unique namespace, which is the GitHub
+      repository ID. Alternatively, the namespace can be configured as an input argument to the
+      custom models action.
     - `target_type`: Provide the correct target type for your custom model.
     - `target_name`: Provide the correct target name for your custom model.
-    - `model_environment_id`: Provide the DataRobot execution environment required for your custom model.
-      You can find these environments in the DataRobot application under 
+    - `model_environment_id`: Provide the DataRobot execution environment required for your custom
+      model. You can find these environments in the DataRobot application under
       [**Model Registry** > **Custom Model Workshop** > **Environments**](https://docs.datarobot.com/en/docs/mlops/deployment/custom-models/custom-env.html).
 
-4. In any directory in your repository, add a deployment definition YAML file (with any filename) 
+4. In any directory in your repository, add a deployment definition YAML file (with any filename)
    containing the following YAML:
 
     ```yaml
-    user_provided_deployment_id: company/user/my-awesome-deployment-id
-    user_provided_model_id: company/user/model-unique-id-1
+    user_provided_deployment_id: user/my-awesome-deployment-id
+    user_provided_model_id: user/model-unique-id-1
     ```
 
     Configure the following fields:
 
-    - `user_provided_deployment_id`: Provide any descriptive and unique string value. The value
-      must be globally unique. A good practice is to use this pattern:
-      `<company>/<user>/<deployment-unique-id>`.
+    - `user_provided_deployment_id`: Provide any descriptive and unique string value.
+      A good practice could be this kind of pattern: `<user>/<deployment-unique-id>`.
+      Please note that, by default, this ID will reside in a unique namespace, which is the GitHub
+      repository ID. Alternatively, the namespace can be configured as an input argument to the
+      custom models action.
     - `user_provided_model_id`: Provide the exact `user_provided_model_id` you set in the model
       definition YAML file.
 
@@ -136,27 +145,29 @@ repository in GitHub, take the following steps:
     - Navigate to the DataRobot application. You'll notice that a new custom model was
       created along with an associated deployment. This action can take a few minutes.
 
-> **Note**: Creating two commits (or merging two pull requests) in quick succession can result in a `ResourceNotFoundError`. 
-> For example, you add a model definition with a training dataset, make a commit, and push to the remote. 
-> Then, you immediately delete the model definition, make a commit, and push to the remote.
-> The training data upload action may begin after model deletion, resulting in an error.
-> To avoid this scenario, wait for an action's execution to complete before pushing new commits or merging new pull requests to the remote repository.
+> **Note**: Creating two commits (or merging two pull requests) in quick succession can result in
+> a `ResourceNotFoundError`. For example, you add a model definition with a training dataset, make
+> a commit, and push to the remote. Then, you immediately delete the model definition, make a
+> commit, and push to the remote. The training data upload action may begin after model deletion,
+> resulting in an error. To avoid this scenario, wait for an action's execution to complete before
+> pushing new commits or merging new pull requests to the remote repository.
 
 ## Custom Model Action Commit Information in DataRobot
 
-After your workflow creates a model and a deployment in DataRobot, you can access the commit information 
-from the model's version info and the deployment's overview:
+After your workflow creates a model and a deployment in DataRobot, you can access the commit
+information from the model's version info and the deployment's overview:
 
 ### Model Version Info
 
 1. In the **Model Registry**, click **Custom Model Workshop**.
 
-2. On the **Models** tab, click a GitHub-sourced model from the list and then click the **Versions** tab.
+2. On the **Models** tab, click a GitHub-sourced model from the list and then click the
+   **Versions** tab.
 
 3. Under **Manage Versions**, click the version you want to view the commit for.
 
-4. Under **Version Info**, find the **Git Commit Reference** and then click the commit hash (or commit ID) 
-   to open the commit in GitHub that created the current version.
+4. Under **Version Info**, find the **Git Commit Reference** and then click the commit hash
+   (or commit ID) to open the commit in GitHub that created the current version.
 
 ### Model Package Info
 
@@ -164,32 +175,34 @@ from the model's version info and the deployment's overview:
   
   2. On the **Model Packages** tab, click a GitHub-sourced model package from the list.
 
-  2. Under **Package Info**, review the model information provided by your workflow, find the **Git Commit Reference**, 
-     and then click the commit hash (or commit ID) to open the commit that created the current model package. 
+  3. Under **Package Info**, review the model information provided by your workflow, find
+     the **Git Commit Reference**, and then click the commit hash (or commit ID) to open the commit
+     that created the current model package.
 
 ### Deployment overview
 
 1. In the **Deployments** inventory, click a GitHub-sourced deployment from the list.
 
-2. On the deployment's **Overview** tab, review the model and deployment information provided by your workflow.
+2. On the deployment's **Overview** tab, review the model and deployment information provided by
+   your workflow.
 
-3. In the **Content** group box, find the **Git Commit Reference** and click the commit hash (or commit ID) 
-   to open the commit that created the deployment.
+3. In the **Content** group box, find the **Git Commit Reference** and click the commit hash
+   (or commit ID) to open the commit that created the deployment.
 
 ## Custom Model Action Reference
 
 ### Datasets
 
-Datasets referenced in custom models action YAML files are expected to exist in the DataRobot AI catalog 
-before configuring the action in GitHub. You should upload these datasets to the DataRobot 
+Datasets referenced in custom models action YAML files are expected to exist in the DataRobot AI
+catalog before configuring the action in GitHub. You should upload these datasets to the DataRobot
 AI catalog (via the UI or any other client) prior to configuring the GitHub action.
 
 ### Drop-In Environments
 
-Environments referenced in custom models action YAML files are expected to exist in DataRobot before 
-configuring the action in GitHub. You should validate the existence of the required drop-in environments 
-prior to configuring the GitHub action. In addition, you can install new drop-in environments. 
-For more information, see the [Custom model environments documentation](https://docs.datarobot.com/en/docs/mlops/deployment/custom-models/custom-env.html).
+Environments referenced in custom models action YAML files are expected to exist in DataRobot before
+configuring the action in GitHub. You should validate the existence of the required drop-in
+environments prior to configuring the GitHub action. In addition, you can install new drop-in
+environments. For more information, see the [Custom model environments documentation](https://docs.datarobot.com/en/docs/mlops/deployment/custom-models/custom-env.html).
 
 ### The GitHub Action's Input Arguments <a id="input-arguments"/>
 
@@ -226,12 +239,18 @@ purpose is to guarantee that the custom model action handles models and deployme
 in the configured namespace. Any other models and deployments that are not in the configured
 namespace will remain untouched.
 
-If not provided, the GitHub repository ID will be used as the namespace. It means that the custom
-models action will process models and deployments that were created from this repository only.
+If not provided, the GitHub repository ID will be used as the namespace (see: `GITHUB_REPOSITORY_ID`
+in this [link](https://docs.github.com/en/actions/learn-github-actions/variables#default-environment-variables)).
+It means that the custom models action will process models and deployments that were created from
+this repository only.
 
 If, for instance, users would like to work with the same model and deployment definitions from
-different branches and still make sure that each will have its own isolated models and deployments,
+different branches and still make sure that different entities will be created in DataRobot,
 they can simply configure a different namespace to the custom models action in the GitHub workflow.
+
+Please note, that a change of the namespace input argument to the custom models action in a GitHub
+workflow, will result in new models and deployments in DataRobot. The existing ones will remain in
+DataRobot without a control from the GitHub action.
 
 ### The GitHub Action's Output Metrics
 
@@ -258,8 +277,8 @@ The GitHub action requires the model's metadata in a YAML file. The model's full
 https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L271
 )
 
-A model metadata YAML file may contain the schema of a single model's definition (as specified above)
-or the schema of multiple models' definitions.
+A model metadata YAML file may contain the schema of a single model's definition
+(as specified above) or the schema of multiple models' definitions.
 
 The **multiple models' schema** is defined in [this source code block](
 https://github.com/datarobot/custom-models-action/blob/62b9df9e8895becabd7592e65c0ed52252690498/src/schema_validator.py#L351
@@ -329,9 +348,11 @@ below.
 
 At the top level, some attributes shouldn't be changed once the deployment is created: 
 
-* `user_provided_model_id`: An exception that associates a model definition to the given deployment. 
-  A change in this field triggers model replacement or challenger creation, depending on the deployment's configuration.
-* `settings`: Changes to the fields in this section will result in changes to the deployment's settings.
+* `user_provided_model_id`: An exception that associates a model definition to the given deployment.
+  A change in this field triggers model replacement or challenger creation, depending on the
+  deployment's configuration.
+* `settings`: Changes to the fields in this section will result in changes to the deployment's
+  settings.
 
 ### GitHub Workflow
 
@@ -383,15 +404,16 @@ GitHub workflow definition:
   - `if: ${{ github.event.pull_request.merged != true }}`: An important condition that is
     needed in order to skip the action's execution upon merging. The action will be triggered
     by the 'push' event.
-  - `actions/checkout@v3`: The action scans the repository files; therefore, it requires the checkout
-    action a step before the DataRobot action.
+  - `actions/checkout@v3`: The action scans the repository files; therefore, it requires the
+    checkout action a step before the DataRobot action.
   - `custom-models-action@1.1.4`: This link refers to a specific historic release. You might want
     to look at newer versions in the [RELEASES.md](RELEASES.md).
   - Two input arguments are used to establish communication with DataRobot. 
     These arguments should be defined in the repository **Secrets** section:
     - `DATAROBOT_API_TOKEN`: The API token used to validate credentials with DataRobot.
     - `DATAROBOT_WEBSERVER`: The publicly accessible DataRobot web server URL.
-      For the full possible input arguments to the action, refer to the [input arguments section](#input-arguments) above.
+      For the full possible input arguments to the action, refer to the
+      [input arguments section](#input-arguments) above.
 
   </details>
 
@@ -455,7 +477,7 @@ sequentially:
 Below is an example of a minimal model's definition, which includes only mandatory fields:
 
 ```yaml
-user_provided_model_id: company/user/any-model-unique-id-1
+user_provided_model_id: user/any-model-unique-id-1
 target_type: Regression
 settings:
   name: My Awsome GitHub Model 1 [GitHub CI/CD]
@@ -474,7 +496,7 @@ version:
 Below is an example of a full model's definition, which includes both mandatory and optional fields:
 
 ```yaml
-user_provided_model_id: company/user/any-model-unique-id-1
+user_provided_model_id: user/any-model-unique-id-1
 target_type: Binary
 settings:
   name: My Awsome GitHub Model 1 [GitHub CI/CD]
@@ -547,7 +569,7 @@ Below is an example of a multi-models definition, which includes only mandatory 
 datarobot_models:
   - model_path: ./models/model_1
     model_metadata:
-      user_provided_model_id: company/user/any-model-unique-id-1
+      user_provided_model_id: user/any-model-unique-id-1
       target_type: Regression
       settings:
         name: My Awsome GitHub Model 1 [GitHub CI/CD]
@@ -560,7 +582,7 @@ datarobot_models:
 
   - model_path: ./models/model_2
     model_metadata:
-      user_provided_model_id: company/user/any-model-unique-string-2
+      user_provided_model_id: user/any-model-unique-string-2
       target_type: Regression
       settings:
         name: My Awsome GitHub Model 2 [GitHub CI/CD]
@@ -581,8 +603,8 @@ datarobot_models:
 Below is an example of a minimal deployment's definition, which includes only mandatory fields:
 
 ```yaml
-user_provided_deployment_id: company/user/my-awesome-deployment-id
-user_provided_model_id: company/user/any-model-unique-id-1
+user_provided_deployment_id: user/my-awesome-deployment-id
+user_provided_model_id: user/any-model-unique-id-1
 ```
 
 </details>
@@ -593,8 +615,8 @@ Below is an example of a full deployment's definition, which includes both manda
 fields:
 
 ```yaml
-user_provided_deployment_id: company/user/my-awesome-deployment-id
-user_provided_model_id: company/user/any-model-unique-string-2
+user_provided_deployment_id: user/my-awesome-deployment-id
+user_provided_model_id: user/any-model-unique-string-2
 prediction_environment_name: "https://eks-test.orm.company.com"
 settings:
   label: "My Awesome Deployment (model-2)"
@@ -626,14 +648,14 @@ settings:
 Below is an example of a multi-deployments definition, which includes only mandatory fields:
 
 ```yaml
-- user_provided_deployment_id: company/user/any-deployment-unique-id-1
-  user_provided_model_id: company/user/any-model-unique-id-1
+- user_provided_deployment_id: user/any-deployment-unique-id-1
+  user_provided_model_id: user/any-model-unique-id-1
 
-- user_provided_deployment_id: company/user/any-deployment-unique-id-2
-  user_provided_model_id: company/user/any-model-unique-string-2
+- user_provided_deployment_id: user/any-deployment-unique-id-2
+  user_provided_model_id: user/any-model-unique-string-2
 
-- user_provided_deployment_id: company/user/any-deployment-unique-id-3
-  user_provided_model_id: company/user/any-model-unique-id-3
+- user_provided_deployment_id: user/any-deployment-unique-id-3
+  user_provided_model_id: user/any-model-unique-id-3
 ```
 
 </details>

@@ -4,10 +4,13 @@
 #  Released under the terms of DataRobot Tool and Utility Agreement.
 
 """A module that contains methods to handle a namespace."""
+import logging
 
 from common.exceptions import NamespaceAlreadySet
 from common.exceptions import NamespaceNotInitialized
 from common.github_env import GitHubEnv
+
+logger = logging.getLogger()
 
 
 class Namespace:
@@ -45,6 +48,8 @@ class Namespace:
         else:
             namespace = cls.default_namespace()
 
+        logger.info("Set namespace: %s", namespace)
+
         if namespace == cls.namespace():
             return
 
@@ -60,6 +65,7 @@ class Namespace:
     def uninit(cls):
         """Un-init the namespace."""
 
+        logger.info("Un-set namespace.")
         cls._namespace = None
 
     @classmethod
