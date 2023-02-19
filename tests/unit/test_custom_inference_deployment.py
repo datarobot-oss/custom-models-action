@@ -26,6 +26,7 @@ from common.exceptions import DeploymentMetadataAlreadyExists
 from common.exceptions import NoValidAncestor
 from common.git_tool import GitTool
 from common.github_env import GitHubEnv
+from common.namepsace import Namespace
 from custom_models_action import CustomModelsAction
 from deployment_controller import DeploymentController
 from deployment_info import DeploymentInfo
@@ -73,6 +74,61 @@ class TestCustomInferenceDeployment:
 
         yield common_path_with_code
 
+    @contextlib.contextmanager
+    def _un_namespaced_deployment_user_provided_id(self, single_or_multi_deployment_metadata):
+        if not single_or_multi_deployment_metadata:
+            yield
+        else:
+            if DeploymentSchema.is_multi_deployments_schema(single_or_multi_deployment_metadata):
+                if not single_or_multi_deployment_metadata:
+                    yield
+                else:
+                    for deployment_metadata in single_or_multi_deployment_metadata:
+                        deployment_metadata[
+                            DeploymentSchema.DEPLOYMENT_ID_KEY
+                        ] = Namespace.un_namespaced(
+                            deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                        )
+                        deployment_metadata[SharedSchema.MODEL_ID_KEY] = Namespace.un_namespaced(
+                            deployment_metadata[SharedSchema.MODEL_ID_KEY]
+                        )
+                    try:
+                        yield
+                    finally:
+                        for deployment_metadata in single_or_multi_deployment_metadata:
+                            deployment_metadata[
+                                DeploymentSchema.DEPLOYMENT_ID_KEY
+                            ] = Namespace.namespaced(
+                                deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                            )
+                            deployment_metadata[SharedSchema.MODEL_ID_KEY] = Namespace.namespaced(
+                                deployment_metadata[SharedSchema.MODEL_ID_KEY]
+                            )
+            else:
+                single_or_multi_deployment_metadata[
+                    DeploymentSchema.DEPLOYMENT_ID_KEY
+                ] = Namespace.un_namespaced(
+                    single_or_multi_deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                )
+                single_or_multi_deployment_metadata[
+                    SharedSchema.MODEL_ID_KEY
+                ] = Namespace.un_namespaced(
+                    single_or_multi_deployment_metadata[SharedSchema.MODEL_ID_KEY]
+                )
+                try:
+                    yield
+                finally:
+                    single_or_multi_deployment_metadata[
+                        DeploymentSchema.DEPLOYMENT_ID_KEY
+                    ] = Namespace.namespaced(
+                        single_or_multi_deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                    )
+                    single_or_multi_deployment_metadata[
+                        SharedSchema.MODEL_ID_KEY
+                    ] = Namespace.namespaced(
+                        single_or_multi_deployment_metadata[SharedSchema.MODEL_ID_KEY]
+                    )
+
     # pylint: disable=unused-argument
     @pytest.fixture
     def deployments_factory(self, common_path_with_code, workspace_path, models_factory):
@@ -86,7 +142,7 @@ class TestCustomInferenceDeployment:
                 model_name = model_metadata[ModelSchema.SETTINGS_SECTION_KEY][ModelSchema.NAME_KEY]
                 deployment_name = f"deployment-{model_name}"
                 deployment_metadata = {
-                    DeploymentSchema.DEPLOYMENT_ID_KEY: str(uuid.uuid4()),
+                    DeploymentSchema.DEPLOYMENT_ID_KEY: Namespace.namespaced(str(uuid.uuid4())),
                     SharedSchema.MODEL_ID_KEY: model_metadata[SharedSchema.MODEL_ID_KEY],
                     SharedSchema.SETTINGS_SECTION_KEY: {
                         DeploymentSchema.LABEL_KEY: deployment_name
@@ -95,11 +151,13 @@ class TestCustomInferenceDeployment:
                 multi_deployments_metadata.append(deployment_metadata)
                 if not is_multi:
                     deployment_yaml_filepath = workspace_path / model_name / "deployment.yaml"
-                    write_to_file(deployment_yaml_filepath, yaml.dump(deployment_metadata))
+                    with self._un_namespaced_deployment_user_provided_id(deployment_metadata):
+                        write_to_file(deployment_yaml_filepath, yaml.dump(deployment_metadata))
 
             if is_multi:
                 deployments_yaml_filepath = workspace_path / "deployments.yaml"
-                write_to_file(deployments_yaml_filepath, yaml.dump(multi_deployments_metadata))
+                with self._un_namespaced_deployment_user_provided_id(multi_deployments_metadata):
+                    write_to_file(deployments_yaml_filepath, yaml.dump(multi_deployments_metadata))
 
             return multi_deployments_metadata, models_metadata
 
@@ -127,7 +185,7 @@ class TestCustomInferenceDeployment:
     def test_scan_and_load_already_exists_deployment(self, options, single_deployment_factory):
         """Tes scanning and loading of an already existing deployments with same IDs."""
 
-        same_user_provided_id = "123"
+        same_user_provided_id = Namespace.namespaced("123")
         single_deployment_factory("deployment_1", user_provided_id=same_user_provided_id)
         single_deployment_factory("deployment_2", user_provided_id=same_user_provided_id)
         deployment_controller = DeploymentController(options, None, None)
@@ -197,12 +255,12 @@ class TestCustomInferenceDeployment:
 
         return [
             {
-                DeploymentSchema.DEPLOYMENT_ID_KEY: "dep-id-1",
-                DeploymentSchema.MODEL_ID_KEY: "model-id-1",
+                DeploymentSchema.DEPLOYMENT_ID_KEY: Namespace.namespaced("dep-id-1"),
+                DeploymentSchema.MODEL_ID_KEY: Namespace.namespaced("model-id-1"),
             },
             {
-                DeploymentSchema.DEPLOYMENT_ID_KEY: "dep-id-2",
-                DeploymentSchema.MODEL_ID_KEY: "model-id-2",
+                DeploymentSchema.DEPLOYMENT_ID_KEY: Namespace.namespaced("dep-id-2"),
+                DeploymentSchema.MODEL_ID_KEY: Namespace.namespaced("model-id-2"),
             },
         ]
 
@@ -358,21 +416,25 @@ class TestCustomInferenceDeployment:
         ):
             yield
 
+    @pytest.mark.parametrize(
+        "namespace", [None, "dev1"], ids=["default-namespace", "dev1-namespace"]
+    )
     @pytest.mark.usefixtures("workspace_path")
     def test_deployments_integrity_validation_success(
-        self, options, deployments_factory, git_repo, init_repo_for_root_path_factory
+        self, options, deployments_factory, git_repo, init_repo_for_root_path_factory, namespace
     ):
         """Test a successful deployments' integrity validation."""
 
-        with self._mock_repo_with_datarobot_models(
-            deployments_factory, git_repo, init_repo_for_root_path_factory
-        ):
-            git_tool = GitTool(GitHubEnv.workspace_path())
-            model_controller = ModelController(options, git_tool)
-            deployment_controller = DeploymentController(options, model_controller, git_tool)
-            deployment_controller.scan_and_load_deployments_metadata()
-            deployment_controller.fetch_deployments_from_datarobot()
-            deployment_controller.validate_deployments_integrity()
+        with set_namespace(namespace):
+            with self._mock_repo_with_datarobot_models(
+                deployments_factory, git_repo, init_repo_for_root_path_factory
+            ):
+                git_tool = GitTool(GitHubEnv.workspace_path())
+                model_controller = ModelController(options, git_tool)
+                deployment_controller = DeploymentController(options, model_controller, git_tool)
+                deployment_controller.scan_and_load_deployments_metadata()
+                deployment_controller.fetch_deployments_from_datarobot()
+                deployment_controller.validate_deployments_integrity()
 
     @pytest.mark.usefixtures("workspace_path")
     def test_deployments_integrity_validation_no_dr_deployments(

@@ -5,8 +5,9 @@
 
 """A module that contains methods to handle a namespace."""
 
-from common.exceptions import InvalidEmptyArgument
 from common.exceptions import NamespaceAlreadySet
+from common.exceptions import NamespaceNotInitialized
+from common.github_env import GitHubEnv
 
 
 class Namespace:
@@ -20,36 +21,44 @@ class Namespace:
 
         return cls._namespace
 
+    @staticmethod
+    def default_namespace():
+        """A default namespace is used if the user does not provide his own namespace."""
+
+        return f"{GitHubEnv.repository_id()}/"
+
     @classmethod
-    def set_namespace(cls, namespace, force_override=False):
+    def init(cls, namespace=None):
         """
-        Set a namespace. The namespace can be set only once.
+        Initialize the namespace. This method should be called only once. The input
+        namespace argument is optional and if not provided then a default namespace is used.
 
         Parameters
         ----------
-        namespace : str
-            A non-empty string.
-        force_override : bool
-            Whether to override an already configured namespace.
+        namespace : str or None
+            A namespace string. If None, a default namespace will be used.
         """
 
-        if not namespace:
-            raise InvalidEmptyArgument("Namespace must be a valid string.")
+        if namespace:
+            if not namespace.startswith("/"):
+                namespace += "/"
+        else:
+            namespace = cls.default_namespace()
 
-        if namespace == cls._namespace:
-            # Happens during the functional tests
+        if namespace == cls.namespace():
             return
 
-        if cls._namespace and not force_override:
+        if cls.namespace():
             raise NamespaceAlreadySet(
-                f"A namespace has already been set. Existing: {cls._namespace}, new: {namespace}."
+                "A namespace has already been set. "
+                f"Existing namespace: {cls.namespace()}, new: {namespace}."
             )
 
         cls._namespace = namespace
 
     @classmethod
-    def unset_namespace(cls):
-        """Unset the namespace."""
+    def uninit(cls):
+        """Un-init the namespace."""
 
         cls._namespace = None
 
@@ -64,9 +73,9 @@ class Namespace:
             A user provided ID.
         """
 
-        if cls._namespace:
-            return user_provided_id.startswith(f"{cls._namespace}/")
-        return True
+        if not cls.namespace():
+            raise NamespaceNotInitialized("A namespace was not initialized.")
+        return user_provided_id.startswith(cls.namespace())
 
     @classmethod
     def namespaced(cls, user_provided_id):
@@ -86,6 +95,29 @@ class Namespace:
             The user provided ID with a prefixed namespace if exists.
 
         """
-        if not cls._namespace or cls.is_in_namespace(user_provided_id):
+        if cls.is_in_namespace(user_provided_id):
             return user_provided_id
-        return f"{cls._namespace}/{user_provided_id}"
+        return f"{cls.namespace()}{user_provided_id}"
+
+    @classmethod
+    def un_namespaced(cls, user_provided_id):
+        """
+        Removes the prefixed namespace from the input argument's user provided ID (if exists).
+        If the input user_provided_id does not start with the namespace, it will be returned
+        untouched.
+
+        Parameters
+        ----------
+        user_provided_id : str
+            A user provided ID.
+
+        Returns
+        -------
+        str:
+            The user provided ID with a prefixed namespace if exists.
+
+        """
+        if cls.is_in_namespace(user_provided_id):
+            namespace_len = len(cls.namespace())
+            return user_provided_id[namespace_len:]
+        return user_provided_id

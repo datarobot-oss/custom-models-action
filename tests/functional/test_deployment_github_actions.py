@@ -673,6 +673,18 @@ class TestDeploymentGitHubActions:
         )
         cls._validate_deployments_metric(Metrics.total_updated_settings, event_name, github_output)
 
+    @contextlib.contextmanager
+    def _set_namespace(self, namespace):
+        origin_namespace = Namespace.namespace()
+        try:
+            Namespace.uninit()
+            Namespace.init(namespace)
+            printout(f"Set new namespace, old: {origin_namespace}, new: {Namespace.namespace()}")
+            yield
+        finally:
+            Namespace.uninit()
+            Namespace.init(origin_namespace)
+
     @pytest.mark.usefixtures("cleanup", "skip_model_testing", "set_deployment_actuals_dataset")
     def test_deployment_and_model_fetch_for_different_namespaces(
         self, dr_client, workspace_path, git_repo, main_branch_name
@@ -684,6 +696,7 @@ class TestDeploymentGitHubActions:
         run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=True)
 
         # Validate deployments exist in namespace
+        printout("Validate that models and deployments exist in the configured namespace.")
         deployments = dr_client.fetch_deployments()
         assert len(deployments) > 0
 
@@ -691,16 +704,13 @@ class TestDeploymentGitHubActions:
         assert len(custom_models) > 0
 
         # Change namespace and verify zero fetched deployments
-        origin_namespace = Namespace.namespace()
-        try:
-            new_namespace = f"/datarobot/gh-functional-tests/non-existing-ns-{unique_str()}"
-            Namespace.set_namespace(new_namespace, force_override=True)
-            assert Namespace.namespace() == new_namespace
+        new_namespace = f"datarobot/gh-functional-tests/non-existing-ns-{unique_str()}"
+        with self._set_namespace(new_namespace):
+            assert Namespace.namespace() == f"{new_namespace}/"
 
+            printout("Validate non existing models nor deployments in the new namespace.")
             deployments = dr_client.fetch_deployments()
             assert len(deployments) == 0
 
             custom_models = dr_client.fetch_custom_models()
             assert len(custom_models) == 0
-        finally:
-            Namespace.set_namespace(origin_namespace, force_override=True)

@@ -47,10 +47,11 @@ def setup_functional_tests_namespace_fixture():
     """
 
     try:
-        Namespace.set_namespace(FUNCTIONAL_TESTS_NAMESPACE)
+        with github_env_set("GITHUB_REPOSITORY_ID", "1234567"):
+            Namespace.init(FUNCTIONAL_TESTS_NAMESPACE)
         yield
     finally:
-        Namespace.unset_namespace()
+        Namespace.uninit()
 
 
 def create_dr_client():
@@ -576,9 +577,11 @@ def run_github_action(
 
     main_branch_head_sha = main_branch_head_sha or git_repo.head.commit.hexsha
     ref_name = main_branch_name if event_name == "push" else "merge-branch"
-    with github_env_set("GITHUB_WORKSPACE", str(workspace_path)), github_env_set(
-        "GITHUB_SHA", git_repo.commit(main_branch_head_sha).hexsha
-    ), github_env_set("GITHUB_EVENT_NAME", event_name), github_env_set(
+    with github_env_set("GITHUB_REPOSITORY_ID", "1234567"), github_env_set(
+        "GITHUB_WORKSPACE", str(workspace_path)
+    ), github_env_set("GITHUB_SHA", git_repo.commit(main_branch_head_sha).hexsha), github_env_set(
+        "GITHUB_EVENT_NAME", event_name
+    ), github_env_set(
         "GITHUB_SHA", git_repo.commit(main_branch_head_sha).hexsha
     ), github_env_set(
         "GITHUB_BASE_REF", main_branch_name

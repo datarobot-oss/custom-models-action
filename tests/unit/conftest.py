@@ -31,6 +31,15 @@ from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 
 
+@pytest.fixture(name="setup_unit_tests_namespace", scope="session", autouse=True)
+def fixture_setup_unit_tests_namespace():
+    """A fixture to setup default unit-tests namespace"""
+
+    with patch.dict(os.environ, {"GITHUB_REPOSITORY_ID": "1234567"}):
+        Namespace.init("datarobot/gh-unit-tests")
+        yield
+
+
 @pytest.fixture(name="workspace_path")
 def fixture_workspace_path():
     """
@@ -155,6 +164,37 @@ def fixture_excluded_src_path(workspace_path):
     return excluded_path
 
 
+@contextlib.contextmanager
+def _un_namespaced_model_user_provided_id(single_or_multi_model_metadata):
+    if ModelSchema.is_multi_models_schema(single_or_multi_model_metadata):
+        if not single_or_multi_model_metadata[ModelSchema.MULTI_MODELS_KEY]:
+            yield
+        else:
+            for model_entry in single_or_multi_model_metadata[ModelSchema.MULTI_MODELS_KEY]:
+                model_metadata = model_entry[ModelSchema.MODEL_ENTRY_META_KEY]
+                model_metadata[ModelSchema.MODEL_ID_KEY] = Namespace.un_namespaced(
+                    model_metadata[ModelSchema.MODEL_ID_KEY]
+                )
+            try:
+                yield
+            finally:
+                for model_entry in single_or_multi_model_metadata[ModelSchema.MULTI_MODELS_KEY]:
+                    model_metadata = model_entry[ModelSchema.MODEL_ENTRY_META_KEY]
+                    model_metadata[ModelSchema.MODEL_ID_KEY] = Namespace.namespaced(
+                        model_metadata[ModelSchema.MODEL_ID_KEY]
+                    )
+    else:
+        single_or_multi_model_metadata[ModelSchema.MODEL_ID_KEY] = Namespace.un_namespaced(
+            single_or_multi_model_metadata[ModelSchema.MODEL_ID_KEY]
+        )
+        try:
+            yield
+        finally:
+            single_or_multi_model_metadata[ModelSchema.MODEL_ID_KEY] = Namespace.namespaced(
+                single_or_multi_model_metadata[ModelSchema.MODEL_ID_KEY]
+            )
+
+
 @pytest.fixture(name="single_model_factory")
 def fixture_single_model_factory(workspace_path, common_path_with_code):
     """A factory fixture to create a single model definition."""
@@ -177,7 +217,7 @@ def fixture_single_model_factory(workspace_path, common_path_with_code):
         write_to_file(model_path / "score" / "score.py", "# score.py")
 
         single_model_metadata = {
-            ModelSchema.MODEL_ID_KEY: user_provided_id or str(uuid.uuid4()),
+            ModelSchema.MODEL_ID_KEY: Namespace.namespaced(user_provided_id or str(uuid.uuid4())),
             ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
             ModelSchema.SETTINGS_SECTION_KEY: {
                 ModelSchema.NAME_KEY: name,
@@ -200,7 +240,8 @@ def fixture_single_model_factory(workspace_path, common_path_with_code):
         metadata_yaml_filepath = None
         if write_metadata:
             metadata_yaml_filepath = model_path / "model.yaml"
-            write_to_file(metadata_yaml_filepath, yaml.dump(single_model_metadata))
+            with _un_namespaced_model_user_provided_id(single_model_metadata):
+                write_to_file(metadata_yaml_filepath, yaml.dump(single_model_metadata))
 
         return single_model_metadata, metadata_yaml_filepath
 
@@ -248,7 +289,9 @@ def fixture_models_factory(common_path_with_code, workspace_path, single_model_f
                         ModelSchema.MODEL_ENTRY_META_KEY: model_metadata,
                     }
                 )
-            multi_models_content = yaml.dump(multi_models_yaml_content)
+
+            with _un_namespaced_model_user_provided_id(multi_models_yaml_content):
+                multi_models_content = yaml.dump(multi_models_yaml_content)
             models_metadata_dir_path = workspace_path / "metadata"
             if not os.path.exists(models_metadata_dir_path):
                 os.makedirs(models_metadata_dir_path)
@@ -509,13 +552,14 @@ def set_namespace(namespace):
         A non-empty namespace name.
     """
 
-    if namespace:
-        Namespace.set_namespace(namespace)
+    origin_namespace = Namespace.namespace()
+    Namespace.uninit()
     try:
+        Namespace.init(namespace)
         yield
     finally:
-        if namespace:
-            Namespace.unset_namespace()
+        Namespace.uninit()
+        Namespace.init(origin_namespace)
 
 
 def validate_namespaced_user_provided_id(info_bases, namespace):
