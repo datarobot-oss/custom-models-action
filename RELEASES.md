@@ -1,5 +1,10 @@
 # RELEASES
 
+## 1.2.0 [2023-02-20]
+  * Add support for namespaces
+  * Add a new metric to count models and deployment whose settings were changed
+  * Internal improvements
+
 ## 1.1.8 [2023-01-31]
   * Internal improvements
   * Bug fixes
