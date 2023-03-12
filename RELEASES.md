@@ -1,5 +1,9 @@
 # RELEASES
 
+## 1.2.1 [2023-03-12]
+  * Fix examples in the README.md to comply with the defaults in DataRobot
+  * Internal improvement
+
 ## 1.2.0 [2023-02-20]
   * Add support for namespaces
   * Add a new metric to count models and deployment whose settings were changed
