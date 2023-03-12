@@ -26,52 +26,66 @@ class ReleaseCreator:
     def run(self):
         """The main method to drive the functionality to create a release."""
 
+        if self._update_tag_reference_in_readme_if_needed():
+            return
+
         self._validate_integrity()
 
         if self._tag_already_exists():
             logger.info("Tag already exists, tag: %s", self._args.tag)
-            self._verify_override_conditions()
+            if not self._verify_override_conditions():
+                return
             self._remove_tag()
-        else:
-            self._verify_valid_docs()
 
         self._create_tag()
         self._push_to_remote()
 
+    def _update_tag_reference_in_readme_if_needed(self):
+        readme_filepath = self._git_workspace_path / "README.md"
+        with open(readme_filepath, encoding="utf-8") as fd:
+            content = fd.read()
+
+        unexpected_tags_pattern = f"datarobot-oss/custom-models-action@((?!{self._args.tag})\\S+)"
+        unexpected_tags = re.findall(unexpected_tags_pattern, content)
+        if unexpected_tags:
+            with open(readme_filepath, "w", encoding="utf-8") as fd:
+                content = re.sub(
+                    unexpected_tags_pattern,
+                    f"datarobot-oss/custom-models-action@{self._args.tag}",
+                    content,
+                )
+                fd.write(content)
+                print("Tag was updated in README.md file. Please commit and try again.")
+                return True
+        return False
+
     def _validate_integrity(self):
         if self._repo.is_dirty():
-            raise Exception("There is probably an un-committed work. The repository is dirty.")
+            raise AssertionError("There is probably an un-committed work. The repository is dirty.")
 
         if self._repo.active_branch.name != "master":
-            raise Exception("A release can only be created from the 'master' branch.")
+            raise AssertionError("A release can only be created from the 'master' branch.")
+
+        self._verify_releases_history()
 
         commits_behind = self._repo.iter_commits("master..origin/master")
         if sum(1 for c in commits_behind) > 0:
-            raise Exception("Local 'master' branch is behind of its remote branch.")
+            raise AssertionError("Local 'master' branch is behind of its remote branch.")
 
         commits_ahead = self._repo.iter_commits("origin/master..master")
         if sum(1 for c in commits_ahead) > 0:
-            raise Exception("Local 'master' branch is ahead of its remote branch.")
+            raise AssertionError("Local 'master' branch is ahead of its remote branch.")
 
     def _tag_already_exists(self):
         return self._args.tag in self._repo.tags
 
     def _verify_override_conditions(self):
         if not self._args.force_override:
-            raise ValueError("A release already exists with the given tag!")
+            raise AssertionError("A release already exists with the given tag!")
 
-        user_response = input(
-            f"A release already exists with the given tag: {self._args.tag}.\n"
-            "Do you want to override it? [Yes] "
-        )
-        if user_response != "Yes":
-            sys.exit(0)
-
-        self._verify_valid_docs()
-
-    def _verify_valid_docs(self):
-        self._verify_releases_history()
-        self._verify_tag_reference_in_readme()
+        msg = f"A release already exists with the given tag: {self._args.tag}."
+        user_response = input(f"{msg}\nDo you want to override it? [Yes] ")
+        return user_response == "Yes"
 
     def _verify_releases_history(self):
         releases_filepath = self._git_workspace_path / "RELEASES.md"
@@ -82,33 +96,12 @@ class ReleaseCreator:
                 if line.startswith("##"):  # the latest reported release
                     line = line.strip()
                     if line != expected_release_report_line:
-                        raise Exception(
+                        raise AssertionError(
                             "There's no valid report in RELEASES.md. "
                             f"Expecting: '{expected_release_report_line}'"
                         )
                     break
         logger.info("Release history is valid (RELEASES.md).")
-
-    def _verify_tag_reference_in_readme(self):
-        readme_filepath = self._git_workspace_path / "README.md"
-        with open(readme_filepath, encoding="utf-8") as fd:
-            content = fd.read()
-
-        unexpected_tags_pattern = f"datarobot-oss/custom-models-action@((?!{self._args.tag})\\S+)"
-        unexpected_tags = re.findall(unexpected_tags_pattern, content)
-        if unexpected_tags:
-            print(f"An invalid tag(s) are referenced in the README.md: {unexpected_tags}")
-            user_response = input(f"Do you want to replace with new tag: {self._args.tag}? [yY] ")
-            if user_response in ["y", "Y"]:
-                with open(readme_filepath, "w", encoding="utf-8") as fd:
-                    content = re.sub(
-                        unexpected_tags_pattern,
-                        f"datarobot-oss/custom-models-action@{self._args.tag}",
-                        content,
-                    )
-                    fd.write(content)
-                    print("Replacement done. Please commit and try again ...")
-                    sys.exit(0)
 
     def _remove_tag(self):
         logger.info("Removing tag: %s", self._args.tag)
