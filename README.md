@@ -518,7 +518,7 @@ version:
   include_glob_pattern:
     - ./
   memory: 100Mi
-  replicas: 3
+  replicas: 2
 
 test:
   memory: 100Mi
