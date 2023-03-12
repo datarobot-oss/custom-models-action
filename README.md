@@ -517,11 +517,11 @@ version:
     - out/
   include_glob_pattern:
     - ./
-  memory: 100Mi
-  replicas: 3
+  memory: 128Mi
+  replicas: 2
 
 test:
-  memory: 100Mi
+  memory: 128Mi
   skip: false
   test_data_id: 62779143562155aa34a3d65b
   checks:
