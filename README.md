@@ -636,9 +636,14 @@ settings:
   enable_challenger_models: true
   segment_analysis:
     enabled: true
-    attributes:
-      - Host-IP
-      - Remote-IP
+    # NOTE: the 'segment_analysis' may contain an 'attributes' section, where users can specify
+    # attributes that are categorical features in the associated model.
+    # Be aware that if you enabled segment analysis, without specifying attribute, you can still
+    # access various statistics by segment of built-in attributes in DataRobot.
+    #
+    # attributes:
+    # - <categorical-attr-1>
+    # - <categorical-attr-2>
 ```
 
 </details>
