@@ -1,5 +1,9 @@
 # RELEASES
 
+## 1.2.2 [2023-03-21]
+  * Improve segment analysis functionality and update README.md
+  * Bug fix
+
 ## 1.2.1 [2023-03-12]
   * Fix examples in the README.md to comply with the defaults in DataRobot
   * Internal improvement
