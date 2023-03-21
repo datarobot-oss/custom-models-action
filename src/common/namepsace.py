@@ -43,7 +43,7 @@ class Namespace:
         """
 
         if namespace:
-            if not namespace.startswith("/"):
+            if not namespace.endswith("/"):
                 namespace += "/"
         else:
             namespace = cls.default_namespace()

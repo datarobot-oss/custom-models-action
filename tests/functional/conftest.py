@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import shutil
+import socket
 from collections import namedtuple
 from functools import lru_cache
 from pathlib import Path
@@ -26,6 +27,7 @@ from git import Repo
 from common.convertors import MemoryConvertor
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
+from common.github_env import GitHubEnv
 from common.namepsace import Namespace
 from dr_client import DrClient
 from main import main
@@ -34,12 +36,28 @@ from schema_validator import ModelSchema
 from schema_validator import SharedSchema
 from tests.conftest import unique_str
 
-FUNCTIONAL_TESTS_NAMESPACE = "/datarobot/gh-action/functional-tests-63e89e5656215589ef3cd3b5"
+FUNCTIONAL_TESTS_NAMESPACE = "{}/datarobot/gh-action/functional-tests"
+
+
+@pytest.fixture(name="github_repository_id", scope="session")
+def github_repository_id_fixture():
+    """
+    A fixture to return the GitHub repository ID if exists. Otherwise, use the local machine
+    name as the repository ID and return it.
+    """
+
+    unique_repository_id = GitHubEnv.repository_id()
+    if not unique_repository_id:
+        unique_repository_id = socket.gethostname()
+        with github_env_set("GITHUB_REPOSITORY_ID", unique_repository_id):
+            yield unique_repository_id
+    else:
+        yield unique_repository_id
 
 
 # pylint: disable=unused-argument
 @pytest.fixture(name="setup_functional_tests_namespace", scope="session")
-def setup_functional_tests_namespace_fixture():
+def setup_functional_tests_namespace_fixture(github_repository_id):
     """
     A fixture to set up the GitHub action functional tests' namespace. Please note that this is
     required because there could be direct access to modules from the functional tests, such
@@ -47,8 +65,7 @@ def setup_functional_tests_namespace_fixture():
     """
 
     try:
-        with github_env_set("GITHUB_REPOSITORY_ID", "1234567"):
-            Namespace.init(FUNCTIONAL_TESTS_NAMESPACE)
+        Namespace.init(FUNCTIONAL_TESTS_NAMESPACE.format(github_repository_id))
         yield
     finally:
         Namespace.uninit()
@@ -577,11 +594,9 @@ def run_github_action(
 
     main_branch_head_sha = main_branch_head_sha or git_repo.head.commit.hexsha
     ref_name = main_branch_name if event_name == "push" else "merge-branch"
-    with github_env_set("GITHUB_REPOSITORY_ID", "1234567"), github_env_set(
-        "GITHUB_WORKSPACE", str(workspace_path)
-    ), github_env_set("GITHUB_SHA", git_repo.commit(main_branch_head_sha).hexsha), github_env_set(
-        "GITHUB_EVENT_NAME", event_name
-    ), github_env_set(
+    with github_env_set("GITHUB_WORKSPACE", str(workspace_path)), github_env_set(
+        "GITHUB_SHA", git_repo.commit(main_branch_head_sha).hexsha
+    ), github_env_set("GITHUB_EVENT_NAME", event_name), github_env_set(
         "GITHUB_SHA", git_repo.commit(main_branch_head_sha).hexsha
     ), github_env_set(
         "GITHUB_BASE_REF", main_branch_name
@@ -589,6 +604,7 @@ def run_github_action(
         "GITHUB_REF_NAME", ref_name
     ):
         datarobot_webserver = os.environ.get("DATAROBOT_WEBSERVER")
+        namespace = FUNCTIONAL_TESTS_NAMESPACE.format(GitHubEnv.repository_id())
         args = [
             "--webserver",
             datarobot_webserver,
@@ -597,7 +613,7 @@ def run_github_action(
             "--branch",
             main_branch_name,
             "--namespace",
-            FUNCTIONAL_TESTS_NAMESPACE,
+            namespace,
             "--allow-model-deletion",
         ]
 
