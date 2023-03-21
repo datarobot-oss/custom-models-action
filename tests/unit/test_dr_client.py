@@ -1451,3 +1451,110 @@ class TestDeploymentSettingsPayloadConstruction:
                     "enabled": pred_data_collection_enabled
                 }
         return actual_settings
+
+
+class TestSetupSegmentAnalysis:
+    """Contains unit-test for the method to setup segment analaysis."""
+
+    @pytest.mark.parametrize(
+        "desired_enabled, actual_enabled",
+        [(None, None), (False, False), (True, True)],
+        ids=["both-none", "both-false", "both-true"],
+    )
+    def test_desired_equals_actual__no_attributes(self, desired_enabled, actual_enabled):
+        """
+        Test the expected payload if segment analysis enablement is the same for desired and
+        actual settings.
+        """
+
+        desired_settings = {DeploymentSchema.SETTINGS_SECTION_KEY: {}}
+        if desired_enabled is not None:
+            desired_settings[DeploymentSchema.SETTINGS_SECTION_KEY] = {
+                DeploymentSchema.SEGMENT_ANALYSIS_KEY: {
+                    DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY: desired_enabled,
+                }
+            }
+        deployment_info = DeploymentInfo("dummy.yaml", desired_settings)
+        if actual_enabled is None:
+            actual_settings = None
+        else:
+            actual_settings = {"segmentAnalysis": {"enabled": actual_enabled}}
+
+        segmented_analysis_payload = DrClient._setup_segmented_analysis(
+            deployment_info, actual_settings
+        )
+        assert not segmented_analysis_payload
+
+    def test_desired_exists_with_attributes__no_actual_settings(self):
+        """
+        Test the expected payload if segment analysis settings are fully configured while
+        actual(remote) configuration is not set.
+        """
+
+        desired_settings = {
+            DeploymentSchema.SETTINGS_SECTION_KEY: {
+                DeploymentSchema.SEGMENT_ANALYSIS_KEY: {
+                    DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY: True,
+                    DeploymentSchema.SEGMENT_ANALYSIS_ATTRIBUTES_KEY: ["attr-1", "attr-2"],
+                },
+            }
+        }
+        deployment_info = DeploymentInfo("dummy.yaml", desired_settings)
+        segmented_analysis_payload = DrClient._setup_segmented_analysis(
+            deployment_info, actual_settings=None
+        )
+        expected_attrs = desired_settings[DeploymentSchema.SETTINGS_SECTION_KEY][
+            DeploymentSchema.SEGMENT_ANALYSIS_KEY
+        ][DeploymentSchema.SEGMENT_ANALYSIS_ATTRIBUTES_KEY]
+        assert segmented_analysis_payload == {"enabled": True, "attributes": expected_attrs}
+
+    def test_desired_exists__no_actual_settings__no_attributes(self):
+        """
+        Test the expected payload if segment analysis settings was only enabled without
+        actual(remote) configuration.
+        """
+
+        desired_settings = {
+            DeploymentSchema.SETTINGS_SECTION_KEY: {
+                DeploymentSchema.SEGMENT_ANALYSIS_KEY: {
+                    DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY: True,
+                }
+            }
+        }
+        deployment_info = DeploymentInfo("dummy.yaml", desired_settings)
+        segmented_analysis_payload = DrClient._setup_segmented_analysis(
+            deployment_info, actual_settings=None
+        )
+        assert segmented_analysis_payload == {"enabled": True}
+
+    @pytest.mark.parametrize(
+        "orig_segmented_analysis_attrs", [None, ["orig-attr-1", "oring-attr-2"]]
+    )
+    def test_desired_and_actual_settings_enabled__new_attributes(
+        self, orig_segmented_analysis_attrs
+    ):
+        """
+        Test the expected payload if segment analysis settings exist with new attributes, which
+        different from the actual (remote) settings.
+        """
+
+        new_segment_analysis_attrs = ["new-attr-1", "new-attr-2"]
+        desired_settings = {
+            DeploymentSchema.SETTINGS_SECTION_KEY: {
+                DeploymentSchema.SEGMENT_ANALYSIS_KEY: {
+                    DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY: True,
+                    DeploymentSchema.SEGMENT_ANALYSIS_ATTRIBUTES_KEY: new_segment_analysis_attrs,
+                }
+            }
+        }
+        deployment_info = DeploymentInfo("dummy.yaml", desired_settings)
+        actual_settings = {"segmentAnalysis": {"enabled": True}}
+        if orig_segmented_analysis_attrs:
+            actual_settings["segmentAnalysis"]["attributes"] = orig_segmented_analysis_attrs
+        segmented_analysis_payload = DrClient._setup_segmented_analysis(
+            deployment_info, actual_settings
+        )
+        assert segmented_analysis_payload == {
+            "enabled": True,
+            "attributes": new_segment_analysis_attrs,
+        }

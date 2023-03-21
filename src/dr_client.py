@@ -1335,12 +1335,14 @@ class DrClient:
             DeploymentSchema.SEGMENT_ANALYSIS_KEY,
             DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY,
         )
-        if desired_enabled is not None:
-            actual_enabled = (
-                actual_settings["segmentAnalysis"]["enabled"] if actual_settings else None
-            )
-            if desired_enabled != actual_enabled:
-                segmented_analysis_payload = {"enabled": desired_enabled}
+        desired_enabled = bool(desired_enabled)
+        actual_enabled = (
+            actual_settings.get("segmentAnalysis", {}).get("enabled", False)
+            if actual_settings
+            else False
+        )
+        if desired_enabled != actual_enabled:
+            segmented_analysis_payload = {"enabled": desired_enabled}
 
         desired_attributes = deployment_info.get_settings_value(
             DeploymentSchema.SEGMENT_ANALYSIS_KEY,
@@ -1348,10 +1350,16 @@ class DrClient:
         )
         if desired_attributes is not None:
             actual_attributes = (
-                actual_settings["segmentAnalysis"]["attributes"] if actual_settings else None
+                actual_settings.get("segmentAnalysis", {}).get("attributes")
+                if actual_settings
+                else None
             )
             if desired_attributes != actual_attributes:
-                segmented_analysis_payload["attributes"] = desired_attributes
+                # The `enabled` attribute is mandatory, so make sure it is set.
+                segmented_analysis_payload = {
+                    "enabled": desired_enabled,
+                    "attributes": desired_attributes,
+                }
 
         return segmented_analysis_payload
 
