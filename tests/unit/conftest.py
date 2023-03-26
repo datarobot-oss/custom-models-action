@@ -578,3 +578,11 @@ def validate_namespaced_user_provided_id(info_bases, namespace):
         assert Namespace.is_in_namespace(info.user_provided_id)
         if namespace:
             assert info.user_provided_id.startswith(f"{namespace}/")
+
+
+@pytest.fixture(autouse=True)
+def mock_git_model_version():
+    """A fixture to mock the GitModelVersion class in the model controller."""
+
+    with patch("model_controller.GitModelVersion"):
+        yield

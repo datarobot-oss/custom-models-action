@@ -230,7 +230,8 @@ class TestModelSchemaValidator:
                 self._validate_schema(is_single, model_schema)
 
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
-    def test_invalid_mutual_exclusive_keys_partitioning_and_holdout(self, is_single):
+    @pytest.mark.parametrize("section", [ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.VERSION_KEY])
+    def test_invalid_mutual_exclusive_keys_partitioning_and_holdout(self, is_single, section):
         """
         A case to test an invalid mutual exclusive keys related to partitioning and holdout
         attributes.
@@ -243,18 +244,55 @@ class TestModelSchemaValidator:
             if is_single
             else model_metadata[ModelSchema.MULTI_MODELS_KEY][0][ModelSchema.MODEL_ENTRY_META_KEY]
         )
-        edit_metadata[ModelSchema.SETTINGS_SECTION_KEY][ModelSchema.HOLDOUT_DATASET_ID_KEY] = str(
-            ObjectId()
-        )
-        edit_metadata[ModelSchema.SETTINGS_SECTION_KEY][
-            ModelSchema.PARTITIONING_COLUMN_KEY
-        ] = "holdout"
+        edit_metadata[section][ModelSchema.PARTITIONING_COLUMN_KEY] = "partitioning"
+        edit_metadata[section][ModelSchema.HOLDOUT_DATASET_ID_KEY] = str(ObjectId())
 
         with pytest.raises(InvalidModelSchema):
             if is_single:
                 ModelSchema.validate_and_transform_single(model_metadata)
             else:
                 ModelSchema.validate_and_transform_multi(model_metadata)
+
+    @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
+    @pytest.mark.parametrize("is_unstructured", [True, False], ids=["unstructured", "structured"])
+    @pytest.mark.parametrize("with_holdout", [True, False], ids=["with-holdout", "without-holdout"])
+    def test_invalid_mutual_exclusive_training_and_holdout_keys_between_settings_and_version(
+        self, is_single, is_unstructured, with_holdout
+    ):
+        """
+        A case to test an invalid mutual exclusive keys between model settings section and version
+        section, related to training and holdout dataset attributes.
+        """
+
+        model_metadata = create_partial_model_schema(is_single, num_models=1, with_target_type=True)
+
+        edit_metadata = (
+            model_metadata
+            if is_single
+            else model_metadata[ModelSchema.MULTI_MODELS_KEY][0][ModelSchema.MODEL_ENTRY_META_KEY]
+        )
+        sections_in_test = [ModelSchema.SETTINGS_SECTION_KEY, ModelSchema.VERSION_KEY]
+        for index in range(2):
+            section_one = sections_in_test[index]
+            section_two = sections_in_test[index ^ 1]
+            if is_unstructured:
+                edit_metadata[section_one][ModelSchema.TRAINING_DATASET_ID_KEY] = str(ObjectId())
+                edit_metadata[section_two][ModelSchema.TRAINING_DATASET_ID_KEY] = str(ObjectId())
+                if with_holdout:
+                    edit_metadata[section_one][ModelSchema.HOLDOUT_DATASET_ID_KEY] = str(ObjectId())
+                    edit_metadata[section_two][ModelSchema.HOLDOUT_DATASET_ID_KEY] = str(ObjectId())
+            else:
+                edit_metadata[section_one][ModelSchema.TRAINING_DATASET_ID_KEY] = str(ObjectId())
+                edit_metadata[section_two][ModelSchema.TRAINING_DATASET_ID_KEY] = str(ObjectId())
+                if with_holdout:
+                    edit_metadata[section_one][ModelSchema.PARTITIONING_COLUMN_KEY] = "partitioning"
+                    edit_metadata[section_two][ModelSchema.PARTITIONING_COLUMN_KEY] = "partitioning"
+
+            with pytest.raises(InvalidModelSchema):
+                if is_single:
+                    ModelSchema.validate_and_transform_single(model_metadata)
+                else:
+                    ModelSchema.validate_and_transform_multi(model_metadata)
 
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
     @pytest.mark.parametrize(

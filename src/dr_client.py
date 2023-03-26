@@ -40,6 +40,9 @@ class DrClient:
     CUSTOM_MODELS_ROUTE = "customModels/"
     CUSTOM_MODEL_ROUTE = CUSTOM_MODELS_ROUTE + "{model_id}/"
     CUSTOM_MODELS_VERSIONS_ROUTE = CUSTOM_MODEL_ROUTE + "versions/"
+    CUSTOM_MODELS_VERSIONS_CREATE_WITH_TRAINING_DATA_ROUTE = (
+        CUSTOM_MODEL_ROUTE + "versions/withTrainingData"
+    )
     CUSTOM_MODELS_VERSION_ROUTE = CUSTOM_MODEL_ROUTE + "versions/{model_ver_id}/"
     CUSTOM_MODELS_VERSION_DEPENDENCY_BUILD_ROUTE = CUSTOM_MODELS_VERSION_ROUTE + "dependencyBuild/"
     CUSTOM_MODELS_VERSION_DEPENDENCY_BUILD_LOG_ROUTE = (
@@ -287,6 +290,11 @@ class DrClient:
         elif model_info.is_multiclass:
             payload["classLabels"] = model_info.get_settings_value(ModelSchema.CLASS_LABELS_KEY)
 
+        if model_info.is_there_a_change_in_training_or_holdout_data_at_version_level(
+            datarobot_latest_model_version=None
+        ):
+            payload["isTrainingDataForVersionsPermanentlyEnabled"] = True
+
         return payload
 
     def fetch_custom_model_versions(self, custom_model_id, **kwargs):
@@ -381,10 +389,7 @@ class DrClient:
         custom_model_id,
         is_major_update,
         model_info,
-        ref_name,
-        commit_url,
-        main_branch_commit_sha,
-        pull_request_commit_sha=None,
+        git_model_version,
         changed_file_paths=None,
         file_ids_to_delete=None,
         from_latest=False,
@@ -400,14 +405,8 @@ class DrClient:
             Whether to create a major or minor version.
         model_info : ModelInfo
             An information about the model in the local source tree.
-        ref_name : str
-            The branch or tag name that triggered the workflow run.
-        commit_url : str
-            A GitHub commit URL.
-        main_branch_commit_sha : str
-            A commit SHA from the main branch. For pull requests, it is the split point.
-        pull_request_commit_sha : str or None
-            The top commit sha of a feature branch in a pull request. Otherwise, None.
+        git_model_version : common.GitModelVersion
+            A class that contains required information about the model's version in Git.
         changed_file_paths : list[ModelFilePath] or None
             A list of changed files related to the last GitHub action.
         file_ids_to_delete : list[str] or None
@@ -430,10 +429,7 @@ class DrClient:
             payload, file_objs = self._setup_payload_for_custom_model_version_creation(
                 is_major_update,
                 model_info,
-                ref_name,
-                commit_url,
-                main_branch_commit_sha,
-                pull_request_commit_sha,
+                git_model_version,
                 changed_file_paths,
                 file_ids_to_delete=file_ids_to_delete,
                 base_env_id=base_env_id,
@@ -468,10 +464,7 @@ class DrClient:
         cls,
         is_major_update,
         model_info,
-        ref_name,
-        commit_url,
-        main_branch_commit_sha,
-        pull_request_commit_sha,
+        git_model_version,
         changed_file_paths,
         file_ids_to_delete=None,
         base_env_id=None,
@@ -482,10 +475,10 @@ class DrClient:
                 "gitModelVersion",
                 json.dumps(
                     {
-                        "refName": ref_name,
-                        "commitUrl": commit_url,
-                        "mainBranchCommitSha": main_branch_commit_sha,
-                        "pullRequestCommitSha": pull_request_commit_sha,
+                        "refName": git_model_version.ref_name,
+                        "commitUrl": git_model_version.commit_url,
+                        "mainBranchCommitSha": git_model_version.main_branch_commit_sha,
+                        "pullRequestCommitSha": git_model_version.pull_request_commit_sha,
                     }
                 ),
             ),
@@ -564,6 +557,102 @@ class DrClient:
                 "Failed to update custom model version main branch commit SHA. "
                 f"Response status: {response.status_code} "
                 f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        return response.json()
+
+    def create_version_from_latest_with_training_and_holdout_data(
+        self, model_info, datarobot_custom_model, git_model_version
+    ):
+        """
+        Creates a new custom model version from latest with new training and/or holdout data.
+
+        Parameters
+        ----------
+        model_info : ModelInfo
+            An information about the model in the local source tree.
+        datarobot_custom_model : dict
+            A DataRobot custom model entity.
+        git_model_version : common.GitModelVersion
+            A class that contains required information about the model's version in Git.
+
+        Returns
+        -------
+        dict
+            Custom inference model version.
+        """
+
+        if not datarobot_custom_model.get("isTrainingDataForVersionsPermanentlyEnabled"):
+            self._permanently_enable_training_data_for_versions_in_model(
+                model_info, datarobot_custom_model
+            )
+
+        holdout_data = (
+            {
+                "datasetId": model_info.get_value(
+                    ModelSchema.VERSION_KEY, ModelSchema.HOLDOUT_DATASET_ID_KEY
+                )
+            }
+            if model_info.is_unstructured
+            else {
+                "partitionColumn": model_info.get_value(
+                    ModelSchema.VERSION_KEY, ModelSchema.PARTITIONING_COLUMN_KEY
+                )
+            }
+        )
+
+        payload = {
+            "trainingData": {
+                "datasetId": model_info.get_value(
+                    ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_ID_KEY
+                )
+            },
+            "holdoutData": holdout_data,
+            "gitModelVersion": {
+                "refName": git_model_version.ref_name,
+                "commitUrl": git_model_version.commit_url,
+                "mainBranchCommitSha": git_model_version.main_branch_commit_sha,
+                "pullRequestCommitSha": git_model_version.pull_request_commit_sha,
+            },
+        }
+
+        url = DrClient.CUSTOM_MODELS_VERSIONS_CREATE_WITH_TRAINING_DATA_ROUTE.format(
+            model_id=datarobot_custom_model["id"]
+        )
+        response = self._http_requester.patch(url, json=payload)
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                "Failed to assign training/holdout data at custom model version level. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        location = self._wait_for_async_resolution(response.headers["Location"])
+        response = self._http_requester.get(location, raw=True)
+        return response.json()
+
+    def _permanently_enable_training_data_for_versions_in_model(
+        self, model_info, datarobot_custom_model
+    ):
+        logger.info(
+            "Permanently enable training data for version in model '%s'.",
+            model_info.user_provided_id,
+        )
+        payload = {"isTrainingDataForVersionsPermanentlyEnabled": True}
+        err_msg = "Failed to permanently enable training data for version"
+        self._update_model(model_info, datarobot_custom_model, payload, err_msg)
+
+    def _update_model(self, model_info, datarobot_custom_model, payload, err_msg=None):
+        err_msg = err_msg or "Failed to update custom model"
+        url = self.CUSTOM_MODEL_ROUTE.format(model_id=datarobot_custom_model["id"])
+        response = self._http_requester.patch(url, json=payload)
+        if response.status_code != 200:
+            raise DataRobotClientError(
+                f"{err_msg}. "
+                f"User provided ID: {model_info.user_provided_id}. "
+                f"DataRobot model ID: {datarobot_custom_model['id']}. "
+                f"Response status: {response.status_code}. "
+                f"Response body: {response.text}.",
                 code=response.status_code,
             )
         return response.json()
@@ -1243,21 +1332,26 @@ class DrClient:
             if association_payload:
                 payload["associationId"] = association_payload
 
-        desired_target_drift = deployment_info.get_settings_value(
+        desired_target_drift_enabled = deployment_info.get_settings_value(
             DeploymentSchema.ENABLE_TARGET_DRIFT_KEY
         )
-        if desired_target_drift is not None:
-            actual_targe_drift = actual_settings["targetDrift"] if actual_settings else None
-            if actual_targe_drift != desired_target_drift:
-                payload["targetDrift"] = {"enabled": desired_target_drift}
+        if desired_target_drift_enabled is not None:
+            actual_target_drift_enabled = bool(
+                actual_settings and actual_settings.get("targetDrift", {}).get("enabled")
+            )
+            if desired_target_drift_enabled != actual_target_drift_enabled:
+                payload["targetDrift"] = {"enabled": desired_target_drift_enabled}
 
-        desired_feature_drift = deployment_info.get_settings_value(
+        desired_feature_drift_enabled = deployment_info.get_settings_value(
             DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY
         )
-        if desired_feature_drift is not None:
-            actual_feature_drift = actual_settings["featureDrift"] if actual_settings else None
-            if actual_feature_drift != desired_feature_drift:
-                payload["featureDrift"] = {"enabled": desired_feature_drift}
+        if desired_feature_drift_enabled is not None:
+            actual_feature_drift_enabled = bool(
+                actual_settings and actual_settings.get("featureDrift", {}).get("enabled")
+            )
+
+            if desired_feature_drift_enabled != actual_feature_drift_enabled:
+                payload["featureDrift"] = {"enabled": desired_feature_drift_enabled}
 
         desired_segmented_analysis = deployment_info.get_settings_value(
             DeploymentSchema.SEGMENT_ANALYSIS_KEY
@@ -1359,7 +1453,7 @@ class DrClient:
             else False
         )
         if desired_enabled != actual_enabled:
-            segmented_analysis_payload = {"enabled": desired_enabled}
+            segmented_analysis_payload["enabled"] = desired_enabled
 
         desired_attributes = deployment_info.get_settings_value(
             DeploymentSchema.SEGMENT_ANALYSIS_KEY,
@@ -1566,7 +1660,7 @@ class DrClient:
             logger.info(validation_message)
 
     def _replace_deployment_model(self, model_package_id, deployment_id):
-        payload = {"modelPackageId": model_package_id, "reason": "DATA_DRIFT"}
+        payload = {"modelPackageId": model_package_id, "reason": "OTHER"}
         url = self.DEPLOYMENT_MODEL_ROUTE.format(deployment_id=deployment_id)
         response = self._http_requester.patch(url, json=payload)
         if response.status_code != 202:
@@ -1676,7 +1770,7 @@ class DrClient:
         """
 
         ext_stats_payload = {}
-        remote_settings = datarobot_custom_model.get("externalMlopsStatsConfig", {}) or {}
+        remote_settings = datarobot_custom_model.get("externalMlopsStatsConfig") or {}
 
         DatasetParam = namedtuple("DatasetParam", ["local", "remote"])
         dataset_params = [
@@ -1690,18 +1784,8 @@ class DrClient:
 
         if ext_stats_payload:
             payload = {"externalMlopsStatsConfig": ext_stats_payload}
-            url = self.CUSTOM_MODEL_ROUTE.format(model_id=datarobot_custom_model["id"])
-            response = self._http_requester.patch(url, json=payload)
-            if response.status_code != 200:
-                raise DataRobotClientError(
-                    "Failed to update training / holdout datasets for unstructured model. "
-                    f"User provided ID: {model_info.user_provided_id}, "
-                    f"DataRobot model ID: {datarobot_custom_model['id']}, "
-                    f"Response status: {response.status_code}, "
-                    f"Response body: {response.text}",
-                    code=response.status_code,
-                )
-            return response.json()
+            err_msg = "Failed to update training / holdout datasets for unstructured model"
+            return self._update_model(model_info, datarobot_custom_model, payload, err_msg)
         return None
 
     def update_training_dataset_for_structured_models(self, datarobot_custom_model, model_info):
@@ -1742,18 +1826,35 @@ class DrClient:
             url = self.CUSTOM_MODEL_TRAINING_DATA.format(model_id=datarobot_custom_model["id"])
             response = self._http_requester.patch(url, json=training_dataset_payload)
             if response.status_code != 202:
-                raise DataRobotClientError(
-                    "Failed to update training dataset for structured model. "
-                    f"User provided ID: {model_info.user_provided_id}. "
-                    f"DataRobot model ID: {datarobot_custom_model['id']}. "
-                    f"Response status: {response.status_code}. "
-                    f"Response body: {response.text}.",
-                    code=response.status_code,
+                msg = "Failed to update training dataset for structured model"
+                self._raise_training_assignment_exception(
+                    msg, model_info, datarobot_custom_model, response
                 )
             location = self._wait_for_async_resolution(response.headers["Location"])
             response = self._http_requester.get(location, raw=True)
             return response.json()
         return None
+
+    @staticmethod
+    def _raise_training_assignment_exception(msg, model_info, datarobot_custom_model, response):
+        message = (
+            f"{msg}. "
+            f"User provided ID: {model_info.user_provided_id}. "
+            f"DataRobot model ID: {datarobot_custom_model['id']}. "
+            f"Response status: {response.status_code}. "
+            f"Response body: {response.text}."
+        )
+        if (
+            response.status_code == 422
+            and "Training data assignment at the model level has been permanently disabled"
+            in response.text
+        ):
+            message += (
+                "\nHint: please move the training/holdout attributes in your model's YAML "
+                "definition, from the 'settings' section to the 'version' section."
+            )
+
+        raise DataRobotClientError(message, code=response.status_code)
 
     def update_model_settings(self, datarobot_custom_model, model_info):
         """
@@ -1780,18 +1881,8 @@ class DrClient:
                 payload[remote_key] = local_value
 
         if payload:
-            url = self.CUSTOM_MODEL_ROUTE.format(model_id=datarobot_custom_model["id"])
-            response = self._http_requester.patch(url, json=payload)
-            if response.status_code != 200:
-                raise DataRobotClientError(
-                    "Failed to update custom model settings. "
-                    f"User provided ID: {model_info.user_provided_id}. "
-                    f"DataRobot model ID: {datarobot_custom_model['id']}. "
-                    f"Response status: {response.status_code}. "
-                    f"Response body: {response.text}.",
-                    code=response.status_code,
-                )
-            return response.json()
+            err_msg = "Failed to update custom model settings"
+            return self._update_model(model_info, datarobot_custom_model, payload, err_msg)
         return None
 
     def fetch_environment_drop_in(self, search_for=None):

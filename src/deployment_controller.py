@@ -208,6 +208,9 @@ class DeploymentController(ControllerBase):
                         self._replace_model_version_in_deployment(
                             desired_datarobot_model.latest_version, datarobot_deployment
                         )
+                        self._reapply_deployment_settings_upon_model_replacement(
+                            deployment_info, datarobot_deployment
+                        )
                     updated = True
 
                 if updated:
@@ -362,6 +365,23 @@ class DeploymentController(ControllerBase):
             self.metrics.total_updated_settings.value += 1
 
         return settings_were_updated
+
+    def _reapply_deployment_settings_upon_model_replacement(
+        self, deployment_info, datarobot_deployment
+    ):
+        """
+        Upon model replacement in a deployment, some deployment's settings (e.g. data drift,
+        target drift, etc.) may be reset in DataRobot. Therefore, it is required to re-apply these
+        configurations.
+        """
+
+        datarobot_deployment_id = datarobot_deployment.deployment["id"]
+        actual_deployment_settings = self._dr_client.fetch_deployment_settings(
+            datarobot_deployment_id, deployment_info
+        )
+        self._dr_client.update_deployment_settings(
+            datarobot_deployment.deployment, deployment_info, actual_deployment_settings
+        )
 
     def handle_deleted_deployments(self):
         """Delete deployments in DataRobot. Deletion takes place only within a push GitHub event."""
