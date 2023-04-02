@@ -379,6 +379,7 @@ class DrClient:
     def create_custom_model_version(
         self,
         custom_model_id,
+        is_major_update,
         model_info,
         ref_name,
         commit_url,
@@ -395,6 +396,8 @@ class DrClient:
         ----------
         custom_model_id : str
             A DataRobot custom model ID.
+        is_major_update : bool
+            Whether to create a major or minor version.
         model_info : ModelInfo
             An information about the model in the local source tree.
         ref_name : str
@@ -425,6 +428,7 @@ class DrClient:
                 ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_ID_KEY
             )
             payload, file_objs = self._setup_payload_for_custom_model_version_creation(
+                is_major_update,
                 model_info,
                 ref_name,
                 commit_url,
@@ -462,6 +466,7 @@ class DrClient:
     @classmethod
     def _setup_payload_for_custom_model_version_creation(
         cls,
+        is_major_update,
         model_info,
         ref_name,
         commit_url,
@@ -472,6 +477,7 @@ class DrClient:
         base_env_id=None,
     ):
         payload = [
+            ("isMajorUpdate", str(is_major_update)),
             (
                 "gitModelVersion",
                 json.dumps(
@@ -486,9 +492,6 @@ class DrClient:
         ]
 
         file_objs = cls._setup_model_version_files(changed_file_paths, file_ids_to_delete, payload)
-
-        is_major = bool(changed_file_paths or file_ids_to_delete or base_env_id)
-        payload.append(("isMajorUpdate", str(is_major)))
 
         if base_env_id:
             payload.append(("baseEnvironmentId", base_env_id))
@@ -1046,14 +1049,28 @@ class DrClient:
             A DataRobot deployment.
         """
 
-        model_package = self._create_model_package_from_custom_model_version(
+        model_package = self.create_model_package_from_custom_model_version(
             custom_model_version["id"]
         )
         deployment = self._create_deployment_from_model_package(model_package, deployment_info)
         deployment, _ = self.update_deployment_settings(deployment, deployment_info)
         return deployment
 
-    def _create_model_package_from_custom_model_version(self, custom_model_version_id):
+    def create_model_package_from_custom_model_version(self, custom_model_version_id):
+        """
+        Creates a model package in the model's registry from a custom model version.
+
+        Parameters
+        ----------
+        custom_model_version_id : str
+            A custom model version ID
+
+        Returns
+        -------
+        dict :
+            A DataRobot model package entity.
+        """
+
         payload = {"customModelVersionId": custom_model_version_id}
         response = self._http_requester.post(self.MODEL_PACKAGES_CREATE_ROUTE, json=payload)
         if response.status_code != 201:
@@ -1515,7 +1532,7 @@ class DrClient:
             A DataRobot deployment, in which the model was replaced.
         """
 
-        model_package = self._create_model_package_from_custom_model_version(
+        model_package = self.create_model_package_from_custom_model_version(
             custom_model_version["id"]
         )
         self._validate_model_compatibility(
@@ -1583,7 +1600,7 @@ class DrClient:
             A DataRobot challenger.
         """
 
-        model_package = self._create_model_package_from_custom_model_version(
+        model_package = self.create_model_package_from_custom_model_version(
             custom_model_version["id"]
         )
         deployment_id = datarobot_deployment.deployment["id"]

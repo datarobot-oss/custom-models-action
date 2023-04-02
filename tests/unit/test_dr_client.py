@@ -491,6 +491,7 @@ class TestCustomModelVersionRoutes:
                 for p in single_model_file_paths
             ]
             payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(
+                True,
                 regression_model_info,
                 ref_name,
                 commit_url,
@@ -542,6 +543,7 @@ class TestCustomModelVersionRoutes:
         """A case to test a minimal payload setup when creating a custom model version."""
 
         payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(
+            True,
             minimal_regression_model_info,
             ref_name,
             commit_url,
@@ -556,11 +558,13 @@ class TestCustomModelVersionRoutes:
         )
         assert not file_objs
 
+    @pytest.mark.parametrize("is_major_update", [True, False], ids=["major", "minor"])
     @responses.activate
     def test_create_custom_model_version_success(
         self,
         dr_client,
         custom_model_id,
+        is_major_update,
         regression_model_info,
         custom_models_version_url_factory,
         ref_name,
@@ -575,6 +579,7 @@ class TestCustomModelVersionRoutes:
         responses.add(responses.POST, url, json=regression_model_version_response, status=201)
         version_id = dr_client.create_custom_model_version(
             custom_model_id,
+            is_major_update,
             regression_model_info,
             ref_name,
             commit_url,
@@ -603,6 +608,7 @@ class TestCustomModelVersionRoutes:
         with pytest.raises(DataRobotClientError) as ex:
             dr_client.create_custom_model_version(
                 custom_model_id,
+                True,
                 regression_model_info,
                 ref_name,
                 commit_url,

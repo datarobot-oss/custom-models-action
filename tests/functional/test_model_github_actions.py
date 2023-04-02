@@ -315,17 +315,30 @@ class TestModelGitHubActions:
         yield
 
     @pytest.mark.usefixtures("cleanup")
-    def test_e2e_push_event_with_multiple_changes(
-        self, workspace_path, git_repo, model_metadata_yaml_file, main_branch_name
+    def test_e2e_push_event_with_multiple_changes_and_one_model_package_creation_in_between(
+        self,
+        dr_client,
+        workspace_path,
+        git_repo,
+        model_metadata,
+        model_metadata_yaml_file,
+        main_branch_name,
     ):
         """
-        An end-to-end case to test a push event with multiple commits, by the custom
-        inference model GitHub action.
+        An end-to-end case to test multiple commits, each is followed by a push event. In between,
+        a model's package will be created, which means the associated version will be frozen.
+        Consequently, the followed version will be a major update.,
         """
 
+        user_provided_id = model_metadata[ModelSchema.MODEL_ID_KEY]
         # 1. Make three changes, one at a time on the main branch
-        printout("Make 3 changes one at a time on the main branch ...")
-        for index in range(3):
+        printout(
+            "Make 3 changes one at a time on the main branch ... "
+            f"user_provided_id: {user_provided_id}"
+        )
+        prev_latest_version = None
+        sequence_of_create_package_flags = [False, False, True, False, False]
+        for index, create_package in enumerate(sequence_of_create_package_flags):
             # 2. Make a change and commit it
             printout(f"Increase memory ... {index + 1}")
             new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
@@ -335,7 +348,37 @@ class TestModelGitHubActions:
             # 3. Run GitHub pull request action
             printout("Run custom model GitHub action (push event) ...")
             run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
+
+            latest_version = dr_client.fetch_custom_model_latest_version_by_user_provided_id(
+                user_provided_id
+            )
+
+            was_package_created_in_prev_iteration = bool(
+                index and sequence_of_create_package_flags[index - 1]
+            )
+            self._validate_major_minor_model_version(
+                prev_latest_version, latest_version, was_package_created_in_prev_iteration
+            )
+            prev_latest_version = latest_version
+
+            if create_package:
+                dr_client.create_model_package_from_custom_model_version(latest_version["id"])
         printout("Done")
+
+    @staticmethod
+    def _validate_major_minor_model_version(
+        prev_latest_version, latest_version, was_package_created_in_prev_iteration
+    ):
+        if prev_latest_version:
+            if was_package_created_in_prev_iteration:
+                assert latest_version["versionMajor"] == prev_latest_version["versionMajor"] + 1
+                assert latest_version["versionMinor"] == 0
+            else:
+                assert latest_version["versionMajor"] == prev_latest_version["versionMajor"]
+                assert latest_version["versionMinor"] == prev_latest_version["versionMinor"] + 1
+        else:
+            assert latest_version["versionMajor"] == 1
+            assert latest_version["versionMinor"] == 0
 
     def test_is_accessible(self):
         """A test case to check whether DataRobot webserver is accessible."""
