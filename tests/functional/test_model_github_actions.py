@@ -17,17 +17,17 @@ import shutil
 from enum import Enum
 
 import pytest
-import yaml
 
 from common.convertors import MemoryConvertor
 from common.github_env import GitHubEnv
-from dr_client import DrClient
+from dr_api_attrs import DrApiModelSettings
 from schema_validator import ModelSchema
 from tests.conftest import unique_str
 from tests.functional.conftest import NUMBER_OF_MODELS_IN_TEST
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import printout
 from tests.functional.conftest import run_github_action
+from tests.functional.conftest import save_new_metadata_and_commit
 from tests.functional.conftest import temporarily_replace_schema_value
 from tests.functional.conftest import webserver_accessible
 
@@ -151,9 +151,7 @@ class TestModelGitHubActions:
     @contextlib.contextmanager
     def _increase_memory_check(git_repo, dr_client, model_metadata, model_metadata_yaml_file):
         printout("Increase the model memory ...")
-        new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
-        git_repo.git.add(model_metadata_yaml_file)
-        git_repo.git.commit("-m", f"Increase memory to {new_memory}")
+        new_memory = increase_model_memory_by_1mb(git_repo, model_metadata_yaml_file)
 
         yield
 
@@ -329,9 +327,7 @@ class TestModelGitHubActions:
         for index, create_package in enumerate(sequence_of_create_package_flags):
             # 2. Make a change and commit it
             printout(f"Increase memory ... {index + 1}")
-            new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
-            git_repo.git.add(model_metadata_yaml_file)
-            git_repo.git.commit("-m", f"Increase memory to {new_memory}")
+            increase_model_memory_by_1mb(git_repo, model_metadata_yaml_file)
 
             # 3. Run GitHub pull request action
             printout("Run custom model GitHub action (push event) ...")
@@ -406,7 +402,7 @@ class TestModelGitHubActions:
             (ModelSchema.PREDICTION_THRESHOLD_KEY, 0.2),  # Assuming the model type is regression
         ]:
             custom_model = dr_client.fetch_custom_model_by_git_id(user_provided_id)
-            actual_settings_value = custom_model[DrClient.MODEL_SETTINGS_KEYS_MAP[settings_key]]
+            actual_settings_value = custom_model[DrApiModelSettings.to_dr_attr(settings_key)]
             assert desired_settings_value != actual_settings_value, (
                 f"Desired settings value '{desired_settings_value}' should be differ than the "
                 f"actual '{actual_settings_value}'."
@@ -428,7 +424,7 @@ class TestModelGitHubActions:
 
                 # Validate
                 custom_model = dr_client.fetch_custom_model_by_git_id(user_provided_id)
-                actual_settings_value = custom_model[DrClient.MODEL_SETTINGS_KEYS_MAP[settings_key]]
+                actual_settings_value = custom_model[DrApiModelSettings.to_dr_attr(settings_key)]
                 assert desired_settings_value == actual_settings_value, (
                     f"Desired settings value '{desired_settings_value}' should be equal to the "
                     f"actual '{actual_settings_value}'."
@@ -471,7 +467,7 @@ class TestModelGitHubActions:
         # 2. Retrieve the models from DataRobot
         model_1_user_provided_id = model_1_metadata[ModelSchema.MODEL_ID_KEY]
         dr_model_1 = dr_client.fetch_custom_model_by_git_id(model_1_user_provided_id)
-        custom_model_1_name = dr_model_1[DrClient.MODEL_SETTINGS_KEYS_MAP[ModelSchema.NAME_KEY]]
+        custom_model_1_name = dr_model_1[DrApiModelSettings.to_dr_attr(ModelSchema.NAME_KEY)]
         custom_model_1_origin_version_id = dr_model_1["latestVersion"]["id"]
 
         model_2_user_provided_id = model_2_metadata[ModelSchema.MODEL_ID_KEY]
@@ -482,11 +478,12 @@ class TestModelGitHubActions:
         model_1_metadata[ModelSchema.SETTINGS_SECTION_KEY][
             ModelSchema.NAME_KEY
         ] = f"{custom_model_1_name}-new"
-        with open(model_1_metadata_yaml_file, "w", encoding="utf-8") as fd:
-            yaml.safe_dump(model_1_metadata, fd)
-
-        git_repo.git.add(model_1_metadata_yaml_file)
-        git_repo.git.commit("-m", "Update the name of the first model.")
+        save_new_metadata_and_commit(
+            model_1_metadata,
+            model_1_metadata_yaml_file,
+            git_repo,
+            "Update the name of the first model.",
+        )
 
         printout("Run custom inference models GitHub action (push) ...")
         run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
@@ -523,7 +520,7 @@ class TestModelGitHubActions:
 
         self._validate_custom_model_action_metrics(
             expected_num_affected_models=1,
-            expected_num_updated_settings=1,
+            expected_num_updated_settings=0,
             expected_num_created_versions=1,
         )
 

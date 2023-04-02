@@ -26,6 +26,7 @@ from common.http_requester import HttpRequester
 from common.namepsace import Namespace
 from deployment_info import DeploymentInfo
 from dr_api_attrs import DrApiAttrs
+from dr_api_attrs import DrApiModelSettings
 from dr_client import DrClient
 from dr_client import logger as dr_client_logger
 from model_file_path import ModelFilePath
@@ -383,6 +384,255 @@ class TestCustomModelRoutes(SharedRouteTests):
             regression_model_response_factory,
             dr_client.fetch_custom_models,
         )
+
+
+class TestCustomModelSettingsPayload:
+    """Contains cases to test custom model settings payload construction."""
+
+    @pytest.fixture
+    def model_info(self):
+        """A fixture to create a ModelInfo, which only includes the settings section."""
+
+        metadata = {
+            ModelSchema.SETTINGS_SECTION_KEY: {
+                ModelSchema.NAME_KEY: "my-model",
+                ModelSchema.DESCRIPTION_KEY: "Some description",
+                ModelSchema.LANGUAGE_KEY: "Python",
+                ModelSchema.TARGET_NAME_KEY: "Some Target",
+                ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
+            }
+        }
+        return ModelInfo(yaml_filepath="/tmp/dummy", model_path="/tmp/model", metadata=metadata)
+
+    @pytest.fixture
+    def datarobot_custom_model(self):
+        """
+        A fixture to create a response custom model dict with the settings related attributes only.
+        """
+
+        return {
+            DrApiModelSettings.to_dr_attr(ModelSchema.NAME_KEY): "my-model",
+            DrApiModelSettings.to_dr_attr(ModelSchema.DESCRIPTION_KEY): "Some description",
+            DrApiModelSettings.to_dr_attr(ModelSchema.LANGUAGE_KEY): "Python",
+            DrApiModelSettings.to_dr_attr(ModelSchema.TARGET_NAME_KEY): "Some Target",
+            DrApiModelSettings.to_dr_attr(ModelSchema.PREDICTION_THRESHOLD_KEY): 0.5,
+        }
+
+    def test_no_update(self, model_info, datarobot_custom_model):
+        """Test no settings differences between local and remote model."""
+
+        payload = DrClient.get_settings_patch_payload(model_info, datarobot_custom_model)
+        assert not payload
+
+    def test_missing_optional_attribute_which_results_in_no_update(
+        self, model_info, datarobot_custom_model
+    ):
+        """
+        Test missing local optional attributes, which result in no update to the model's settings.
+        """
+
+        model_info.metadata[ModelSchema.SETTINGS_SECTION_KEY].pop(ModelSchema.DESCRIPTION_KEY)
+
+        payload = DrClient.get_settings_patch_payload(model_info, datarobot_custom_model)
+        assert not payload
+
+    def test_single_attribute_change(self, model_info, datarobot_custom_model):
+        """
+        Test a single settings attribute change, which result in an update of that specific
+        attribute.
+        """
+
+        origin_name = model_info.get_settings_value(ModelSchema.NAME_KEY)
+        new_name = f"{origin_name}-new"
+        model_info.metadata[ModelSchema.SETTINGS_SECTION_KEY][ModelSchema.NAME_KEY] = new_name
+
+        payload = DrClient.get_settings_patch_payload(model_info, datarobot_custom_model)
+        assert payload[DrApiModelSettings.to_dr_attr(ModelSchema.NAME_KEY)] == new_name
+
+
+class TestCustomModelTrainingHoldoutPayload:
+    """
+    Contains test cases for building an update payload for training and holdout data, for both
+    structured and unstructured models.
+    """
+
+    @pytest.fixture
+    def training_dataset_id(self):
+        """A fixture to return a training dataset ID."""
+
+        return "123"
+
+    @pytest.fixture
+    def partitioning_column(self):
+        """A fixture to return a partitioning column, which is used in structured models."""
+
+        return "partitioning-col"
+
+    @pytest.fixture
+    def holdout_dataset_id(self):
+        """A fixture to return a holdout dataset ID, which is used in unstructured models."""
+
+        return "456"
+
+    @pytest.fixture
+    def datarobot_structured_model(self, training_dataset_id, partitioning_column):
+        """A fixture that returns the training/holdout portion of a datarobot structured model."""
+
+        return {
+            "trainingDatasetId": training_dataset_id,
+            "trainingDataPartitionColumn": partitioning_column,
+        }
+
+    @pytest.fixture
+    def datarobot_unstructured_model(self, training_dataset_id, holdout_dataset_id):
+        """A fixture that returns the training/holdout portion of a datarobot unstructured model."""
+
+        return {
+            "externalMlopsStatsConfig": {
+                "trainingDatasetId": training_dataset_id,
+                "holdoutDatasetId": holdout_dataset_id,
+            }
+        }
+
+    @pytest.fixture
+    def model_info_factory(self, training_dataset_id, partitioning_column, holdout_dataset_id):
+        """
+        A factory to create a ModelInfo, which represents the local configuration for
+        training/holdout data.
+        """
+
+        def _inner(is_unstructured):
+            settings_section = {
+                ModelSchema.TRAINING_DATASET_ID_KEY: training_dataset_id,
+            }
+            metadata = {ModelSchema.SETTINGS_SECTION_KEY: settings_section}
+            if is_unstructured:
+                metadata[
+                    ModelSchema.TARGET_TYPE_KEY
+                ] = ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY
+                settings_section[ModelSchema.HOLDOUT_DATASET_ID_KEY] = holdout_dataset_id
+            else:
+                metadata[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_REGRESSION_KEY
+                settings_section[ModelSchema.PARTITIONING_COLUMN_KEY] = partitioning_column
+
+            return ModelInfo(yaml_filepath="/tmp/dummy", model_path="/tmp/model", metadata=metadata)
+
+        return _inner
+
+    def test_structured_model_local_and_remote_are_the_same(
+        self, datarobot_structured_model, model_info_factory
+    ):
+        """A case to test no settings changes for structured model."""
+
+        model_info = model_info_factory(is_unstructured=False)
+        payload = DrClient.get_training_holdout_patch_payload_at_model_level(
+            model_info, datarobot_structured_model
+        )
+        assert not payload
+
+    def test_structured_model_single_change(self, datarobot_structured_model, model_info_factory):
+        """
+        A case to test a single settings attribute change for structured model, which results in
+        an update of that specific attribute only.
+        """
+
+        model_info = model_info_factory(is_unstructured=False)
+        response_mapping = DrApiModelSettings.STRUCTURED_TRAINING_HOLDOUT_RESPONSE_MAPPING
+        for local_key, remote_response_key in response_mapping.items():
+            origin_value = model_info.get_settings_value(local_key)
+            revised_value = f"{origin_value}a"
+            with self._temporarily_revise_structured_model(
+                datarobot_structured_model, remote_response_key, revised_value
+            ):
+                payload = DrClient.get_training_holdout_patch_payload_at_model_level(
+                    model_info, datarobot_structured_model
+                )
+                patch_key = DrApiModelSettings.STRUCTURED_TRAINING_HOLDOUT_PATCH_MAPPING[local_key]
+                assert payload == {patch_key: origin_value}
+
+    @contextlib.contextmanager
+    def _temporarily_revise_structured_model(self, datarobot_model, remote_key, revised_value):
+        origin_value = datarobot_model[remote_key]
+        datarobot_model[remote_key] = revised_value
+        yield
+        datarobot_model[remote_key] = origin_value
+
+    def test_structured_model_full_update(self, datarobot_structured_model, model_info_factory):
+        """
+        A case to test full settings changes for structured model, which results in an update of
+        the all the training/holdout data attributes.
+        """
+
+        model_info = model_info_factory(is_unstructured=False)
+        response_mapping = DrApiModelSettings.STRUCTURED_TRAINING_HOLDOUT_RESPONSE_MAPPING
+        for local_key, response_key in response_mapping.items():
+            datarobot_structured_model[response_key] = None
+
+        payload = DrClient.get_training_holdout_patch_payload_at_model_level(
+            model_info, datarobot_structured_model
+        )
+
+        patch_mapping = DrApiModelSettings.STRUCTURED_TRAINING_HOLDOUT_PATCH_MAPPING
+        for local_key, patch_key in patch_mapping.items():
+            assert payload[patch_key] == model_info.get_settings_value(local_key)
+
+    def test_unstructured_model_local_and_remote_are_the_same(
+        self, datarobot_unstructured_model, model_info_factory
+    ):
+        """A case to test no settings changes for unstructured model."""
+
+        model_info = model_info_factory(is_unstructured=True)
+        payload = DrClient.get_training_holdout_patch_payload_at_model_level(
+            model_info, datarobot_unstructured_model
+        )
+        assert not payload
+
+    def test_unstructured_model_single_change(
+        self, datarobot_unstructured_model, model_info_factory
+    ):
+        """
+        A case to test a single settings attribute change for unstructured model, which results in
+        an update of that specific attribute only.
+        """
+
+        model_info = model_info_factory(is_unstructured=True)
+        keys_mapping = DrApiModelSettings.UNSTRUCTURED_TRAINING_HOLDOUT_MAPPING
+        for local_key, remote_key in keys_mapping.items():
+            origin_value = model_info.get_settings_value(local_key)
+            revised_value = f"{origin_value}a"
+            with self._temporarily_revise_unstructured_model(
+                datarobot_unstructured_model, remote_key, revised_value
+            ):
+                payload = DrClient.get_training_holdout_patch_payload_at_model_level(
+                    model_info, datarobot_unstructured_model
+                )
+                assert payload == {"externalMlopsStatsConfig": {remote_key: origin_value}}
+
+    @contextlib.contextmanager
+    def _temporarily_revise_unstructured_model(self, datarobot_model, remote_key, revised_value):
+        origin_value = datarobot_model["externalMlopsStatsConfig"][remote_key]
+        datarobot_model["externalMlopsStatsConfig"][remote_key] = revised_value
+        yield
+        datarobot_model["externalMlopsStatsConfig"][remote_key] = origin_value
+
+    def test_unstructured_model_full_update(self, datarobot_unstructured_model, model_info_factory):
+        """
+        A case to test full settings changes for unstructured model, which results in an update of
+        the all the training/holdout data attributes.
+        """
+
+        model_info = model_info_factory(is_unstructured=True)
+        keys_mapping = DrApiModelSettings.UNSTRUCTURED_TRAINING_HOLDOUT_MAPPING
+        ext_mlops_stats_config = datarobot_unstructured_model["externalMlopsStatsConfig"]
+        for local_key, remote_key in keys_mapping.items():
+            ext_mlops_stats_config[remote_key] = None
+        payload = DrClient.get_training_holdout_patch_payload_at_model_level(
+            model_info, datarobot_unstructured_model
+        )
+        ext_mlops_stats_config_payload = payload["externalMlopsStatsConfig"]
+        for local_key, remote_key in keys_mapping.items():
+            local_value = model_info.get_settings_value(local_key)
+            assert ext_mlops_stats_config_payload[remote_key] == local_value
 
 
 class TestCustomModelVersionRoutes:

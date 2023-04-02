@@ -653,7 +653,7 @@ class TestDeploymentChanges:
             "datarobot_models",
             new_callable=PropertyMock(return_value={new_model_id: new_datarobot_model}),
         ), patch.object(
-            DeploymentController, "_conditionally_create_challenger_in_deployment"
+            DeploymentController, "_create_challenger_in_deployment_if_not_created_already"
         ) as create_challenger_in_deployment_method:
             model_controller = ModelController(options, None)
             custom_inference_deployment = DeploymentController(options, model_controller, None)
@@ -698,7 +698,7 @@ class TestDeploymentChanges:
             "datarobot_models",
             new_callable=PropertyMock(return_value={model_id: datarobot_model_with_new_latest}),
         ), patch.object(
-            DeploymentController, "_conditionally_create_challenger_in_deployment"
+            DeploymentController, "_create_challenger_in_deployment_if_not_created_already"
         ) as create_challenger_in_deployment_method:
             model_controller = ModelController(options, None)
             deployment_controller = DeploymentController(options, model_controller, None)

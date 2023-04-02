@@ -26,40 +26,18 @@ from common.namepsace import Namespace
 from deployment_info import DeploymentInfo
 from metrics import Metrics
 from schema_validator import DeploymentSchema
-from schema_validator import ModelSchema
 from tests.conftest import unique_str
 from tests.functional.conftest import cleanup_models
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import printout
 from tests.functional.conftest import run_github_action
+from tests.functional.conftest import save_new_metadata_and_commit
 from tests.functional.conftest import temporarily_replace_schema
 from tests.functional.conftest import (
     temporarily_upload_training_dataset_for_structured_model,
 )
 from tests.functional.conftest import upload_and_update_dataset
 from tests.functional.conftest import webserver_accessible
-
-
-# pylint: disable=unused-argument
-@pytest.fixture(name="deployment_metadata_yaml_file")
-def fixture_deployment_metadata_yaml_file(
-    workspace_path, git_repo, build_repo_for_testing, model_metadata
-):
-    """A fixture to return a unique deployment from the temporary created local source tree."""
-
-    deployment_yaml_file = next(workspace_path.rglob("**/deployment.yaml"))
-    with open(deployment_yaml_file, encoding="utf-8") as fd:
-        yaml_content = yaml.safe_load(fd)
-        yaml_content[DeploymentSchema.DEPLOYMENT_ID_KEY] = f"deployment-id-{unique_str()}"
-        yaml_content[DeploymentSchema.MODEL_ID_KEY] = model_metadata[ModelSchema.MODEL_ID_KEY]
-
-    with open(deployment_yaml_file, "w", encoding="utf-8") as fd:
-        yaml.safe_dump(yaml_content, fd)
-
-    git_repo.git.add(deployment_yaml_file)
-    git_repo.git.commit("--amend", "--no-edit")
-
-    return deployment_yaml_file
 
 
 @pytest.fixture(name="deployment_metadata")
@@ -72,12 +50,13 @@ def fixture_deployment_metadata(deployment_metadata_yaml_file):
 
 
 @pytest.fixture(name="skip_association")
-def fixture_skip_association(deployment_metadata_yaml_file, deployment_metadata):
+def fixture_skip_association(git_repo, deployment_metadata_yaml_file, deployment_metadata):
     """A fixture to remove the association section from a given deployment metadata."""
 
     deployment_metadata[DeploymentSchema.SETTINGS_SECTION_KEY].pop(DeploymentSchema.ASSOCIATION_KEY)
-    with open(deployment_metadata_yaml_file, "w", encoding="utf-8") as fd:
-        yaml.safe_dump(deployment_metadata, fd)
+    save_new_metadata_and_commit(
+        deployment_metadata, deployment_metadata_yaml_file, git_repo, "Skip association"
+    )
 
 
 @pytest.fixture(name="cleanup")
@@ -109,7 +88,7 @@ class TestDeploymentGitHubActions:
 
     @contextlib.contextmanager
     def _upload_actuals_dataset(
-        self, event_name, dr_client, deployment_metadata, deployment_metadata_yaml_file
+        self, dr_client, deployment_metadata, deployment_metadata_yaml_file
     ):
         association_id_column = DeploymentSchema.get_value(
             deployment_metadata,
@@ -185,7 +164,7 @@ class TestDeploymentGitHubActions:
         # Upload actuals dataset and set the deployment metadata with the dataset ID
         printout("Upload actuals dataset")
         with self._upload_actuals_dataset(
-            event_name, dr_client, deployment_metadata, deployment_metadata_yaml_file
+            dr_client, deployment_metadata, deployment_metadata_yaml_file
         ):
             self._commit_changes_by_event("Update actuals dataset", event_name, git_repo)
 
@@ -223,7 +202,7 @@ class TestDeploymentGitHubActions:
 
         # Disable challengers
         printout("Disable challengers ...")
-        self._enable_challenger(deployment_metadata, deployment_metadata_yaml_file, False)
+        self._enable_challenger(git_repo, deployment_metadata, deployment_metadata_yaml_file, False)
 
         (
             _,
@@ -270,7 +249,9 @@ class TestDeploymentGitHubActions:
 
         # Make a local change to the model and commit
         printout("Make a change to the model and run custom model GitHub action (push event) ...")
-        new_memory = increase_model_memory_by_1mb(model_metadata_yaml_file)
+        new_memory = increase_model_memory_by_1mb(
+            git_repo, model_metadata_yaml_file, do_commit=False
+        )
 
         cls._commit_changes_by_event(f"Increase memory to {new_memory}", event_name, git_repo)
 
@@ -294,12 +275,18 @@ class TestDeploymentGitHubActions:
         return the_deployment, latest_deployment_model_version_id, latest_model_version
 
     @staticmethod
-    def _enable_challenger(deployment_metadata, deployment_metadata_yaml_file, enabled=True):
+    def _enable_challenger(
+        git_repo, deployment_metadata, deployment_metadata_yaml_file, enabled=True
+    ):
         settings = deployment_metadata.get(DeploymentSchema.SETTINGS_SECTION_KEY, {})
         settings[DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY] = enabled
         deployment_metadata[DeploymentSchema.SETTINGS_SECTION_KEY] = settings
-        with open(deployment_metadata_yaml_file, "w", encoding="utf-8") as fd:
-            yaml.safe_dump(deployment_metadata, fd)
+        save_new_metadata_and_commit(
+            deployment_metadata,
+            deployment_metadata_yaml_file,
+            git_repo,
+            "Enable challenger",
+        )
 
     @pytest.mark.usefixtures("skip_model_testing", "set_deployment_actuals_dataset")
     @pytest.mark.parametrize("github_event", ["push", "pull_request"])
@@ -383,7 +370,7 @@ class TestDeploymentGitHubActions:
 
         # Enable challengers (although it is the default)
         printout("Enable challengers ...")
-        self._enable_challenger(deployment_metadata, deployment_metadata_yaml_file, True)
+        self._enable_challenger(git_repo, deployment_metadata, deployment_metadata_yaml_file, True)
 
         (
             the_deployment,
