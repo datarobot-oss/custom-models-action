@@ -519,7 +519,10 @@ class ModelController(ControllerBase):
                         self.metrics.total_created.value += 1
 
                     custom_model_id = custom_model["id"]
-                    latest_version = self._create_custom_model_version(custom_model_id, model_info)
+                    is_major_update = bool(latest_version and latest_version["isFrozen"])
+                    latest_version = self._create_custom_model_version(
+                        custom_model_id, is_major_update, model_info
+                    )
                     self.datarobot_models[user_provided_id].latest_version = latest_version
 
                     self.metrics.total_created_versions.value += 1
@@ -577,16 +580,18 @@ class ModelController(ControllerBase):
         logger.info("Custom inference model was created: %s", custom_model["id"])
         return custom_model
 
-    def _create_custom_model_version(self, custom_model_id, model_info):
+    def _create_custom_model_version(self, custom_model_id, is_major_update, model_info):
         if model_info.flags.should_upload_all_files:
             changed_file_paths = list(model_info.model_file_paths.values())
         else:
             changed_file_paths = model_info.file_changes.changed_or_new_files
 
         logger.info(
-            "Create custom inference model version. user_provided_id:  %s, from_latest: %s",
+            "Create custom inference model version. user_provided_id:  %s, from_latest: %s, "
+            "is_major=%s",
             model_info.user_provided_id,
             model_info.flags.should_create_version_from_latest,
+            is_major_update,
         )
         logger.debug(
             "Files to be uploaded: %s, user_provided_id: %s",
@@ -627,6 +632,7 @@ class ModelController(ControllerBase):
 
         custom_model_version = self._dr_client.create_custom_model_version(
             custom_model_id,
+            is_major_update,
             model_info,
             GitHubEnv.ref_name(),
             commit_url,
