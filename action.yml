@@ -42,27 +42,33 @@ inputs:
     required: false
     default: 'false'
 outputs:
-  total-affected-models: # id of output
+  models--total-affected: # id of output
     description: 'The total number of models that were affected.'
-    value: ${{ steps.custom-models-action.outputs.total-affected-models }}
-  total-created-models: # id of output
+    value: ${{ steps.custom-models-action.outputs.models--total-affected }}
+  models--total-created: # id of output
     description: 'The total number of new models that were created.'
-    value: ${{ steps.custom-models-action.outputs.total-created-models }}
-  total-deleted-models: # id of output
+    value: ${{ steps.custom-models-action.outputs.models--total-created }}
+  models--total-deleted: # id of output
     description: 'The total number of models that were deleted.'
-    value: ${{ steps.custom-models-action.outputs.total-deleted-models }}
-  total-created-model-versions: # id of output
+    value: ${{ steps.custom-models-action.outputs.models--total-deleted }}
+  models--total-updated-settings: # id of output
+    description: 'The total number of models that were updated by their settings.'
+    value: ${{ steps.custom-models-action.outputs.models--total-updated-settings }}
+  models--total-created-versions: # id of output
     description: 'The total number of new model versions that were created.'
-    value: ${{ steps.custom-models-action.outputs.total-created-model-versions }}
-  total-affected-deployments: # id of output
+    value: ${{ steps.custom-models-action.outputs.models--total-created-versions }}
+  deployments--total-affected: # id of output
     description: 'How many deployments were affected.'
-    value: ${{ steps.custom-models-action.outputs.total-affected-deployments }}
-  total-created-deployments: # id of output
+    value: ${{ steps.custom-models-action.outputs.deployments--total-affected }}
+  deployments--total-created: # id of output
     description: 'How many new deployments were created.'
-    value: ${{ steps.custom-models-action.outputs.total-created-deployments }}
-  total-deleted-deployments: # id of output
+    value: ${{ steps.custom-models-action.outputs.deployments--total-created }}
+  deployments--total-deleted: # id of output
     description: 'How many deployments were deleted.'
-    value: ${{ steps.custom-models-action.outputs.total-deleted-deployments }}
+    value: ${{ steps.custom-models-action.outputs.deployments--total-deleted }}
+  deployments--total-updated-settings: # id of output
+    description: 'The total number of deployments that were updated by their settings.'
+    value: ${{ steps.custom-models-action.outputs.deployments--total-updated-settings }}
   message: # id of output
     description: 'The output message from the GitHub action.'
     value: ${{ steps.custom-models-action.outputs.message }}
