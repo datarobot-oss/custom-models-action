@@ -691,6 +691,24 @@ class TestCustomModelVersionRoutes:
             parameters = DrClient._build_tests_parameters(loaded_checks)
             assert not parameters
 
+        def test_partial_custom_model_testing_configuration(self):
+            """A case to test a full configuration of custom model testing."""
+
+            partial_configuration = {
+                ModelSchema.NULL_VALUE_IMPUTATION_KEY: {
+                    ModelSchema.CHECK_ENABLED_KEY: True,
+                    ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY: True,
+                }
+            }
+
+            configuration = DrClient._build_tests_configuration(partial_configuration)
+            assert (
+                DrApiAttrs.to_dr_test_check(ModelSchema.NULL_VALUE_IMPUTATION_KEY) in configuration
+            )
+            # The following checks are silently added
+            for check in ["longRunningService", "errorCheck"]:
+                assert check in configuration
+
         def test_full_custom_model_testing_configuration(self, mock_full_custom_model_checks):
             """A case to test a full configuration of custom model testing."""
 
