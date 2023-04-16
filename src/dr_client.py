@@ -822,7 +822,7 @@ class DrClient:
             check_config_value = "skip"
             if loaded_checks:
                 check_info = loaded_checks.get(local_check_name)
-                if check_info[ModelSchema.CHECK_ENABLED_KEY]:
+                if check_info and check_info[ModelSchema.CHECK_ENABLED_KEY]:
                     check_config_value = (
                         "fail" if check_info[ModelSchema.BLOCK_DEPLOYMENT_IF_FAILS_KEY] else "warn"
                     )
