@@ -402,9 +402,25 @@ class TestCustomModelVersionRoutes:
 
     @pytest.fixture
     def ref_name(self):
-        """A fixture to return a dummy Git re name."""
+        """A fixture to return a dummy Git ref name."""
 
         return "feature-branch"
+
+    @pytest.fixture
+    def git_model_version(
+        self, ref_name, commit_url, main_branch_commit_sha, pull_request_commit_sha
+    ):
+        """
+        A fixture to return a mocked Git model version instance. Note that this fixture overrides
+        another fixture with the same name at a higher level, which is in conftest.py
+        """
+
+        return Mock(
+            ref_name=ref_name,
+            commit_url=commit_url,
+            main_branch_commit_sha=main_branch_commit_sha,
+            pull_request_commit_sha=pull_request_commit_sha,
+        )
 
     @pytest.fixture
     def commit_url(self, pull_request_commit_sha):
@@ -413,9 +429,7 @@ class TestCustomModelVersionRoutes:
         return f"https://github.com/user/project/{pull_request_commit_sha}"
 
     @pytest.fixture
-    def regression_model_version_response_factory(
-        self, custom_model_id, ref_name, commit_url, main_branch_commit_sha, pull_request_commit_sha
-    ):
+    def regression_model_version_response_factory(self, custom_model_id, git_model_version):
         """A factory fixture to create a Regression model version response."""
 
         def _inner(version_id):
@@ -442,11 +456,11 @@ class TestCustomModelVersionRoutes:
                 "versionMinor": 2,
                 "label": "1.2",
                 "baseEnvironmentId": "629741dc5621557833bd5aa3",
-                "gitModelVersion": {
-                    "refName": ref_name,
-                    "commitUrl": commit_url,
-                    "mainBranchCommitSha": main_branch_commit_sha,
-                    "pullRequestCommitSha": pull_request_commit_sha,
+                "gitModelVersion": {  # pylint: disable=duplicate-code
+                    "refName": git_model_version.ref_name,
+                    "commitUrl": git_model_version.commit_url,
+                    "mainBranchCommitSha": git_model_version.main_branch_commit_sha,
+                    "pullRequestCommitSha": git_model_version.pull_request_commit_sha,
                 },
                 "dependencies": [],
             }
@@ -473,10 +487,7 @@ class TestCustomModelVersionRoutes:
     def test_full_payload_setup_for_custom_model_version_creation(
         self,
         regression_model_info,
-        ref_name,
-        commit_url,
-        main_branch_commit_sha,
-        pull_request_commit_sha,
+        git_model_version,
         single_model_file_paths,
         single_model_root_path,
         workspace_path,
@@ -493,10 +504,7 @@ class TestCustomModelVersionRoutes:
             payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(
                 True,
                 regression_model_info,
-                ref_name,
-                commit_url,
-                main_branch_commit_sha,
-                pull_request_commit_sha,
+                git_model_version,
                 changed_file_paths=changed_files_info,
                 file_ids_to_delete=None,
                 base_env_id=str(ObjectId()),
@@ -533,22 +541,14 @@ class TestCustomModelVersionRoutes:
             assert "replicas" in keys
 
     def test_minimal_payload_setup_for_custom_model_version_creation(
-        self,
-        minimal_regression_model_info,
-        ref_name,
-        commit_url,
-        main_branch_commit_sha,
-        pull_request_commit_sha,
+        self, minimal_regression_model_info, git_model_version
     ):
         """A case to test a minimal payload setup when creating a custom model version."""
 
         payload, file_objs = DrClient._setup_payload_for_custom_model_version_creation(
             True,
             minimal_regression_model_info,
-            ref_name,
-            commit_url,
-            main_branch_commit_sha,
-            pull_request_commit_sha,
+            git_model_version,
             None,
             None,
             base_env_id=str(ObjectId()),
@@ -567,10 +567,7 @@ class TestCustomModelVersionRoutes:
         is_major_update,
         regression_model_info,
         custom_models_version_url_factory,
-        ref_name,
-        commit_url,
-        main_branch_commit_sha,
-        pull_request_commit_sha,
+        git_model_version,
         regression_model_version_response,
     ):
         """A case to test a successful custom model version creation."""
@@ -578,13 +575,7 @@ class TestCustomModelVersionRoutes:
         url = custom_models_version_url_factory()
         responses.add(responses.POST, url, json=regression_model_version_response, status=201)
         version_id = dr_client.create_custom_model_version(
-            custom_model_id,
-            is_major_update,
-            regression_model_info,
-            ref_name,
-            commit_url,
-            main_branch_commit_sha,
-            pull_request_commit_sha,
+            custom_model_id, is_major_update, regression_model_info, git_model_version
         )
         assert version_id is not None
 
@@ -595,10 +586,7 @@ class TestCustomModelVersionRoutes:
         custom_model_id,
         regression_model_info,
         custom_models_version_url_factory,
-        ref_name,
-        commit_url,
-        main_branch_commit_sha,
-        pull_request_commit_sha,
+        git_model_version,
     ):
         """A case to test a failure in creating a custom model version."""
 
@@ -607,13 +595,7 @@ class TestCustomModelVersionRoutes:
         responses.add(responses.POST, url, json={}, status=status_code)
         with pytest.raises(DataRobotClientError) as ex:
             dr_client.create_custom_model_version(
-                custom_model_id,
-                True,
-                regression_model_info,
-                ref_name,
-                commit_url,
-                main_branch_commit_sha,
-                pull_request_commit_sha,
+                custom_model_id, True, regression_model_info, git_model_version
             )
         assert ex.value.code == status_code
 

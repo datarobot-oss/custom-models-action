@@ -12,39 +12,24 @@ are skipped.
 """
 
 import contextlib
-import glob
 import os
 import shutil
 from enum import Enum
-from pathlib import Path
 
 import pytest
 import yaml
 
 from common.convertors import MemoryConvertor
-from common.exceptions import DataRobotClientError
+from common.github_env import GitHubEnv
 from dr_client import DrClient
 from schema_validator import ModelSchema
 from tests.conftest import unique_str
-from tests.functional.conftest import cleanup_models
+from tests.functional.conftest import NUMBER_OF_MODELS_IN_TEST
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import printout
 from tests.functional.conftest import run_github_action
 from tests.functional.conftest import temporarily_replace_schema_value
-from tests.functional.conftest import (
-    temporarily_upload_training_dataset_for_structured_model,
-)
-from tests.functional.conftest import upload_and_update_dataset
 from tests.functional.conftest import webserver_accessible
-
-
-@pytest.fixture
-def cleanup(dr_client, workspace_path):
-    """A fixture to delete models in DataRobot that were created from the local source tree."""
-
-    yield
-
-    cleanup_models(dr_client, workspace_path)
 
 
 @pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
@@ -315,7 +300,7 @@ class TestModelGitHubActions:
         yield
 
     @pytest.mark.usefixtures("cleanup")
-    def test_e2e_push_event_with_multiple_changes_and_one_model_package_creation_in_between(
+    def test_e2e_push_event_with_multiple_changes_and_a_frozen_version_in_between(
         self,
         dr_client,
         workspace_path,
@@ -386,186 +371,6 @@ class TestModelGitHubActions:
         assert webserver_accessible()
 
     @pytest.mark.usefixtures("cleanup", "skip_model_testing")
-    def test_e2e_set_training_and_holdout_datasets_for_structured_model(
-        self,
-        dr_client,
-        workspace_path,
-        git_repo,
-        model_metadata,
-        model_metadata_yaml_file,
-        main_branch_name,
-    ):
-        """
-        And end-to-end case to test a training dataset assignment for structured model, by the
-        custom inference model GitHub action. The training dataset contains a holdout column.
-        """
-
-        # 1. Create a model just as a preliminary requirement (use GitHub action)
-        printout(
-            "Create a custom model as a preliminary requirement. "
-            "Run custom model GitHub action (push event) ..."
-        )
-        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
-
-        with temporarily_upload_training_dataset_for_structured_model(
-            dr_client, model_metadata_yaml_file, event_name="push"
-        ) as (training_dataset_id, partition_column):
-            try:
-                git_repo.git.add(model_metadata_yaml_file)
-                git_repo.git.commit("-m", "Update training / holdout dataset(s)")
-
-                printout("Run custom inference models GitHub action ...")
-                run_github_action(
-                    workspace_path, git_repo, main_branch_name, "push", is_deploy=False
-                )
-
-                # Validate
-                user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
-                custom_model = dr_client.fetch_custom_model_by_git_id(user_provided_id)
-                assert custom_model["trainingDatasetId"] == training_dataset_id
-                assert custom_model["trainingDataPartitionColumn"] == partition_column
-            finally:
-                cleanup_models(dr_client, workspace_path)
-
-        printout("Done")
-
-    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
-    def test_e2e_set_training_dataset_with_wrong_model_target_name(
-        self,
-        dr_client,
-        workspace_path,
-        git_repo,
-        model_metadata,
-        model_metadata_yaml_file,
-        main_branch_name,
-    ):
-        """
-        And end-to-end case to test a training dataset assignment for structured model, whose
-        definition initially contains wrong target name.
-        """
-
-        with temporarily_upload_training_dataset_for_structured_model(
-            dr_client, model_metadata_yaml_file, event_name="push"
-        ) as (training_dataset_id, partition_column):
-            try:
-                git_repo.git.add(model_metadata_yaml_file)
-                git_repo.git.commit("-m", "Update training / holdout dataset(s)")
-
-                printout(
-                    "Create a custom model with wrong target name. "
-                    "Run custom model GitHub action (push event) ..."
-                )
-
-                with temporarily_replace_schema_value(
-                    model_metadata_yaml_file,
-                    ModelSchema.SETTINGS_SECTION_KEY,
-                    ModelSchema.TARGET_NAME_KEY,
-                    new_value="wrong-target-name",
-                ):
-                    git_repo.git.add(model_metadata_yaml_file)
-                    git_repo.git.commit("-m", "Set wrong target name")
-
-                    with pytest.raises(DataRobotClientError) as ex:
-                        run_github_action(
-                            workspace_path, git_repo, main_branch_name, "push", is_deploy=False
-                        )
-                    assert ex.value.code == 422, ex.value
-                    assert (
-                        "Custom model's target is not found in the provided dataset"
-                        in ex.value.args[0]
-                    ), ex.value.args
-
-                git_repo.git.add(model_metadata_yaml_file)
-                git_repo.git.commit("-m", "Set valid target name")
-
-                printout("Run custom inference models GitHub action with proper target ...")
-                run_github_action(
-                    workspace_path, git_repo, main_branch_name, "push", is_deploy=False
-                )
-
-                # Validate
-                user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
-                custom_model = dr_client.fetch_custom_model_by_git_id(user_provided_id)
-                assert custom_model["trainingDatasetId"] == training_dataset_id
-                assert custom_model["trainingDataPartitionColumn"] == partition_column
-            finally:
-                cleanup_models(dr_client, workspace_path)
-
-        printout("Done")
-
-    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
-    def test_e2e_set_training_and_holdout_datasets_for_unstructured_model(
-        self,
-        dr_client,
-        workspace_path,
-        git_repo,
-        model_metadata,
-        model_metadata_yaml_file,
-        main_branch_name,
-    ):
-        """
-        An end-to-end case to test training and holdout dataset assignment for unstructured
-        model by the custom inference model GitHub action.
-        """
-
-        with temporarily_replace_schema_value(
-            model_metadata_yaml_file,
-            ModelSchema.TARGET_TYPE_KEY,
-            new_value=ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY,
-        ):
-            # 1. Create a model just as a preliminary requirement (use GitHub action)
-            printout(
-                "Create a custom model as a preliminary requirement. "
-                "Run custom model GitHub action (push event) ..."
-            )
-            run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
-
-            user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
-
-            printout("Upload training and holdout datasets for unstructured model.")
-            datasets_root = Path(__file__).parent / ".." / "datasets"
-            training_dataset_filepath = (
-                datasets_root / "juniors_3_year_stats_regression_unstructured_training.csv"
-            )
-            holdout_dataset_filepath = (
-                datasets_root / "juniors_3_year_stats_regression_unstructured_holdout.csv"
-            )
-            with upload_and_update_dataset(
-                dr_client,
-                training_dataset_filepath,
-                model_metadata_yaml_file,
-                ModelSchema.TRAINING_DATASET_ID_KEY,
-            ) as training_dataset_id, upload_and_update_dataset(
-                dr_client,
-                holdout_dataset_filepath,
-                model_metadata_yaml_file,
-                ModelSchema.HOLDOUT_DATASET_ID_KEY,
-            ) as holdout_dataset_id:
-                try:
-                    git_repo.git.add(model_metadata_yaml_file)
-                    git_repo.git.commit("-m", "Update training / holdout dataset(s)")
-
-                    printout("Run custom inference models GitHub action ...")
-                    run_github_action(
-                        workspace_path, git_repo, main_branch_name, "push", is_deploy=False
-                    )
-
-                    # Validation
-                    custom_model = dr_client.fetch_custom_model_by_git_id(user_provided_id)
-                    assert (
-                        custom_model["externalMlopsStatsConfig"]["trainingDatasetId"]
-                        == training_dataset_id
-                    )
-                    assert (
-                        custom_model["externalMlopsStatsConfig"]["holdoutDatasetId"]
-                        == holdout_dataset_id
-                    )
-                finally:
-                    cleanup_models(dr_client, workspace_path)
-
-        printout("Done")
-
-    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
     def test_e2e_update_model_settings(
         self,
         dr_client,
@@ -626,6 +431,142 @@ class TestModelGitHubActions:
                     f"actual '{actual_settings_value}'."
                 )
 
+    # pylint: disable=too-many-locals
+    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
+    def test_no_new_model_version_upon_pr_with_unrelated_changes(
+        self,
+        dr_client,
+        workspace_path,
+        git_repo,
+        numbered_model_metadata,
+        numbered_model_metadata_yaml_file,
+        main_branch_name,
+        feature_branch_name,
+        merge_branch_name,
+    ):
+        """
+        This case validates that no new model's version is created by a pull-request that affects
+        another unrelated model. This can happen if the last change for the first model was made
+        to its settings, before the pull-request of the other model was created.
+        """
+
+        # This test requires two models
+        assert NUMBER_OF_MODELS_IN_TEST == 2
+
+        # 1. Create two models as a preliminary requirement (use GitHub action)
+        printout(
+            "Create 2 custom models as a preliminary requirement. "
+            "Run custom model GitHub action (push event) ..."
+        )
+        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
+
+        model_1_metadata = numbered_model_metadata(model_number=1)
+        model_1_metadata_yaml_file = numbered_model_metadata_yaml_file(model_number=1)
+        model_2_metadata = numbered_model_metadata(model_number=2)
+        model_2_metadata_yaml_file = numbered_model_metadata_yaml_file(model_number=2)
+
+        # 2. Retrieve the models from DataRobot
+        model_1_user_provided_id = model_1_metadata[ModelSchema.MODEL_ID_KEY]
+        dr_model_1 = dr_client.fetch_custom_model_by_git_id(model_1_user_provided_id)
+        custom_model_1_name = dr_model_1[DrClient.MODEL_SETTINGS_KEYS_MAP[ModelSchema.NAME_KEY]]
+        custom_model_1_origin_version_id = dr_model_1["latestVersion"]["id"]
+
+        model_2_user_provided_id = model_2_metadata[ModelSchema.MODEL_ID_KEY]
+        dr_model_2 = dr_client.fetch_custom_model_by_git_id(model_2_user_provided_id)
+        custom_model_2_origin_version_id = dr_model_2["latestVersion"]["id"]
+
+        # 3. Apply settings change (rename label) to the first model
+        model_1_metadata[ModelSchema.SETTINGS_SECTION_KEY][
+            ModelSchema.NAME_KEY
+        ] = f"{custom_model_1_name}-new"
+        with open(model_1_metadata_yaml_file, "w", encoding="utf-8") as fd:
+            yaml.safe_dump(model_1_metadata, fd)
+
+        git_repo.git.add(model_1_metadata_yaml_file)
+        git_repo.git.commit("-m", "Update the name of the first model.")
+
+        printout("Run custom inference models GitHub action (push) ...")
+        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
+
+        self._validate_custom_model_action_metrics(
+            expected_num_affected_models=1,
+            expected_num_updated_settings=1,
+            expected_num_created_versions=0,
+        )
+
+        # 4. Validate that no new versions were created in both models
+        dr_model_1 = dr_client.fetch_custom_model_by_git_id(model_1_user_provided_id)
+        assert custom_model_1_origin_version_id == dr_model_1["latestVersion"]["id"]
+        dr_model_2 = dr_client.fetch_custom_model_by_git_id(model_2_user_provided_id)
+        assert custom_model_2_origin_version_id == dr_model_2["latestVersion"]["id"]
+
+        # 5. Create a feature-branch
+        printout("Create a feature branch and checkout ...")
+        feature_branch = git_repo.create_head(feature_branch_name)
+
+        # 6. Make a memory change to the second model and merge back.
+        checks = [self._increase_memory_check]
+        self._run_checks(
+            checks,
+            feature_branch,
+            git_repo,
+            workspace_path,
+            main_branch_name,
+            model_2_metadata,
+            model_2_metadata_yaml_file,
+            merge_branch_name,
+            dr_client,
+        )
+
+        self._validate_custom_model_action_metrics(
+            expected_num_affected_models=1,
+            expected_num_updated_settings=1,
+            expected_num_created_versions=1,
+        )
+
+        # 4. Validate that a new version was only created to the second model
+        dr_model_1 = dr_client.fetch_custom_model_by_git_id(model_1_user_provided_id)
+        assert custom_model_1_origin_version_id == dr_model_1["latestVersion"]["id"]
+        dr_model_2 = dr_client.fetch_custom_model_by_git_id(model_2_user_provided_id)
+        assert custom_model_2_origin_version_id != dr_model_2["latestVersion"]["id"]
+
+    @staticmethod
+    def _validate_custom_model_action_metrics(
+        expected_num_affected_models, expected_num_updated_settings, expected_num_created_versions
+    ):
+        github_output_filepath = GitHubEnv.github_output()
+        with open(github_output_filepath, encoding="utf-8") as file:
+            lines = file.readlines()
+
+        index = 0
+        actual_num_affected_models = None
+        actual_num_updated_settings = None
+        actual_num_created_versions = None
+        for line in reversed(lines):
+            key, value = line.strip().split("=")
+            if key.startswith("models--total-affected"):
+                actual_num_affected_models = int(value)
+                index += 1
+            elif key.startswith("models--total-updated-settings"):
+                actual_num_updated_settings = int(value)
+                index += 1
+            elif key.startswith("models--total-created-versions"):
+                actual_num_created_versions = int(value)
+                index += 1
+
+            if index == 3:
+                break
+
+        assert actual_num_affected_models == expected_num_affected_models
+        assert actual_num_updated_settings == expected_num_updated_settings
+        assert actual_num_created_versions == expected_num_created_versions
+
+    @staticmethod
+    def _print_custom_model_action_metrics():
+        github_output_filepath = GitHubEnv.github_output()
+        with open(github_output_filepath, encoding="utf-8") as file:
+            print(file.read())
+
     @pytest.fixture
     def dependency_package_name(self):
         """A fixture to return the dependency package name that is used within a functional test."""
@@ -676,60 +617,3 @@ class TestModelGitHubActions:
 
         build_info = dr_client.get_custom_model_version_dependency_build_info(cm_version)
         assert build_info["buildStatus"] == "success"
-
-
-# pylint: disable=too-few-public-methods
-@pytest.mark.skipif(not webserver_accessible(), reason="DataRobot webserver is not accessible.")
-@pytest.mark.usefixtures("github_output", "cleanup")
-class TestMultiModelsOneDefinitionGitHubAction:
-    """A class to test multi-models definition in a single metadata YAML file"""
-
-    @pytest.mark.parametrize(
-        "is_abs_model_path, model_path_prefix", [(True, "/"), (True, "$ROOT/"), (False, None)]
-    )
-    def test_e2e_pull_request_event_with_multi_model_definition(
-        self,
-        dr_client,
-        workspace_path,
-        git_repo,
-        main_branch_name,
-        build_repo_for_testing_factory,
-        is_abs_model_path,
-        model_path_prefix,
-    ):
-        """
-        An end-to-end case to test model deletion by the custom inference model GitHub action
-        from a pull-request. The test first creates a PR with a simple change in order to create
-        the model in DataRobot. Afterwards, it creates another PR to delete the model definition,
-        which should delete the model in DataRobot.
-        """
-
-        build_repo_for_testing_factory(
-            dedicated_model_definition=False,
-            is_absolute_model_path=is_abs_model_path,
-            model_path_prefix=model_path_prefix,
-        )
-        printout("Run custom model GitHub action (push event) ...")
-        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
-
-        printout("Validate after merging ...")
-
-        multi_models_metadata = self._load_multi_models_metadata(workspace_path)
-        models = dr_client.fetch_custom_models()
-
-        expected_user_provided_ids = {
-            model_entry[ModelSchema.MODEL_ENTRY_META_KEY][ModelSchema.MODEL_ID_KEY]
-            for model_entry in multi_models_metadata[ModelSchema.MULTI_MODELS_KEY]
-        }
-        actual_user_provided_ids = {model.get("userProvidedId") for model in models}
-        assert expected_user_provided_ids <= actual_user_provided_ids
-        printout("Done")
-
-    @staticmethod
-    def _load_multi_models_metadata(workspace_path):
-        multi_models_yaml_filepath = glob.glob(str(workspace_path / "**/models.yaml"))
-        assert len(multi_models_yaml_filepath) == 1
-        multi_models_yaml_filepath = multi_models_yaml_filepath[0]
-        with open(multi_models_yaml_filepath, encoding="utf-8") as fd:
-            multi_models_metadata = ModelSchema.validate_and_transform_multi(yaml.safe_load(fd))
-        return multi_models_metadata

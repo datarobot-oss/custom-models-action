@@ -28,6 +28,7 @@ from common.exceptions import ModelMainEntryPointNotFound
 from common.exceptions import ModelMetadataAlreadyExists
 from common.exceptions import SharedAndLocalPathCollision
 from common.exceptions import UnexpectedResult
+from common.git_model_version import GitModelVersion
 from common.git_tool import GitTool
 from common.github_env import GitHubEnv
 from dr_client import DrClient
@@ -119,6 +120,7 @@ class ModelController(ControllerBase):
         self._models_info = {}
         self._datarobot_models = {}
         self._datarobot_models_by_id = {}
+        self._git_model_version = GitModelVersion(repo, options.branch)
 
     def _label(self):
         return constants.Label.MODELS
@@ -506,7 +508,7 @@ class ModelController(ControllerBase):
         for user_provided_id, model_info in self.models_info.items():
             already_exists = user_provided_id in self.datarobot_models
             custom_model = self.datarobot_models[user_provided_id].model if already_exists else None
-            latest_version = (
+            previous_latest_version = latest_version = (
                 self.datarobot_models[user_provided_id].latest_version if already_exists else None
             )
 
@@ -523,28 +525,35 @@ class ModelController(ControllerBase):
                     latest_version = self._create_custom_model_version(
                         custom_model_id, is_major_update, model_info
                     )
-                    self.datarobot_models[user_provided_id].latest_version = latest_version
-
-                    self.metrics.total_created_versions.value += 1
-                    logger.info(
-                        "Custom inference model version was successfully created. "
-                        "user_provided_id: %s, model_id: %s, version_id: %s.",
-                        user_provided_id,
-                        custom_model_id,
-                        latest_version["id"],
-                    )
-
+                    self._cache_new_custom_model_version(user_provided_id, latest_version)
                     self._dr_client.build_dependency_environment_if_required(latest_version)
-                else:
-                    if GitHubEnv.is_push():
-                        # Upon pushing to the main branch, If the model was somehow affected by the
-                        # given event, make sure to update the main branch commit SHA. This solves
-                        # an issue of follow-up pull requests, which are not related to the given
-                        # model that should not affect the given model.
-                        latest_version = self._update_custom_model_version_git_attributes(
-                            model_info, latest_version
+
+                if model_info.is_there_a_change_in_training_or_holdout_data_at_version_level(
+                    latest_version
+                ):
+                    latest_version = (
+                        self._dr_client.create_version_from_latest_with_training_and_holdout_data(
+                            model_info, custom_model, self._git_model_version
                         )
-                        self.datarobot_models[user_provided_id].latest_version = latest_version
+                    )
+                    self._cache_new_custom_model_version(user_provided_id, latest_version)
+
+                if (
+                    previous_latest_version
+                    and latest_version["id"] == previous_latest_version["id"]
+                    and GitHubEnv.is_push()
+                ):
+                    # Upon pushing to the main branch, If the model was somehow affected by the
+                    # given event (.e.g settings), make sure to update the main branch commit
+                    # SHA of the version. This solves an issue of follow-up pull-requests,
+                    # which might not be related to the model that should not affect the
+                    # given model. And yet, the problem is that we loose the git commit SHA
+                    # that produced the latest version by updating the SHA of a commit in
+                    # which the related model's settings were changed.
+                    latest_version = self._update_custom_model_version_git_attributes(
+                        model_info, latest_version
+                    )
+                    self.datarobot_models[user_provided_id].latest_version = latest_version
 
                 if model_info.flags.should_update_settings:
                     self._update_settings(custom_model, model_info)
@@ -555,6 +564,18 @@ class ModelController(ControllerBase):
                     )
 
                 self.metrics.total_affected.value += 1
+
+    def _cache_new_custom_model_version(self, user_provided_id, latest_version):
+        self.datarobot_models[user_provided_id].latest_version = latest_version
+
+        self.metrics.total_created_versions.value += 1
+        logger.info(
+            "A custom inference model version was successfully created. "
+            "user_provided_id: %s, model_id: %s, version_id: %s.",
+            user_provided_id,
+            latest_version["customModelId"],
+            latest_version["id"],
+        )
 
     def _update_custom_model_version_git_attributes(self, model_info, custom_model_version):
         main_branch_commit_sha = GitHubEnv.github_sha()
@@ -599,45 +620,11 @@ class ModelController(ControllerBase):
             model_info.user_provided_id,
         )
 
-        if GitHubEnv.is_pull_request():
-            if self._repo.num_remotes() == 0:
-                # Only to support the functional tests, which do not have a remote repository.
-                main_branch = self.options.branch
-            else:
-                # This is the expected path when working against a remote GitHub repository.
-                main_branch = f"{self._repo.remote_name()}/{self.options.branch}"
-            main_branch_commit_sha = self._repo.merge_base_commit_sha(
-                main_branch, GitHubEnv.github_sha()
-            )
-            pull_request_commit_sha = self._repo.feature_branch_top_commit_sha_of_a_merge_commit(
-                GitHubEnv.github_sha()
-            )
-            commit_url = GitTool.GITHUB_COMMIT_URL_PATTERN.format(
-                user_and_project=GitHubEnv.github_repository(), sha=pull_request_commit_sha
-            )
-        else:
-            main_branch_commit_sha = GitHubEnv.github_sha()
-            pull_request_commit_sha = None
-            commit_url = GitTool.GITHUB_COMMIT_URL_PATTERN.format(
-                user_and_project=GitHubEnv.github_repository(), sha=main_branch_commit_sha
-            )
-        logger.info(
-            "GitHub version info. Ref name: %s, commit URL: %s, main branch commit sha: %s, "
-            "pull request commit sha: %s",
-            GitHubEnv.ref_name(),
-            commit_url,
-            main_branch_commit_sha,
-            pull_request_commit_sha,
-        )
-
         custom_model_version = self._dr_client.create_custom_model_version(
             custom_model_id,
             is_major_update,
             model_info,
-            GitHubEnv.ref_name(),
-            commit_url,
-            main_branch_commit_sha,
-            pull_request_commit_sha,
+            self._git_model_version,
             changed_file_paths,
             model_info.file_changes.deleted_file_ids,
             from_latest=model_info.flags.should_create_version_from_latest,
@@ -654,8 +641,9 @@ class ModelController(ControllerBase):
 
     def _update_settings(self, datarobot_custom_model, model_info):
         self._update_model_settings(datarobot_custom_model, model_info)
-        # NOTE: training/holdout datasets update should always come after model's setting update
-        self._update_training_and_holdout_datasets(datarobot_custom_model, model_info)
+        if not datarobot_custom_model.get("isTrainingDataForVersionsPermanentlyEnabled", False):
+            # NOTE: training/holdout datasets update should always come after model's setting update
+            self._update_training_and_holdout_datasets(datarobot_custom_model, model_info)
         self.metrics.total_updated_settings.value += 1
 
     def _update_training_and_holdout_datasets(self, datarobot_custom_model, model_info):

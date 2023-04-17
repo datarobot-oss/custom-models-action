@@ -305,6 +305,9 @@ class ModelSchema(SharedSchema):
                 ),
                 Optional(MEMORY_KEY): Use(MemoryConvertor.to_bytes),
                 Optional(REPLICAS_KEY): And(int, lambda r: r > 0),
+                Optional(PARTITIONING_COLUMN_KEY): And(str, len),
+                Optional(TRAINING_DATASET_ID_KEY): And(str, ObjectId.is_valid),
+                Optional(HOLDOUT_DATASET_ID_KEY): And(str, ObjectId.is_valid),
             },
             Optional(TEST_KEY): {
                 # The skip attribute allows users to have the test section in their yaml file
@@ -544,9 +547,34 @@ class ModelSchema(SharedSchema):
             if len(mutual_exclusive_keys & settings_section.keys()) > 1:
                 raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")
 
+        # Check training/holdout mutually exclusive at model level
         mutual_exclusive_keys = {cls.PARTITIONING_COLUMN_KEY, cls.HOLDOUT_DATASET_ID_KEY}
         if len(mutual_exclusive_keys & settings_section.keys()) > 1:
-            raise InvalidModelSchema(f"Only one of '{mutual_exclusive_keys}' keys is allowed.")
+            raise InvalidModelSchema(
+                f"Only one of '{mutual_exclusive_keys}' keys is allowed in settings section."
+            )
+
+        # Check training/holdout mutually exclusive at model version level
+        version_section = single_transformed_metadata[ModelSchema.VERSION_KEY]
+        if len(mutual_exclusive_keys & version_section.keys()) > 1:
+            raise InvalidModelSchema(
+                f"Only one of '{mutual_exclusive_keys}' keys is allowed in version section."
+            )
+
+        # Check training/holdout mutually exclusive between model and version levels
+        mutual_exclusive_keys = {
+            cls.PARTITIONING_COLUMN_KEY,
+            cls.TRAINING_DATASET_ID_KEY,
+            cls.HOLDOUT_DATASET_ID_KEY,
+        }
+        if (
+            len(mutual_exclusive_keys & settings_section.keys()) > 0
+            and len(mutual_exclusive_keys & version_section.keys()) > 0
+        ):
+            raise InvalidModelSchema(
+                f"Definition of '{mutual_exclusive_keys}' keys are either allowed under settings "
+                "or version sections."
+            )
 
     @classmethod
     def _validate_dependent_keys(cls, single_transformed_metadata):

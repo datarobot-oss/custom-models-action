@@ -101,30 +101,28 @@ class TestDeploymentGitHubActions:
     def _upload_actuals_dataset(
         self, event_name, dr_client, deployment_metadata, deployment_metadata_yaml_file
     ):
-        if event_name == "push":
-            association_id_column = DeploymentSchema.get_value(
-                deployment_metadata,
+        association_id_column = DeploymentSchema.get_value(
+            deployment_metadata,
+            DeploymentSchema.SETTINGS_SECTION_KEY,
+            DeploymentSchema.ASSOCIATION_KEY,
+            DeploymentSchema.ASSOCIATION_ASSOCIATION_ID_COLUMN_KEY,
+        )
+        if association_id_column:
+            actuals_filepath = (
+                Path(__file__).parent
+                / ".."
+                / "datasets"
+                / "juniors_3_year_stats_regression_actuals.csv"
+            )
+            with upload_and_update_dataset(
+                dr_client,
+                actuals_filepath,
+                deployment_metadata_yaml_file,
                 DeploymentSchema.SETTINGS_SECTION_KEY,
                 DeploymentSchema.ASSOCIATION_KEY,
-                DeploymentSchema.ASSOCIATION_ASSOCIATION_ID_COLUMN_KEY,
-            )
-            if association_id_column:
-                actuals_filepath = (
-                    Path(__file__).parent
-                    / ".."
-                    / "datasets"
-                    / "juniors_3_year_stats_regression_actuals.csv"
-                )
-                with upload_and_update_dataset(
-                    dr_client,
-                    actuals_filepath,
-                    deployment_metadata_yaml_file,
-                    DeploymentSchema.ASSOCIATION_KEY,
-                    DeploymentSchema.ASSOCIATION_ACTUALS_DATASET_ID_KEY,
-                ) as dataset_id:
-                    yield dataset_id
-        else:
-            yield None
+                DeploymentSchema.ASSOCIATION_ACTUALS_DATASET_ID_KEY,
+            ) as dataset_id:
+                yield dataset_id
 
     @staticmethod
     def _commit_changes_by_event(commit_message, event_name, git_repo):
@@ -296,6 +294,7 @@ class TestDeploymentGitHubActions:
             yaml.safe_dump(deployment_metadata, fd)
 
     @pytest.mark.usefixtures("cleanup", "skip_model_testing", "set_deployment_actuals_dataset")
+    @pytest.mark.parametrize("github_event", ["push", "pull_request"])
     def test_e2e_deployment_delete(
         self,
         dr_client,
@@ -304,10 +303,11 @@ class TestDeploymentGitHubActions:
         deployment_metadata,
         deployment_metadata_yaml_file,
         main_branch_name,
+        github_event,
     ):
         """An end-to-end case to test a deployment deletion."""
 
-        # Create a model and deployment. Run the GitHub action.
+        # Setup: create a model and deployment. Run the GitHub action.
         printout("Run the GitHub action (push event) to create a model and deployment")
         run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=True)
         deployments = dr_client.fetch_deployments()
@@ -315,16 +315,20 @@ class TestDeploymentGitHubActions:
         assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
 
         # Delete a deployment local definition yaml file
-        printout("Run the GitHub action (push event) to delete deployment")
-        os.remove(deployment_metadata_yaml_file)
-        self._commit_changes_by_event("Delete the deployment definition file", "push", git_repo)
+        printout(f"Run the GitHub action to delete deployment, github_event: {github_event}")
+        # Note: do not use os.remove, because it'll eventually remove the whole deployments
+        # directory in a feature branch.
+        os.rename(deployment_metadata_yaml_file, f"{deployment_metadata_yaml_file}.deleted")
+        self._commit_changes_by_event(
+            "Delete the deployment definition file", github_event, git_repo
+        )
 
         # Run the GitHub action but disallow deployment deletion
         run_github_action(
             workspace_path,
             git_repo,
             main_branch_name,
-            event_name="push",
+            event_name=github_event,
             is_deploy=True,
             allow_deployment_deletion=False,
         )
@@ -333,35 +337,25 @@ class TestDeploymentGitHubActions:
         local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
         assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
 
-        # Run the GitHub action (pull request) with allowed deployment deletion
-        printout("Run the GitHub action (pull request) with allowed deletion")
+        # Run the GitHub action with allowed deployment deletion
+        printout("Run the GitHub action with allowed deletion")
         run_github_action(
             workspace_path,
             git_repo,
             main_branch_name,
-            "pull_request",
+            github_event,
             is_deploy=True,
             allow_deployment_deletion=True,
         )
         printout("Validate ...")
         deployments = dr_client.fetch_deployments()
         local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
-        assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
-
-        # Run the GitHub action (push) with allowed deployment deletion
-        printout("Run the GitHub action (push) with allowed deletion")
-        run_github_action(
-            workspace_path,
-            git_repo,
-            main_branch_name,
-            "push",
-            is_deploy=True,
-            allow_deployment_deletion=True,
-        )
-        printout("Validate ...")
-        deployments = dr_client.fetch_deployments()
-        local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
-        assert all(d.get("userProvidedId") != local_user_provided_id for d in deployments)
+        if github_event == "push":
+            assert all(d.get("userProvidedId") != local_user_provided_id for d in deployments)
+        elif github_event == "pull_request":
+            assert any(d.get("userProvidedId") == local_user_provided_id for d in deployments)
+        else:
+            assert False, f"GitHub event '{github_event}' is not supported!"
         printout("Done")
 
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
@@ -430,7 +424,7 @@ class TestDeploymentGitHubActions:
         """An end-to-end case to test changes in deployment settings."""
 
         with temporarily_upload_training_dataset_for_structured_model(
-            dr_client, model_metadata_yaml_file, event_name
+            dr_client, model_metadata_yaml_file, is_model_level=False, event_name=event_name
         ):
             try:
                 # Run the GitHub action to create a model and deployment
@@ -546,6 +540,8 @@ class TestDeploymentGitHubActions:
         event_name,
         github_output,
     ):
+        printout("Update deployment settings")
+
         deployment_info = DeploymentInfo(deployment_metadata_yaml_file, deployment_metadata)
         origin_deployment_settings = dr_client.fetch_deployment_settings(
             deployment["id"], deployment_info
@@ -619,7 +615,7 @@ class TestDeploymentGitHubActions:
             ] = deployment_info.get_settings_value(DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY)
 
             expected_values[
-                DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY
+                DeploymentSchema.SEGMENT_ANALYSIS_KEY
             ] = deployment_info.get_settings_value(
                 DeploymentSchema.SEGMENT_ANALYSIS_KEY,
                 DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY,
@@ -639,7 +635,7 @@ class TestDeploymentGitHubActions:
             expected_values[DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY] = origin_deployment_settings[
                 "featureDrift"
             ]["enabled"]
-            expected_values[DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY] = new_deployment_settings[
+            expected_values[DeploymentSchema.SEGMENT_ANALYSIS_KEY] = new_deployment_settings[
                 "segmentAnalysis"
             ]["enabled"]
             expected_values[
@@ -660,7 +656,7 @@ class TestDeploymentGitHubActions:
             == new_deployment_settings["featureDrift"]["enabled"]
         )
         assert (
-            expected_values[DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY]
+            expected_values[DeploymentSchema.SEGMENT_ANALYSIS_KEY]
             == new_deployment_settings["segmentAnalysis"]["enabled"]
         )
         assert (

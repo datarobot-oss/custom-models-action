@@ -226,8 +226,12 @@ class ModelInfo(InfoBase):
     def is_affected_by_commit(self, datarobot_latest_model_version):
         """Whether the given model is affected by the last commit"""
 
-        return self.flags.should_update_settings or self.should_create_new_version(
-            datarobot_latest_model_version
+        return (
+            self.flags.should_update_settings
+            or self.should_create_new_version(datarobot_latest_model_version)
+            or self.is_there_a_change_in_training_or_holdout_data_at_version_level(
+                datarobot_latest_model_version
+            )
         )
 
     def should_create_new_version(self, datarobot_latest_model_version):
@@ -248,6 +252,50 @@ class ModelInfo(InfoBase):
         configured_replicas = self.get_value(ModelSchema.VERSION_KEY, ModelSchema.REPLICAS_KEY)
         if configured_replicas != datarobot_latest_model_version.get("replicas"):
             return True
+
+        return False
+
+    def is_there_a_change_in_training_or_holdout_data_at_version_level(
+        self, datarobot_latest_model_version
+    ):
+        """Whether there's a model's version configuration change of a training/holdout data."""
+
+        # Check training dataset
+        configured_training_dataset = self.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_ID_KEY
+        )
+        if datarobot_latest_model_version is None:
+            # This can happen only when the custom model is first created and still does not have
+            # any associated version. A hidden assumption is that a holdout data will never be set
+            # without a training data
+            return configured_training_dataset is not None
+
+        latest_training_dataset = datarobot_latest_model_version.get("training_data", {}).get(
+            "dataset_id"
+        )
+        if configured_training_dataset != latest_training_dataset:
+            return True
+
+        # Check holdout
+        if self.is_unstructured:
+            configured_holdout_dataset = self.get_value(
+                ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_ID_KEY
+            )
+            latest_holdout_dataset = datarobot_latest_model_version.get("holdout_data", {}).get(
+                "dataset_id"
+            )
+            if configured_holdout_dataset != latest_holdout_dataset:
+                return True
+
+        else:
+            configured_holdout_partition = self.get_value(
+                ModelSchema.VERSION_KEY, ModelSchema.PARTITIONING_COLUMN_KEY
+            )
+            latest_partition = datarobot_latest_model_version.get("holdout_data", {}).get(
+                "partition_column"
+            )
+            if configured_holdout_partition != latest_partition:
+                return True
 
         return False
 
