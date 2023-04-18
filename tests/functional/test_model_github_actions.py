@@ -75,6 +75,9 @@ class TestModelGitHubActions:
         executed from a pull request branch with multiple commits.
         """
 
+        printout("Create models as a prerequisite for this test ...")
+        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
+
         printout("Create a feature branch ...")
         feature_branch = git_repo.create_head(feature_branch_name)
         checks = [self._increase_memory_check, self._add_file_check, self._remove_file_check]

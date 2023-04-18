@@ -981,9 +981,16 @@ class DrClient:
 
         return check_params
 
-    def fetch_custom_model_tests(self, custom_model_id):
+    def fetch_custom_model_tests(self, custom_model_id, **kwargs):
         """
         Retrieve custom model tests from DataRobot.
+
+        Parameters
+        ----------
+        custom_model_id : str
+            A DataRobot custom inference model ID.
+        kwargs : dict
+            A key-value pairs to be submitted as additional attributes when querying DataRobot.
 
         Returns
         -------
@@ -993,6 +1000,8 @@ class DrClient:
 
         logger.debug("Fetching custom model tests for DataRobot model ID %s", custom_model_id)
         params = {"customModelId": custom_model_id}
+        if kwargs:
+            params.update(kwargs)
         return self._paginated_fetch(self.CUSTOM_MODELS_TEST_ROUTE, params=params)
 
     def upload_dataset(self, dataset_filepath):
