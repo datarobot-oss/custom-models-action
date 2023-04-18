@@ -15,12 +15,12 @@ from schema_validator import ModelSchema
 CUSTOM_MODEL_TYPE = "inference"
 
 
-class DrApiAttrs:  # pylint: disable=too-few-public-methods
+class DrApiCustomModelChecks:  # pylint: disable=too-few-public-methods
     """
-    Contains mappings between local and DataRobot attributes.
+    Contains mappings between local custom model checks (testing) and DataRobot attributes.
     """
 
-    DR_TEST_CHECK_MAP = {
+    MAPPING = {
         ModelSchema.NULL_VALUE_IMPUTATION_KEY: "nullValueImputation",
         ModelSchema.SIDE_EFFECTS_KEY: "sideEffects",
         ModelSchema.PREDICTION_VERIFICATION_KEY: "predictionVerificationCheck",
@@ -29,7 +29,7 @@ class DrApiAttrs:  # pylint: disable=too-few-public-methods
     }
 
     @classmethod
-    def to_dr_test_check(cls, check_name):
+    def to_dr_attr(cls, check_name):
         """
         A method to map between local attribute test name to DataRobot related test name.
 
@@ -43,7 +43,7 @@ class DrApiAttrs:  # pylint: disable=too-few-public-methods
             DataRobot related test name.
 
         """
-        return cls.DR_TEST_CHECK_MAP[check_name]
+        return cls.MAPPING[check_name]
 
 
 class DrApiModelSettings:  # pylint: disable=too-few-public-methods
@@ -86,6 +86,31 @@ class DrApiModelSettings:  # pylint: disable=too-few-public-methods
     UNSTRUCTURED_TRAINING_HOLDOUT_MAPPING = {
         ModelSchema.TRAINING_DATASET_ID_KEY: "trainingDatasetId",
         ModelSchema.HOLDOUT_DATASET_ID_KEY: "holdoutDatasetId",
+    }
+
+    @classmethod
+    def to_dr_attr(cls, local_schema_key):
+        """
+        Maps between local schema settings attribute to the corresponding attribute in DataRobot.
+        """
+
+        return cls.MAPPING[local_schema_key]
+
+
+class DrApiTargetType:  # pylint: disable=too-few-public-methods
+    """
+    Contains mappings between local target types and DataRobot attributes.
+    """
+
+    MAPPING = {
+        ModelSchema.TARGET_TYPE_BINARY_KEY: "Binary",
+        ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY: "Binary",
+        ModelSchema.TARGET_TYPE_REGRESSION_KEY: "Regression",
+        ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY: "Regression",
+        ModelSchema.TARGET_TYPE_MULTICLASS_KEY: "Multiclass",
+        ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY: "Multiclass",
+        ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY: "Unstructured",
+        ModelSchema.TARGET_TYPE_ANOMALY_DETECTION_KEY: "Anomaly",
     }
 
     @classmethod

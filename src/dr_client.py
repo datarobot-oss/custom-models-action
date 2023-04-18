@@ -26,8 +26,9 @@ from common.exceptions import IllegalModelDeletion
 from common.http_requester import HttpRequester
 from common.namepsace import Namespace
 from common.string_util import StringUtil
-from dr_api_attrs import DrApiAttrs
+from dr_api_attrs import DrApiCustomModelChecks
 from dr_api_attrs import DrApiModelSettings
+from dr_api_attrs import DrApiTargetType
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 
@@ -66,16 +67,6 @@ class DrClient:
     DEPLOYMENT_MODEL_CHALLENGER_ROUTE = DEPLOYMENT_ROUTE + "challengers/"
     DEPLOYMENT_ACTUALS_UPDATE_ROUTE = DEPLOYMENT_ROUTE + "actuals/fromDataset/"
     ENVIRONMENT_DROP_IN_ROUTE = "executionEnvironments/"
-
-    MODEL_TARGET_TYPE_MAP = {
-        ModelSchema.TARGET_TYPE_BINARY_KEY: "Binary",
-        ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY: "Binary",
-        ModelSchema.TARGET_TYPE_REGRESSION_KEY: "Regression",
-        ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY: "Regression",
-        ModelSchema.TARGET_TYPE_MULTICLASS_KEY: "Multiclass",
-        ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY: "Multiclass",
-        ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY: "Unstructured",
-    }
 
     DEFAULT_MAX_WAIT_SEC = 600
 
@@ -242,7 +233,7 @@ class DrClient:
 
         payload = {
             "customModelType": constants.CUSTOM_MODEL_TYPE,
-            "targetType": cls.MODEL_TARGET_TYPE_MAP.get(target_type),
+            "targetType": DrApiTargetType.to_dr_attr(target_type),
             "targetName": model_info.get_settings_value(ModelSchema.TARGET_NAME_KEY),
             "isUnstructuredModelKind": model_info.is_unstructured,
             "userProvidedId": model_info.get_value(ModelSchema.MODEL_ID_KEY),
@@ -897,7 +888,7 @@ class DrClient:
             "longRunningService": "fail",
             "errorCheck": "fail",
         }
-        for local_check_name, dr_check_name in DrApiAttrs.DR_TEST_CHECK_MAP.items():
+        for local_check_name, dr_check_name in DrApiCustomModelChecks.MAPPING.items():
             check_config_value = "skip"
             if loaded_checks:
                 check_info = loaded_checks.get(local_check_name)
@@ -925,7 +916,7 @@ class DrClient:
                     check_params.update(cls._get_stability_check_params(info))
 
                 if check_params:
-                    dr_check_name = DrApiAttrs.to_dr_test_check(check)
+                    dr_check_name = DrApiCustomModelChecks.to_dr_attr(check)
                     parameters[dr_check_name] = check_params
         return parameters
 
