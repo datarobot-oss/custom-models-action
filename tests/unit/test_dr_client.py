@@ -25,7 +25,7 @@ from common.exceptions import DataRobotClientError
 from common.http_requester import HttpRequester
 from common.namepsace import Namespace
 from deployment_info import DeploymentInfo
-from dr_api_attrs import DrApiAttrs
+from dr_api_attrs import DrApiCustomModelChecks
 from dr_api_attrs import DrApiModelSettings
 from dr_client import DrClient
 from dr_client import logger as dr_client_logger
@@ -935,7 +935,8 @@ class TestCustomModelVersionRoutes:
 
             configuration = DrClient._build_tests_configuration(partial_configuration)
             assert (
-                DrApiAttrs.to_dr_test_check(ModelSchema.NULL_VALUE_IMPUTATION_KEY) in configuration
+                DrApiCustomModelChecks.to_dr_attr(ModelSchema.NULL_VALUE_IMPUTATION_KEY)
+                in configuration
             )
             # The following checks are silently added
             for check in ["longRunningService", "errorCheck"]:
@@ -944,10 +945,10 @@ class TestCustomModelVersionRoutes:
         def test_full_custom_model_testing_configuration(self, mock_full_custom_model_checks):
             """A case to test a full configuration of custom model testing."""
 
-            assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
+            assert mock_full_custom_model_checks.keys() == DrApiCustomModelChecks.MAPPING.keys()
             configuration = DrClient._build_tests_configuration(mock_full_custom_model_checks)
-            for check in DrApiAttrs.DR_TEST_CHECK_MAP:
-                assert DrApiAttrs.to_dr_test_check(check) in configuration
+            for check in DrApiCustomModelChecks.MAPPING:
+                assert DrApiCustomModelChecks.to_dr_attr(check) in configuration
             for check in ["longRunningService", "errorCheck"]:
                 assert check in configuration
 
@@ -959,7 +960,7 @@ class TestCustomModelVersionRoutes:
             disabled.
             """
 
-            assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
+            assert mock_full_custom_model_checks.keys() == DrApiCustomModelChecks.MAPPING.keys()
             for _, info in mock_full_custom_model_checks.items():
                 info[ModelSchema.CHECK_ENABLED_KEY] = False
             configuration = DrClient._build_tests_configuration(mock_full_custom_model_checks)
@@ -968,9 +969,9 @@ class TestCustomModelVersionRoutes:
         def test_full_custom_model_testing_parameters(self, mock_full_custom_model_checks):
             """A case to test a full number of parameters in custom model testing."""
 
-            assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
+            assert mock_full_custom_model_checks.keys() == DrApiCustomModelChecks.MAPPING.keys()
             parameters = DrClient._build_tests_parameters(mock_full_custom_model_checks)
-            dr_stability_check_key = DrApiAttrs.to_dr_test_check(ModelSchema.STABILITY_KEY)
+            dr_stability_check_key = DrApiCustomModelChecks.to_dr_attr(ModelSchema.STABILITY_KEY)
 
             assert (
                 parameters[dr_stability_check_key]["passingRate"]
@@ -985,7 +986,7 @@ class TestCustomModelVersionRoutes:
                 ModelSchema.PERFORMANCE_KEY,
                 ModelSchema.STABILITY_KEY,
             ]:
-                assert DrApiAttrs.to_dr_test_check(check) in parameters
+                assert DrApiCustomModelChecks.to_dr_attr(check) in parameters
 
         def test_full_custom_model_testing_parameters_with_all_disabled_checks(
             self, mock_full_custom_model_checks
@@ -994,7 +995,7 @@ class TestCustomModelVersionRoutes:
             A case to test a full number of testing parameters, when all the checks are disabled.
             """
 
-            assert mock_full_custom_model_checks.keys() == DrApiAttrs.DR_TEST_CHECK_MAP.keys()
+            assert mock_full_custom_model_checks.keys() == DrApiCustomModelChecks.MAPPING.keys()
             for _, info in mock_full_custom_model_checks.items():
                 info[ModelSchema.CHECK_ENABLED_KEY] = False
             parameters = DrClient._build_tests_parameters(mock_full_custom_model_checks)
