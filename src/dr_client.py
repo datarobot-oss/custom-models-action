@@ -15,7 +15,6 @@ communicates with DataRobot via the published public API.
 import json
 import logging
 import time
-from collections import namedtuple
 
 from requests_toolbelt import MultipartEncoder
 
@@ -28,6 +27,7 @@ from common.http_requester import HttpRequester
 from common.namepsace import Namespace
 from common.string_util import StringUtil
 from dr_api_attrs import DrApiAttrs
+from dr_api_attrs import DrApiModelSettings
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
 
@@ -75,17 +75,6 @@ class DrClient:
         ModelSchema.TARGET_TYPE_MULTICLASS_KEY: "Multiclass",
         ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY: "Multiclass",
         ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY: "Unstructured",
-    }
-
-    MODEL_SETTINGS_KEYS_MAP = {
-        ModelSchema.NAME_KEY: "name",
-        ModelSchema.DESCRIPTION_KEY: "description",
-        ModelSchema.LANGUAGE_KEY: "language",
-        ModelSchema.TARGET_NAME_KEY: "targetName",
-        ModelSchema.PREDICTION_THRESHOLD_KEY: "predictionThreshold",
-        ModelSchema.POSITIVE_CLASS_LABEL_KEY: "positiveClassLabel",
-        ModelSchema.NEGATIVE_CLASS_LABEL_KEY: "negativeClassLabel",
-        ModelSchema.CLASS_LABELS_KEY: "classLabels",
     }
 
     DEFAULT_MAX_WAIT_SEC = 600
@@ -224,7 +213,7 @@ class DrClient:
 
         Parameters
         ----------
-        model_info : ModelInfo
+        model_info : model_info.ModelInfo
             A local model info as loaded from the local source tree.
 
         Returns
@@ -404,7 +393,7 @@ class DrClient:
             A DataRobot custom model ID.
         is_major_update : bool
             Whether to create a major or minor version.
-        model_info : ModelInfo
+        model_info : model_info.ModelInfo
             An information about the model in the local source tree.
         git_model_version : common.GitModelVersion
             A class that contains required information about the model's version in Git.
@@ -570,7 +559,7 @@ class DrClient:
 
         Parameters
         ----------
-        model_info : ModelInfo
+        model_info : model_info.ModelInfo
             An information about the model in the local source tree.
         datarobot_custom_model : dict
             A DataRobot custom model entity.
@@ -820,7 +809,7 @@ class DrClient:
             A DataRobot custom model ID.
         model_version_id : str
             A DataRobot custom model version ID.
-        model_info : ModelInfo
+        model_info : model_info.ModelInfo
             A class that contains full information about a single model from the local source tree.
         """
 
@@ -1818,7 +1807,7 @@ class DrClient:
         ----------
         datarobot_custom_model : dict
             A DataRobot custom model.
-        model_info : ModelInfo
+        model_info : model_info.ModelInfo
             An information about a model, which is read from the local source tree.
 
         Returns
@@ -1827,24 +1816,61 @@ class DrClient:
             A custom model entity from DataRobot if an update took place or None otherwise.
         """
 
-        ext_stats_payload = {}
-        remote_settings = datarobot_custom_model.get("externalMlopsStatsConfig") or {}
-
-        DatasetParam = namedtuple("DatasetParam", ["local", "remote"])
-        dataset_params = [
-            DatasetParam(ModelSchema.TRAINING_DATASET_ID_KEY, "trainingDatasetId"),
-            DatasetParam(ModelSchema.HOLDOUT_DATASET_ID_KEY, "holdoutDatasetId"),
-        ]
-        for dataset_param in dataset_params:
-            local_value = model_info.get_settings_value(dataset_param.local)
-            if local_value and local_value != remote_settings.get(dataset_param.remote):
-                ext_stats_payload[dataset_param.remote] = local_value
-
+        ext_stats_payload = self.get_training_holdout_patch_payload_at_model_level(
+            model_info, datarobot_custom_model
+        )
         if ext_stats_payload:
-            payload = {"externalMlopsStatsConfig": ext_stats_payload}
             err_msg = "Failed to update training / holdout datasets for unstructured model"
-            return self._update_model(model_info, datarobot_custom_model, payload, err_msg)
+            return self._update_model(
+                model_info, datarobot_custom_model, ext_stats_payload, err_msg
+            )
         return None
+
+    @staticmethod
+    def get_training_holdout_patch_payload_at_model_level(model_info, datarobot_model):
+        """
+        Returns a payload for the training/holdout attributes that need to be updated in DataRobot
+        after a comparison to the local corresponding values. For unstructured models the payload
+        contains an `externalMlopsStatsConfig` attribute, which is a map of the related attributes.
+        For structured models, the payload contains the related attributes (which are different
+        from the response) for the PATCH operation.
+
+        Parameters
+        ----------
+        model_info : model_info.ModelInfo
+            An information about the model, which is read from the local source tree.
+        datarobot_model : dict
+            A dict that contains all the attributes of a model in DataRobot.
+
+        Returns
+        -------
+        dict :
+            The payload of a PATCH of the training/holdout DataRobot model.
+        """
+
+        if model_info.is_unstructured:
+            training_holdout_mapping = DrApiModelSettings.UNSTRUCTURED_TRAINING_HOLDOUT_MAPPING
+            remote_settings = datarobot_model.get("externalMlopsStatsConfig") or {}
+        else:
+            training_holdout_mapping = (
+                DrApiModelSettings.STRUCTURED_TRAINING_HOLDOUT_RESPONSE_MAPPING
+            )
+            remote_settings = datarobot_model
+
+        payload = {}
+        for local_key, remote_key in training_holdout_mapping.items():
+            local_value = model_info.get_settings_value(local_key)
+            remote_value = remote_settings.get(remote_key)
+            if local_value != remote_value:
+                if model_info.is_unstructured:
+                    if "externalMlopsStatsConfig" not in payload:
+                        payload["externalMlopsStatsConfig"] = {}
+                    payload["externalMlopsStatsConfig"][remote_key] = local_value
+                else:
+                    patch_key_mapping = DrApiModelSettings.STRUCTURED_TRAINING_HOLDOUT_PATCH_MAPPING
+                    remote_patch_key = patch_key_mapping[local_key]
+                    payload[remote_patch_key] = local_value
+        return payload
 
     def update_training_dataset_for_structured_models(self, datarobot_custom_model, model_info):
         """
@@ -1855,7 +1881,7 @@ class DrClient:
         ----------
         datarobot_custom_model : dict
             A DataRobot custom model.
-        model_info : ModelInfo
+        model_info : model_info.ModelInfo
             An information about the model, which is read from the local source tree.
 
         Returns
@@ -1864,22 +1890,9 @@ class DrClient:
             The updated custom model from DataRobot if an update took place, or None otherwise.
         """
 
-        training_dataset_payload = {}
-
-        DatasetParam = namedtuple("DatasetParam", ["local", "remote", "patch_remote"])
-        dataset_params = [
-            DatasetParam(ModelSchema.TRAINING_DATASET_ID_KEY, "trainingDatasetId", "datasetId"),
-            DatasetParam(
-                ModelSchema.PARTITIONING_COLUMN_KEY,
-                "trainingDataPartitionColumn",
-                "partitionColumn",
-            ),
-        ]
-        for dataset_param in dataset_params:
-            local_value = model_info.get_settings_value(dataset_param.local)
-            if local_value and local_value != datarobot_custom_model.get(dataset_param.remote):
-                training_dataset_payload[dataset_param.patch_remote] = local_value
-
+        training_dataset_payload = self.get_training_holdout_patch_payload_at_model_level(
+            model_info, datarobot_custom_model
+        )
         if training_dataset_payload:
             url = self.CUSTOM_MODEL_TRAINING_DATA.format(model_id=datarobot_custom_model["id"])
             response = self._http_requester.patch(url, json=training_dataset_payload)
@@ -1922,7 +1935,7 @@ class DrClient:
         ----------
         datarobot_custom_model : dict
             A DataRobot custom model.
-        model_info : ModelInfo
+        model_info : model_info.ModelInfo
             An information about the model, which is read from the local source tree.
 
         Returns
@@ -1931,17 +1944,39 @@ class DrClient:
             The updated custom model from DatRobot if an update took place, or None otherwise.
         """
 
-        payload = {}
-
-        for local_key, remote_key in self.MODEL_SETTINGS_KEYS_MAP.items():
-            local_value = model_info.get_settings_value(local_key)
-            if local_value and local_value != datarobot_custom_model[remote_key]:
-                payload[remote_key] = local_value
-
+        payload = self.get_settings_patch_payload(model_info, datarobot_custom_model)
         if payload:
             err_msg = "Failed to update custom model settings"
             return self._update_model(model_info, datarobot_custom_model, payload, err_msg)
         return None
+
+    @staticmethod
+    def get_settings_patch_payload(model_info, datarobot_model):
+        """
+        Returns a payload for the settings attributes that need to be updated in DataRobot,
+        after a comparison to the local corresponding values.
+
+        Parameters
+        ----------
+        model_info : model_info.ModelInfo
+            An information about the model, which is read from the local source tree.
+        datarobot_model : dict
+            A dict that contains all the attributes of a model in DataRobot.
+
+        Returns
+        -------
+        dict :
+            The payload for a PATCH of the DataRobot settings.
+        """
+
+        payload = {}
+        for local_key, remote_key in DrApiModelSettings.MAPPING.items():
+            if remote_key == DrApiModelSettings.ReservedValues.UNSET:
+                continue
+            local_value = model_info.get_settings_value(local_key)
+            if local_value and local_value != datarobot_model.get(remote_key):
+                payload[remote_key] = local_value
+        return payload
 
     def fetch_environment_drop_in(self, search_for=None):
         """

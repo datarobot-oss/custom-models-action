@@ -199,7 +199,7 @@ class DeploymentController(ControllerBase):
                     desired_datarobot_model, datarobot_deployment
                 ):
                     if deployment_info.is_challenger_enabled:
-                        self._conditionally_create_challenger_in_deployment(
+                        self._create_challenger_in_deployment_if_not_created_already(
                             desired_datarobot_model.latest_version,
                             datarobot_deployment,
                             deployment_info,
@@ -297,23 +297,13 @@ class DeploymentController(ControllerBase):
             deployment["id"],
         )
 
-    def _conditionally_create_challenger_in_deployment(
+    def _create_challenger_in_deployment_if_not_created_already(
         self, model_latest_version, datarobot_deployment, deployment_info
     ):
-        associated_model_info = self._model_controller.models_info.get(
-            deployment_info.user_provided_model_id
-        )
-        if not associated_model_info.is_affected_by_commit(model_latest_version):
-            logger.debug(
-                "Avoid creating a challenger because the associated model was not affected. "
-                "User provided deployment ID: %s, Model path: %s, model latest version id: %s",
-                deployment_info.user_provided_id,
-                associated_model_info.model_path,
-                model_latest_version["id"],
-            )
-            return
-
         if self._challenger_already_created(model_latest_version, datarobot_deployment):
+            associated_model_info = self._model_controller.models_info.get(
+                deployment_info.user_provided_model_id
+            )
             logger.debug(
                 "Avoid creating a challenger because the challenger already exists. "
                 "User provided deployment ID: %s, model path: %s, model latest version id: %s",

@@ -238,10 +238,10 @@ class ModelInfo(InfoBase):
         """Whether a new custom inference model version should be created"""
 
         if (
-            self.flags.should_upload_all_files
+            not datarobot_latest_model_version
+            or self.flags.should_upload_all_files
             or bool(self.file_changes.changed_or_new_files)
             or bool(self.file_changes.deleted_file_ids)
-            or not datarobot_latest_model_version
         ):
             return True
 

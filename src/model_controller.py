@@ -427,8 +427,7 @@ class ModelController(ControllerBase):
             self._handle_changed_or_new_files(model_info, changed_files)
             self._handle_deleted_files(model_info)
 
-    @classmethod
-    def _handle_changed_or_new_files(cls, model_info, changed_or_new_files):
+    def _handle_changed_or_new_files(self, model_info, changed_or_new_files):
         for changed_file in changed_or_new_files:
             changed_model_filepath = model_info.model_file_paths.get(changed_file)
             if changed_model_filepath:
@@ -439,10 +438,9 @@ class ModelController(ControllerBase):
                 )
                 model_info.file_changes.add_changed(changed_model_filepath)
 
-            cls._mark_changes_in_model_settings(model_info, changed_file)
+            self._mark_changes_in_model_settings(model_info, changed_file)
 
-    @classmethod
-    def _mark_changes_in_model_settings(cls, model_info, changed_file):
+    def _mark_changes_in_model_settings(self, model_info, changed_file):
         # A change may happen in the model's definition (yaml), which is not necessarily
         # included by the glob patterns
         if any(changed_file.suffix == suffix for suffix in [".yaml", ".yml"]):
@@ -452,9 +450,45 @@ class ModelController(ControllerBase):
                 model_info.yaml_filepath,
                 changed_file,
             )
-            if model_info.yaml_filepath.samefile(changed_file):
+            # With the following condition, the model's settings will remain untouched in DataRobot
+            # unless there was a local change to the related model's definition in the settings
+            # section. It means that if the user made a change via the UI, this change will not
+            # be overriden until a local change will be detected.
+            if model_info.yaml_filepath.samefile(changed_file) and self._should_settings_be_updated(
+                model_info
+            ):
                 logger.debug("The model's settings were changed. path %s", model_info.model_path)
                 model_info.flags.should_update_settings = True
+
+    def _should_settings_be_updated(self, model_info):
+        datarobot_model = self.datarobot_models[model_info.user_provided_id].model
+        dr_model_settings_update_payload = self._dr_client.get_settings_patch_payload(
+            model_info, datarobot_model
+        )
+        return bool(
+            dr_model_settings_update_payload
+            or self._should_training_holdout_data_be_updated_at_model_level(
+                model_info, datarobot_model
+            )
+        )
+
+    def _should_training_holdout_data_be_updated_at_model_level(self, model_info, datarobot_model):
+        training_holdout_changes_at_model_level = (
+            self._dr_client.get_training_holdout_patch_payload_at_model_level(
+                model_info, datarobot_model
+            )
+        )
+        is_training_enabled_for_version = datarobot_model.get(
+            "isTrainingDataForVersionsPermanentlyEnabled", False
+        )
+        if training_holdout_changes_at_model_level and is_training_enabled_for_version:
+            logger.warning(
+                "Changes of training/holdout data at model level are ignored, because the given"
+                "model was already set to handle training/holdout data at version level. "
+                "Model path: %s",
+                model_info.model_path,
+            )
+        return bool(training_holdout_changes_at_model_level and not is_training_enabled_for_version)
 
     def _handle_deleted_files(self, model_info):
         """

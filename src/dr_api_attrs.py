@@ -7,6 +7,7 @@
 A module that contains constants and mappings between local and DataRobot public API attribute
 names.
 """
+from enum import Enum
 
 from schema_validator import ModelSchema
 
@@ -43,3 +44,54 @@ class DrApiAttrs:  # pylint: disable=too-few-public-methods
 
         """
         return cls.DR_TEST_CHECK_MAP[check_name]
+
+
+class DrApiModelSettings:  # pylint: disable=too-few-public-methods
+    """
+    Contains mapping between local and DataRobot model settings.
+    """
+
+    class ReservedValues(Enum):
+        """A placeholder for reserved values."""
+
+        UNSET = 1
+
+    MAPPING = {
+        ModelSchema.NAME_KEY: "name",
+        ModelSchema.DESCRIPTION_KEY: "description",
+        ModelSchema.LANGUAGE_KEY: "language",
+        ModelSchema.TARGET_NAME_KEY: "targetName",
+        ModelSchema.PREDICTION_THRESHOLD_KEY: "predictionThreshold",
+        ModelSchema.POSITIVE_CLASS_LABEL_KEY: "positiveClassLabel",
+        ModelSchema.NEGATIVE_CLASS_LABEL_KEY: "negativeClassLabel",
+        ModelSchema.CLASS_LABELS_KEY: "classLabels",
+        # The following keys are dependent on whether the model is structured or unstructured
+        # and therefore the actual mapping is done directly by accessing the
+        # `STRUCTURED_TRAINING_HOLDOUT_MAPPING` & `UNSTRUCTURED_TRAINING_HOLDOUT_MAPPING` below.
+        ModelSchema.PARTITIONING_COLUMN_KEY: ReservedValues.UNSET,
+        ModelSchema.TRAINING_DATASET_ID_KEY: ReservedValues.UNSET,
+        ModelSchema.HOLDOUT_DATASET_ID_KEY: ReservedValues.UNSET,
+    }
+
+    STRUCTURED_TRAINING_HOLDOUT_RESPONSE_MAPPING = {
+        ModelSchema.TRAINING_DATASET_ID_KEY: "trainingDatasetId",
+        ModelSchema.PARTITIONING_COLUMN_KEY: "trainingDataPartitionColumn",
+    }
+
+    STRUCTURED_TRAINING_HOLDOUT_PATCH_MAPPING = {
+        ModelSchema.TRAINING_DATASET_ID_KEY: "datasetId",
+        ModelSchema.PARTITIONING_COLUMN_KEY: "partitionColumn",
+    }
+
+    UNSTRUCTURED_TRAINING_HOLDOUT_MAPPING = {
+        ModelSchema.TRAINING_DATASET_ID_KEY: "trainingDatasetId",
+        ModelSchema.HOLDOUT_DATASET_ID_KEY: "holdoutDatasetId",
+    }
+
+    @classmethod
+    def to_dr_attr(cls, local_schema_key):
+        """
+        Maps between local schema settings attribute to the corresponding attribute in DataRobot.
+        """
+
+        return cls.MAPPING[local_schema_key]
