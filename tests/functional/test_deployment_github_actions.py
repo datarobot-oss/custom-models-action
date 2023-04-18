@@ -733,6 +733,7 @@ class TestDeploymentGitHubActions:
                         workspace_path, git_repo, main_branch_name, "push", is_deploy=True
                     )
 
+            printout(str(exec_info.value))
             assert any(record.levelname in ("WARNING", "ERROR") for record in caplog.records)
             assert "WARNING" in str(exec_info.value) or "WARNING" in str(exec_info.value)
         printout("Done")

@@ -539,8 +539,7 @@ class ModelController(ControllerBase):
                     self._cache_new_custom_model_version(user_provided_id, latest_version)
 
                 if (
-                    previous_latest_version
-                    and latest_version["id"] == previous_latest_version["id"]
+                    not self._was_new_version_created(previous_latest_version, latest_version)
                     and GitHubEnv.is_push()
                 ):
                     # Upon pushing to the main branch, If the model was somehow affected by the
@@ -558,12 +557,49 @@ class ModelController(ControllerBase):
                 if model_info.flags.should_update_settings:
                     self._update_settings(custom_model, model_info)
 
-                if model_info.should_run_test:
-                    self._test_custom_model_version(
-                        custom_model["id"], latest_version["id"], model_info
-                    )
-
                 self.metrics.total_affected.value += 1
+
+            # Running a test is an action and is not directly considered as a change of a model
+            # or a version. It's possible, for instance, that the only change in a given run
+            # is the fact that the user enabled the testing, applying any settings of creating
+            # a new version.
+            if self._should_run_custom_model_test(
+                model_info, custom_model, previous_latest_version, latest_version
+            ):
+                self._test_custom_model_version(
+                    custom_model["id"], latest_version["id"], model_info
+                )
+
+    @staticmethod
+    def _was_new_version_created(previous_latest_version, latest_version):
+        return not previous_latest_version or latest_version["id"] != previous_latest_version["id"]
+
+    def _should_run_custom_model_test(
+        self, model_info, datarobot_custom_model, previous_latest_version, latest_version
+    ):
+        if not model_info.should_run_test:
+            return False
+
+        if self._was_new_version_created(previous_latest_version, latest_version):
+            return True
+
+        # The rest of the code makes sure that changes in the model's metadata test section
+        # will trigger the test if required.
+
+        # It is enough to fetch a single test and check it against the latest version.
+        custom_model_tests = self._dr_client.fetch_custom_model_tests(
+            custom_model_id=datarobot_custom_model["id"], limit=1
+        )
+        if not custom_model_tests:
+            return True
+
+        if custom_model_tests[0]["customModelVersion"]["id"] != latest_version["id"]:
+            return True
+
+        # NOTE: it is still desired to examine changes in the checks under the test section, and
+        # trigger the test accordingly. But will leave it for now for the future.
+
+        return False
 
     def _cache_new_custom_model_version(self, user_provided_id, latest_version):
         self.datarobot_models[user_provided_id].latest_version = latest_version
