@@ -9,6 +9,8 @@ on:
     types: [ opened, synchronize, reopened, edited ]
   push:
     branches: [ master ]
+  issue_comment:
+    types: [ created ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -21,7 +23,7 @@ env:
   LOGLEVEL: debug
   DATAROBOT_API_TOKEN: ${{ secrets.DATAROBOT_API_TOKEN }}  # Required by the functional tests
   DATAROBOT_WEBSERVER: ${{ secrets.DATAROBOT_WEBSERVER }}  # Required by the functional tests
-  INSPECT_CONTEXT: false
+  INSPECT_CONTEXT: true
   OUT_DIR: output-context/${{ github.event_name }}
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
@@ -33,8 +35,6 @@ jobs:
 
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
-
-    if: false
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -74,10 +74,11 @@ jobs:
 
           echo "github.repository:    ${{ github.repository }}" >> $OUT_DIR/github_context.txt
           echo "github.workspace:    ${{ github.workspace }}" >> $OUT_DIR/github_context.txt
+          echo "" >> $OUT_DIR/github_context.txt
 
-          echo "The github context is:"
-          echo "${{ toJson(github) }}" >> $OUT_DIR/github_context.json
-          echo ""
+          echo "github.event.comment.body:  ${{ github.event.comment.body }}" >> $OUT_DIR/github_context.txt
+          echo "github.event.comment:  ${{ toJson(github.event.comment) }}" >> $OUT_DIR/github_context.txt
+          echo "" >> $OUT_DIR/github_context.txt
 
       - uses: actions/upload-artifact@v3
         if: ${{ env.INSPECT_CONTEXT == 'true' }}
@@ -108,6 +109,8 @@ jobs:
 
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
+
+    if: false
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
