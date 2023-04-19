@@ -5,10 +5,10 @@ name: Workflow CI/CD
 # Controls when the workflow will run
 on:
   pull_request:
-    branches: [ master ]
+    branches: [ zohar/raptor-9338-specify-functional-tests-during-pr ]
     types: [ opened, synchronize, reopened, edited ]
   push:
-    branches: [ master ]
+    branches: [ zohar/raptor-9338-specify-functional-tests-during-pr ]
   issue_comment:
     types: [ created ]
 
