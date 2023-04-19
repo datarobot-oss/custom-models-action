@@ -9,6 +9,8 @@ on:
     types: [ opened, synchronize, reopened, edited ]
   push:
     branches: [ master ]
+  issue_comment:
+    types: [ created, edited ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -30,6 +32,9 @@ jobs:
   validate-code-style:
     # Run this job on any action of a PR, but skip the job upon merge to master
     # if: github.event.pull_request.merged != true
+    if: |
+      github.event.comment.body == null ||
+      (github.event.issue.pull_request && contains(github.event.comment.body, '$FUNCTIONAL_TESTS='))
 
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
@@ -72,10 +77,16 @@ jobs:
 
           echo "github.repository:    ${{ github.repository }}" >> $OUT_DIR/github_context.txt
           echo "github.workspace:    ${{ github.workspace }}" >> $OUT_DIR/github_context.txt
+          echo "" >> $OUT_DIR/github_context.txt
 
-          echo "The github context is:"
-          echo "${{ toJson(github) }}" >> $OUT_DIR/github_context.json
-          echo ""
+          echo "Comment:" >> $OUT_DIR/github_context.txt
+          echo "github.event.comment.body:  ${{ github.event.comment.body }}" >> $OUT_DIR/github_context.txt
+          echo "github.event.comment:  ${{ toJson(github.event.comment) }}" >> $OUT_DIR/github_context.txt
+          echo "" >> $OUT_DIR/github_context.txt
+
+          echo "toJson(github) - the whole GitHub context:" >> $OUT_DIR/github_context.txt
+          echo "${{ toJson(github) }}" >> $OUT_DIR/github_context.txt
+          echo "" >> $OUT_DIR/github_context.txt
 
       - uses: actions/upload-artifact@v3
         if: ${{ env.INSPECT_CONTEXT == 'true' }}
@@ -85,7 +96,12 @@ jobs:
 
   run-unit-tests:
     # Run this job on any action of a PR, but skip the job upon merge to master
-    if: github.event.pull_request.merged != true
+    if: |
+      github.event.pull_request.merged != true &&
+      (
+        github.event.comment.body == null ||
+        (github.event.issue.pull_request && contains(github.event.comment.body, '$FUNCTIONAL_TESTS='))
+      )
 
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
@@ -102,6 +118,10 @@ jobs:
         run: make test
 
   run-functional-test:
+    if: |
+      github.event.comment.body == null ||
+      (github.event.issue.pull_request && contains(github.event.comment.body, '$FUNCTIONAL_TESTS='))
+
     needs: [run-unit-tests, validate-code-style]
 
     # The type of runner that the job will run on
@@ -112,10 +132,23 @@ jobs:
       - name: Check run state for functional tests
         id: functional-tests-state
         run: |
+          # Read the pull request body
           body=$(cat <<"EOF"
           ${{github.event.pull_request.body}}
           EOF
           )
+
+          # Look for '$FUNCTIONAL_TESTS' in the body and add it to the 'TESTS_KEY' output
+          if [ ! -z "${{ github.event.comment.body }}" ]; then
+            functional_tests=$( \
+              grep -o '$FUNCTIONAL_TESTS=[a-zA-Z0-9:/\._]\+' <<< '${{github.event.comment.body}}' \
+            )
+            if [ ! -z "${functional_tests}" ]; then
+              echo "TESTS_KEY=${functional_tests:1}" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+          # Determine the functional tests state
           if grep '.*\- \[\s*x\s*\] Skip functional tests.*' <<< "${body}" > /dev/null; then
             echo "The user decided to skip the functional tests."
             echo "FUNCTIONAL_TESTS_RUN_STATE=skip" >> $GITHUB_OUTPUT
@@ -139,7 +172,7 @@ jobs:
         if: ${{ steps.functional-tests-state.outputs.FUNCTIONAL_TESTS_RUN_STATE != 'skip' }}
         run: |
           if ${{ steps.functional-tests-state.outputs.FUNCTIONAL_TESTS_RUN_STATE == 'all' }}; then
-            make test-functional
+            ${{ steps.functional-tests-state.outputs.TESTS_KEY }} make test-functional
           else
-            make test-functional-basic
+            ${{ steps.functional-tests-state.outputs.TESTS_KEY }} make test-functional-basic
           fi
