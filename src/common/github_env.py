@@ -6,6 +6,7 @@
 """A module to provide an interface to GitHub environment variables"""
 
 import os
+import uuid
 from pathlib import Path
 
 
@@ -78,5 +79,16 @@ class GitHubEnv:
     def set_output_param(cls, name, value):
         """Set an output parameter that can be referenced by a follow-up step."""
 
+        is_multiline = False
+        if isinstance(value, str):
+            value = value.strip()
+            is_multiline = "\n" in value
+
         with open(cls.github_output(), "a", encoding="utf-8") as file:
-            file.write(f"{name}={value}\n")
+            if is_multiline:
+                eof = uuid.uuid4()
+                file.write(f"{name}<<{eof}\n")
+                file.write(f"{value}\n")
+                file.write(f"{eof}\n")
+            else:
+                file.write(f"{name}={value}\n")
