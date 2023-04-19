@@ -76,6 +76,7 @@ jobs:
           echo "github.workspace:    ${{ github.workspace }}" >> $OUT_DIR/github_context.txt
           echo "" >> $OUT_DIR/github_context.txt
 
+          echo "Comment:" >> $OUT_DIR/github_context.txt
           echo "github.event.comment.body:  ${{ github.event.comment.body }}" >> $OUT_DIR/github_context.txt
           echo "github.event.comment:  ${{ toJson(github.event.comment) }}" >> $OUT_DIR/github_context.txt
           echo "" >> $OUT_DIR/github_context.txt
