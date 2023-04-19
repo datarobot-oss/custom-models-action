@@ -6,18 +6,17 @@
 # pylint: disable=too-many-arguments
 
 """A module that contains unit-tests for the common package."""
+import re
 
 import pytest
-import schema
 
 from common.convertors import MemoryConvertor
 from common.exceptions import InvalidMemoryValue
 from common.exceptions import NamespaceAlreadySet
 from common.exceptions import NamespaceNotInitialized
 from common.git_tool import GitTool
+from common.github_env import GitHubEnv
 from common.namepsace import Namespace
-from dr_api_attrs import DrApiModelSettings
-from schema_validator import ModelSchema
 from tests.unit.conftest import make_a_change_and_commit
 
 
@@ -224,42 +223,53 @@ class TestNamespace:
         assert un_namespaced_user_provided_id == user_provided_id
 
 
-class TestDrApiAttrs:  # pylint: disable=too-few-public-methods
-    """
-    A class to test the mappings between a local schema attribute keys to the corresponding
-    DataRobot API attributes.
-    """
+@pytest.mark.usefixtures("github_output")
+class TestGitHubEnv:
+    """A class that contains unit-tests for the GitHubEnv module."""
 
-    def test_dr_settings_mapping_keys(self):
-        """A case to test a mapping of the settings section."""
+    @pytest.mark.parametrize("value", [1, -1, 0.5, None, [2, 3], (4, 5), {"a": 1}])
+    def test_set_output_param_non_str_value(self, value):
+        """A case to test non-strings output values."""
 
-        model_schema_settings_section = ModelSchema.MODEL_SCHEMA.schema[
-            ModelSchema.SETTINGS_SECTION_KEY
-        ]
-        for local_settings_key in model_schema_settings_section:
-            local_name = None
-            if isinstance(local_settings_key, str):
-                local_name = local_settings_key
-            elif isinstance(local_settings_key, schema.Optional):
-                local_name = local_settings_key.schema
-            remote_key = DrApiModelSettings.to_dr_attr(local_name)
-            if remote_key == DrApiModelSettings.ReservedValues.UNSET:
-                remote_key = DrApiModelSettings.STRUCTURED_TRAINING_HOLDOUT_PATCH_MAPPING.get(
-                    local_name
-                )
-                if not remote_key:
-                    remote_key = DrApiModelSettings.UNSTRUCTURED_TRAINING_HOLDOUT_MAPPING.get(
-                        local_name
-                    )
-                    assert remote_key, f"Missing local '{local_name}' key mapping!"
+        param_name = "some-non-str-value-param"
+        GitHubEnv.set_output_param(param_name, value)
+        with open(GitHubEnv.github_output(), "r", encoding="utf-8") as fd:
+            content = fd.read()
+            assert f"{param_name}={value}" in content
 
-    def test_dr_structured_model_training_holdout_response_and_patch_keys(self):
-        """
-        Test the correlation between response and patch payloads of the training/holdout data in
-        structured models.
-        """
+    @pytest.mark.parametrize("value", ["Hello", "Hello World", "Hello World\n"])
+    def test_set_output_param_single_line_str_value(self, value):
+        """A case to test single line string output values."""
 
-        response_mapping = DrApiModelSettings.STRUCTURED_TRAINING_HOLDOUT_RESPONSE_MAPPING
-        patch_mapping = DrApiModelSettings.STRUCTURED_TRAINING_HOLDOUT_PATCH_MAPPING
-        for local_key, _ in response_mapping.items():
-            assert patch_mapping.get(local_key) is not None
+        param_name = "some-single-line-str-param"
+        GitHubEnv.set_output_param(param_name, value)
+        with open(GitHubEnv.github_output(), "r", encoding="utf-8") as fd:
+            content = fd.read()
+            assert f"{param_name}={value}" in content
+
+    @pytest.mark.parametrize("value", ["Hello\nWorld", "Hello\nWorld\n"])
+    def test_set_output_param_multilines_str_value(self, value):
+        """A case to test multilines string output values."""
+
+        param_name = "some-multilines-str-param"
+        GitHubEnv.set_output_param(param_name, value)
+        with open(GitHubEnv.github_output(), "r", encoding="utf-8") as fd:
+            content = fd.read()
+
+            expected_block = f"{param_name}<<.*\n{value.rstrip()}\n.*\n"
+            assert re.search(expected_block, content)
+
+    def test_set_output_param_two_multilines_str_values(self):
+        """A case to test more than one multilines string output values."""
+
+        param_name_prefix = "some-multilines-str-param"
+        value_prefix = "Hello\nWorld"
+        for index in range(2):
+            GitHubEnv.set_output_param(f"{param_name_prefix}-{index}", f"{value_prefix}-{index}")
+
+        with open(GitHubEnv.github_output(), "r", encoding="utf-8") as fd:
+            content = fd.read()
+
+            for index in range(2):
+                expected_block = f"{param_name_prefix}-{index}<<.*\n{value_prefix}-{index}\n.*\n"
+                assert re.search(expected_block, content)
