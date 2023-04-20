@@ -38,7 +38,7 @@ jobs:
 
     if: |
       github.event.comment.body == null ||
-      (github.event.issue.pull_request && contains(github .event.comment.body, '$FUNCTIONAL_TESTS='))
+      (github.event.issue.pull_request && contains(github.event.comment.body, '$FUNCTIONAL_TESTS='))
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -101,7 +101,7 @@ jobs:
       github.event.pull_request.merged != true &&
       (
         github.event.comment.body == null ||
-        (github.event.issue.pull_request && contains(github .event.comment.body, '$FUNCTIONAL_TESTS='))
+        (github.event.issue.pull_request && contains(github.event.comment.body, '$FUNCTIONAL_TESTS='))
       )
 
     # The type of runner that the job will run on
@@ -123,7 +123,7 @@ jobs:
 
     if: |
       github.event.comment.body == null ||
-      (github.event.issue.pull_request && contains(github .event.comment.body, '$FUNCTIONAL_TESTS='))
+      (github.event.issue.pull_request && contains(github.event.comment.body, '$FUNCTIONAL_TESTS='))
 
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
@@ -142,8 +142,14 @@ jobs:
           set -x
 
           # Look for FUNCTIONAL_TESTS in the body
-          functional_tests=$(grep -o '$FUNCTIONAL_TESTS=[a-zA-Z0-9:/\._]\+' <<< "${body}")
-          echo "FUNCTIONAL_TESTS=${functional_tests:1}" >> $GITHUB_OUTPUT
+          if ${{ github.event.comment.body != null }}; then
+            functional_tests=$( \
+              grep -o '$FUNCTIONAL_TESTS=[a-zA-Z0-9:/\._]\+' <<< "${{github.event.comment.body}}" \
+            )
+            if [ ! -z $functional_tests ]:
+              echo "FUNCTIONAL_TESTS=${functional_tests:1}" >> $GITHUB_OUTPUT
+            fi
+          fi
 
           # Determine the functional tests state
           if grep '.*\- \[\s*x\s*\] Skip functional tests.*' <<< "${body}" > /dev/null; then
