@@ -36,6 +36,10 @@ jobs:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
+    if: |
+      github.event.comment.body == null ||
+      (github.event.issue.pull_request && contains(github .event.comment.body, '$FUNCTIONAL_TESTS='))
+
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
@@ -93,7 +97,12 @@ jobs:
 
   run-unit-tests:
     # Run this job on any action of a PR, but skip the job upon merge to master
-    if: github.event.pull_request.merged != true
+    if: |
+      github.event.pull_request.merged != true &&
+      (
+        github.event.comment.body == null ||
+        (github.event.issue.pull_request && contains(github .event.comment.body, '$FUNCTIONAL_TESTS='))
+      )
 
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
@@ -111,6 +120,10 @@ jobs:
 
   run-functional-test:
     needs: [run-unit-tests, validate-code-style]
+
+    if: |
+      github.event.comment.body == null ||
+      (github.event.issue.pull_request && contains(github .event.comment.body, '$FUNCTIONAL_TESTS='))
 
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
