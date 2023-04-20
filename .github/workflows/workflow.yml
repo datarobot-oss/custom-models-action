@@ -142,11 +142,11 @@ jobs:
           set -x
 
           # Look for FUNCTIONAL_TESTS in the body
-          if [ ! -z ${{ github.event.comment.body }} ]; then
+          if [ ! -z "${{ github.event.comment.body }}" ]; then
             functional_tests=$( \
               grep -o '$FUNCTIONAL_TESTS=[a-zA-Z0-9:/\._]\+' <<< "${{github.event.comment.body}}" \
             )
-            if [ ! -z $functional_tests ]:
+            if [ ! -z "${functional_tests}" ]; then
               echo "FUNCTIONAL_TESTS=${functional_tests:1}" >> $GITHUB_OUTPUT
             fi
           fi
