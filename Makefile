@@ -1,6 +1,12 @@
 
 FUNCTIONAL_TESTS ?= tests/functional
 
+ifeq ($(FUNCTIONAL_TESTS),tests/functional)
+BASIC_FUNCTIONAL_TEST = tests/functional/test_deployment_github_actions.py::TestDeploymentGitHubActions::test_e2e_deployment_create
+else
+BASIC_FUNCTIONAL_TEST = $(FUNCTIONAL_TESTS)
+endif
+
 validate-env-%:
 	@if [ "${$*}" = "" ]; then \
 	  printf "\033[0;31m\nEnvironment variable '${*}' is not set. Aborting.\n\n\033[0m"; \
@@ -32,21 +38,13 @@ test-functional: validate-env-DATAROBOT_WEBSERVER validate-env-DATAROBOT_API_TOK
 .PHONY: test-functional
 
 test-functional-basic: validate-env-DATAROBOT_WEBSERVER validate-env-DATAROBOT_API_TOKEN
-	set -x
-	make --version
-	echo "Enter 'test-functional-basic' rule ..."
-	if [ "$(FUNCTIONAL_TESTS)" = "tests/functional" ]; then \
-	  echo "Set FUNCTIONAL_TESTS ..." ; \
-	  FUNCTIONAL_TESTS=tests/functional/test_deployment_github_actions.py::TestDeploymentGitHubActions::test_e2e_deployment_create ; \
-	  echo "FUNCTIONAL_TESTS=$(FUNCTIONAL_TESTS)" ; \
-	fi
 	set -ex; PYTHONPATH=.:src \
 	echo pytest \
 	-v \
 	--log-cli-level=debug \
 	--log-cli-date-format="%Y-%m-%d %H:%M:%S" \
 	--log-cli-format="%(asctime)s [%(levelname)-5s]  %(message)s" \
-	${FLAGS} $(FUNCTIONAL_TESTS)
+	${FLAGS} ${BASIC_FUNCTIONAL_TEST}
 .PHONY: test-functional-basic
 
 black:
