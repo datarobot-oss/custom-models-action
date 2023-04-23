@@ -1,5 +1,11 @@
 
-FUNCTIONAL_TESTS ?= 'tests/functional'
+FUNCTIONAL_TESTS ?= tests/functional
+
+ifeq ($(FUNCTIONAL_TESTS),tests/functional)
+BASIC_FUNCTIONAL_TEST = tests/functional/test_deployment_github_actions.py::TestDeploymentGitHubActions::test_e2e_deployment_create
+else
+BASIC_FUNCTIONAL_TEST = $(FUNCTIONAL_TESTS)
+endif
 
 validate-env-%:
 	@if [ "${$*}" = "" ]; then \
@@ -38,8 +44,7 @@ test-functional-basic: validate-env-DATAROBOT_WEBSERVER validate-env-DATAROBOT_A
 	--log-cli-level=debug \
 	--log-cli-date-format="%Y-%m-%d %H:%M:%S" \
 	--log-cli-format="%(asctime)s [%(levelname)-5s]  %(message)s" \
-	${FLAGS} \
-	tests/functional/test_deployment_github_actions.py::TestDeploymentGitHubActions::test_e2e_deployment_create
+	${FLAGS} ${BASIC_FUNCTIONAL_TEST}
 .PHONY: test-functional-basic
 
 black:
