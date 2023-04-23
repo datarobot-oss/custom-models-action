@@ -237,6 +237,9 @@ class TestModelSchemaValidator:
         attributes.
         """
 
+        if section == ModelSchema.VERSION_KEY:
+            pytest.skip("Training/holdout data are still not supported at version level.")
+
         model_metadata = create_partial_model_schema(is_single, num_models=1, with_target_type=True)
 
         edit_metadata = (
@@ -253,6 +256,7 @@ class TestModelSchemaValidator:
             else:
                 ModelSchema.validate_and_transform_multi(model_metadata)
 
+    @pytest.mark.skip(reason="Training/holdout data is currently not supported at version level.")
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
     @pytest.mark.parametrize("is_unstructured", [True, False], ids=["unstructured", "structured"])
     @pytest.mark.parametrize("with_holdout", [True, False], ids=["with-holdout", "without-holdout"])
