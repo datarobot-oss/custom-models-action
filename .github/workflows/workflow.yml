@@ -28,8 +28,20 @@ env:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
+  fake-job-to-test-condition:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Step-1
+        if: github.event.comment.body == null || (github.event.issue.pull_request && contains(github.event.comment.body, '$FUNCTIONAL_TESTS='))
+        run: echo "Executing step-1."
+
+      - name: Step-2
+        if: github.event.comment.body == null || (github.event.issue.pull_request && contains(github.event.comment.body, '$FUNCTIONAL_TESTS='))
+        run: echo "Executing step-2."
+
   # This workflow contains a single job called "build"
   validate-code-style:
+    needs: [fake-job-to-test-condition]
     # Run this job on any action of a PR, but skip the job upon merge to master
     # if: github.event.pull_request.merged != true
     if: github.event.comment.body == null || (github.event.issue.pull_request && contains(github.event.comment.body, '$FUNCTIONAL_TESTS='))
@@ -93,6 +105,7 @@ jobs:
           path: output-context
 
   run-unit-tests:
+    needs: [fake-job-to-test-condition]
     # Run this job on any action of a PR, but skip the job upon merge to master
     if: |
       github.event.pull_request.merged != true &&
