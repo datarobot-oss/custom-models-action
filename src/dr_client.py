@@ -198,7 +198,7 @@ class DrClient:
 
         return total_entities
 
-    def create_custom_model(self, model_info):
+    def create_custom_model(self, model_info, git_model_version):
         """
         Create a custom model in DataRobot.
 
@@ -206,6 +206,8 @@ class DrClient:
         ----------
         model_info : model_info.ModelInfo
             A local model info as loaded from the local source tree.
+        git_model_version : common.GitModelVersion
+            A class that contains required information about the model's version in Git.
 
         Returns
         -------
@@ -213,7 +215,7 @@ class DrClient:
             A DataRobot custom model entity.
         """
 
-        payload = self._setup_payload_for_custom_model_creation(model_info)
+        payload = self._setup_payload_for_custom_model_creation(model_info, git_model_version)
         response = self._http_requester.post(self.CUSTOM_MODELS_ROUTE, json=payload)
         if response.status_code != 201:
             raise DataRobotClientError(
@@ -228,7 +230,7 @@ class DrClient:
         return custom_model
 
     @classmethod
-    def _setup_payload_for_custom_model_creation(cls, model_info):
+    def _setup_payload_for_custom_model_creation(cls, model_info, git_model_version):
         target_type = model_info.get_value(ModelSchema.TARGET_TYPE_KEY)
 
         payload = {
@@ -237,6 +239,12 @@ class DrClient:
             "targetName": model_info.get_settings_value(ModelSchema.TARGET_NAME_KEY),
             "isUnstructuredModelKind": model_info.is_unstructured,
             "userProvidedId": model_info.get_value(ModelSchema.MODEL_ID_KEY),
+            "gitModelVersion": {
+                "refName": git_model_version.ref_name,
+                "commitUrl": git_model_version.commit_url,
+                "mainBranchCommitSha": git_model_version.main_branch_commit_sha,
+                "pullRequestCommitSha": git_model_version.pull_request_commit_sha,
+            },
         }
 
         name = model_info.get_settings_value(ModelSchema.NAME_KEY)
@@ -1927,7 +1935,13 @@ class DrClient:
 
         raise DataRobotClientError(message, code=response.status_code)
 
-    def update_model_settings(self, datarobot_custom_model, model_info):
+    def update_model_settings(
+        self,
+        datarobot_custom_model,
+        model_info,
+        git_model_version,
+        force_git_model_version_update=False,
+    ):
         """
         Update custom inference model settings in DataRobot.
 
@@ -1937,6 +1951,11 @@ class DrClient:
             A DataRobot custom model.
         model_info : model_info.ModelInfo
             An information about the model, which is read from the local source tree.
+        git_model_version : common.GitModelVersion
+            A class that contains required Git information related to the last changes.
+        force_git_model_version_update : bool
+            Optional. Whether to update git model version even if there were no direct change
+            to model's settings.
 
         Returns
         -------
@@ -1945,7 +1964,14 @@ class DrClient:
         """
 
         payload = self.get_settings_patch_payload(model_info, datarobot_custom_model)
-        if payload:
+        if payload or force_git_model_version_update:
+            payload = payload or {}
+            payload["gitModelVersion"] = {
+                "refName": git_model_version.ref_name,
+                "commitUrl": git_model_version.commit_url,
+                "mainBranchCommitSha": git_model_version.main_branch_commit_sha,
+                "pullRequestCommitSha": git_model_version.pull_request_commit_sha,
+            }
             err_msg = "Failed to update custom model settings"
             return self._update_model(model_info, datarobot_custom_model, payload, err_msg)
         return None
