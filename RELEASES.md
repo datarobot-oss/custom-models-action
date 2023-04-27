@@ -1,5 +1,11 @@
 # RELEASES
 
+## 1.3.0 [2023-04-27]
+  * Fetch and print deployment's log in case of a deployment's creation failure
+  * Add a missing mapping of Anomaly target type
+  * Internal improvements
+  * Bug fixes
+
 ## 1.2.2 [2023-03-21]
   * Improve segment analysis functionality and update README.md
   * Bug fix
