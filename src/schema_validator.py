@@ -244,6 +244,15 @@ class ModelSchema(SharedSchema):
     MEMORY_KEY = "memory"
     REPLICAS_KEY = "replicas"
 
+    MODEL_REPLACEMENT_REASON_KEY = "model_replacement_reason"
+    MODEL_REPLACEMENT_REASON_ACCURACY = "ACCURACY"
+    MODEL_REPLACEMENT_REASON_DATA_DRIFT = "DATA_DRIFT"
+    MODEL_REPLACEMENT_REASON_ERRORS = "ERRORS"
+    MODEL_REPLACEMENT_REASON_SCHEDULED_REFRESH = "SCHEDULED_REFRESH"
+    MODEL_REPLACEMENT_REASON_SCORING_SPEED = "SCORING_SPEED"
+    MODEL_REPLACEMENT_REASON_DEPRECATION = "DEPRECATION"
+    MODEL_REPLACEMENT_REASON_OTHER = "OTHER"
+
     TEST_KEY = "test"
     TEST_SKIP_KEY = "skip"
     TEST_DATA_ID_KEY = "test_data_id"
@@ -308,6 +317,15 @@ class ModelSchema(SharedSchema):
                 # Optional(PARTITIONING_COLUMN_KEY): And(str, len),
                 # Optional(TRAINING_DATASET_ID_KEY): And(str, ObjectId.is_valid),
                 # Optional(HOLDOUT_DATASET_ID_KEY): And(str, ObjectId.is_valid),
+                Optional(MODEL_REPLACEMENT_REASON_KEY, default=MODEL_REPLACEMENT_REASON_OTHER): Or(
+                    MODEL_REPLACEMENT_REASON_ACCURACY,
+                    MODEL_REPLACEMENT_REASON_DATA_DRIFT,
+                    MODEL_REPLACEMENT_REASON_ERRORS,
+                    MODEL_REPLACEMENT_REASON_SCHEDULED_REFRESH,
+                    MODEL_REPLACEMENT_REASON_SCORING_SPEED,
+                    MODEL_REPLACEMENT_REASON_DEPRECATION,
+                    MODEL_REPLACEMENT_REASON_OTHER,
+                ),
             },
             Optional(TEST_KEY): {
                 # The skip attribute allows users to have the test section in their yaml file

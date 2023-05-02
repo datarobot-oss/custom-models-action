@@ -1647,21 +1647,23 @@ class DrClient:
 
         return self._paginated_fetch(url)
 
-    def replace_model_deployment(self, custom_model_version, datarobot_deployment):
+    def replace_model_deployment(self, model_info, custom_model_version, datarobot_deployment):
         """
-        Replace a custom model version in a given deployment in DataRobot.
+         Replace a custom model version in a given deployment in DataRobot.
 
-        Parameters
-        ----------
-        custom_model_version : dict
-            A DataRobot custom model version.
-        datarobot_deployment : dict
-            A DataRobot deployment.
+         Parameters
+         ----------
+        model_info : model_info.ModelInfo
+             The associated model metadata, which is read from the local source tree.
+         custom_model_version : dict
+             A DataRobot custom model version.
+         datarobot_deployment : dict
+             A DataRobot deployment.
 
-        Returns
-        -------
-        dict,
-            A DataRobot deployment, in which the model was replaced.
+         Returns
+         -------
+         dict,
+             A DataRobot deployment, in which the model was replaced.
         """
 
         model_package = self.create_model_package_from_custom_model_version(
@@ -1671,7 +1673,7 @@ class DrClient:
             model_package["id"], datarobot_deployment.deployment["id"]
         )
         return self._replace_deployment_model(
-            model_package["id"], datarobot_deployment.deployment["id"]
+            model_info, model_package["id"], datarobot_deployment.deployment["id"]
         )
 
     def _validate_model_compatibility(self, model_package_id, deployment_id):
@@ -1697,8 +1699,8 @@ class DrClient:
         else:
             logger.info(validation_message)
 
-    def _replace_deployment_model(self, model_package_id, deployment_id):
-        payload = {"modelPackageId": model_package_id, "reason": "OTHER"}
+    def _replace_deployment_model(self, model_info, model_package_id, deployment_id):
+        payload = self._setup_model_replacement_payload(model_info, model_package_id)
         url = self.DEPLOYMENT_MODEL_ROUTE.format(deployment_id=deployment_id)
         response = self._http_requester.patch(url, json=payload)
         if response.status_code != 202:
@@ -1712,6 +1714,13 @@ class DrClient:
         response = self._http_requester.get(location, raw=True)
         deployment = response.json()
         return deployment
+
+    @staticmethod
+    def _setup_model_replacement_payload(model_info, model_package_id):
+        replacement_reason = model_info.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.MODEL_REPLACEMENT_REASON_KEY
+        )
+        return {"modelPackageId": model_package_id, "reason": replacement_reason}
 
     def create_challenger(self, custom_model_version, datarobot_deployment, deployment_info):
         """

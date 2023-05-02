@@ -491,23 +491,33 @@ def set_deployment_actuals_dataset(
         yield
 
 
+def replace_and_store_schema(yaml_filepath, *keys, metadata_or_value):
+    """
+    A helper method to replace and save either a provided complete metadata or a single value
+    of a metadata.
+    """
+
+    with open(yaml_filepath, encoding="utf-8") as fd:
+        origin_metadata = yaml.safe_load(fd)
+
+    if keys:  # Assuming a value replacement
+        new_metadata = copy.deepcopy(origin_metadata)
+        SharedSchema.set_value(new_metadata, *keys, value=metadata_or_value)
+    else:  # Assuming a metadata replacement
+        new_metadata = metadata_or_value
+
+    save_new_metadata(new_metadata, yaml_filepath)
+    return origin_metadata, new_metadata
+
+
 @contextlib.contextmanager
 def _temporarily_replace_schema(yaml_filepath, *keys, metadata_or_value):
+    origin_metadata = None
     try:
-        origin_metadata = None
-        with open(yaml_filepath, encoding="utf-8") as fd:
-            origin_metadata = yaml.safe_load(fd)
-
-        if keys:  # Assuming a value replacement
-            new_metadata = copy.deepcopy(origin_metadata)
-            SharedSchema.set_value(new_metadata, *keys, value=metadata_or_value)
-        else:  # Assuming a metadata replacement
-            new_metadata = metadata_or_value
-
-        save_new_metadata(new_metadata, yaml_filepath)
-
+        origin_metadata, new_metadata = replace_and_store_schema(
+            yaml_filepath, *keys, metadata_or_value=metadata_or_value
+        )
         yield new_metadata
-
     finally:
         if origin_metadata:
             save_new_metadata(origin_metadata, yaml_filepath)

@@ -205,8 +205,13 @@ class DeploymentController(ControllerBase):
                             deployment_info,
                         )
                     else:
+                        associated_model_info = self._model_controller.models_info.get(
+                            deployment_info.user_provided_model_id
+                        )
                         self._replace_model_version_in_deployment(
-                            desired_datarobot_model.latest_version, datarobot_deployment
+                            associated_model_info,
+                            desired_datarobot_model.latest_version,
+                            datarobot_deployment,
                         )
                         self._reapply_deployment_settings_upon_model_replacement(
                             deployment_info, datarobot_deployment
@@ -279,7 +284,9 @@ class DeploymentController(ControllerBase):
     def _there_is_a_new_model_version(datarobot_model, datarobot_deployment):
         return datarobot_deployment.model_version["id"] != datarobot_model.latest_version["id"]
 
-    def _replace_model_version_in_deployment(self, model_latest_version, datarobot_deployment):
+    def _replace_model_version_in_deployment(
+        self, model_info, model_latest_version, datarobot_deployment
+    ):
         user_provided_id = datarobot_deployment.deployment["userProvidedId"]
         logger.info(
             "Replacing a model version in a deployment ... "
@@ -288,7 +295,7 @@ class DeploymentController(ControllerBase):
             model_latest_version["id"],
         )
         deployment = self._dr_client.replace_model_deployment(
-            model_latest_version, datarobot_deployment
+            model_info, model_latest_version, datarobot_deployment
         )
         logger.info(
             "The latest model version was successfully replaced in a deployment. "
