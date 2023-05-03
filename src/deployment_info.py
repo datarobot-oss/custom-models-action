@@ -21,6 +21,12 @@ class DeploymentInfo(InfoBase):
         self._metadata = deployment_metadata
 
     @property
+    def schema_validator(self):
+        """Return the schema validator class."""
+
+        return DeploymentSchema
+
+    @property
     def user_provided_id(self):
         """
         A deployment's unique ID that is provided by the user and read from the deployment's
@@ -53,86 +59,3 @@ class DeploymentInfo(InfoBase):
         challenger_enabled = self.get_settings_value(DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY)
         # A special case, in which the default is to enable challengers
         return True if challenger_enabled is None else challenger_enabled
-
-    def get_value(self, key, *sub_keys):
-        """
-        Get a value from the deployment's metadata given a key and sub-keys.
-
-        Parameters
-        ----------
-        key : str
-            A key name from the DeploymentSchema.
-        sub_keys :
-            An optional dynamic sub-keys from the DeploymentSchema.
-
-        Returns
-        -------
-        Any or None,
-            The value associated with the provided key (and sub-keys) or None if not exists.
-        """
-
-        return DeploymentSchema.get_value(self.metadata, key, *sub_keys)
-
-    def set_value(self, key, *sub_keys, value):
-        """
-        Set a value in the deployment's metadata.
-
-        Parameters
-        ----------
-        key : str
-            A key name from the DeploymentSchema.
-        sub_keys : list
-            An optional dynamic sub-keys from the DeploymentSchema.
-        value : Any
-            A value to set for the given key and optionally sub keys.
-
-        Returns
-        -------
-        dict,
-            The revised metadata after the value was set.
-        """
-
-        return DeploymentSchema.set_value(self.metadata, key, *sub_keys, value=value)
-
-    def get_settings_value(self, key, *sub_keys):
-        """
-        Get a value from the deployment's metadata settings section, given a key and sub-keys
-        under the settings section.
-
-        Parameters
-        ----------
-        key : str
-            A key name from the DeploymentSchema, which is supposed to be under the
-            SharedSchema.SETTINGS_SECTION_KEY section.
-        sub_keys :
-            An optional dynamic sub-keys from the DeploymentSchema, which are under the
-            SharedSchema.SETTINGS_SECTION_KEY section.
-
-        Returns
-        -------
-        Any or None,
-            The value associated with the provided key (and sub-keys) or None if not exists.
-        """
-
-        return self.get_value(DeploymentSchema.SETTINGS_SECTION_KEY, key, *sub_keys)
-
-    def set_settings_value(self, key, *sub_keys, value):
-        """
-        Set a value in the self deployment's metadata settings section.
-
-        Parameters
-        ----------
-        key : str
-            A key from the SharedSchema.SETTINGS_SECTION_KEY.
-        sub_keys: list
-            An optional dynamic sub-keys from the DeploymentSchema.
-        value : Any
-            A value to set.
-
-        Returns
-        -------
-        dict,
-            The revised metadata after the value was set.
-        """
-
-        return self.set_value(DeploymentSchema.SETTINGS_SECTION_KEY, key, *sub_keys, value=value)

@@ -129,7 +129,7 @@ class TestModelTrainingHoldoutData:
         versions = dr_client.fetch_custom_model_versions(custom_model["id"])
         assert len(versions) == 1
 
-    @pytest.makr.skip(reason="Training/holdout data is not supported at version level, just yet.")
+    @pytest.mark.skip(reason="Training/holdout data is not supported at version level, just yet.")
     def test_e2e_set_training_and_holdout_datasets_for_structured_model_version(
         self,
         dr_client,
@@ -391,6 +391,7 @@ class TestModelTrainingHoldoutData:
         ) as holdout_dataset_id:
             yield training_dataset_id, holdout_dataset_id
 
+    @pytest.mark.skip(reason="Training/holdout data is not supported at version level, just yet.")
     def test_e2e_set_training_and_holdout_datasets_for_unstructured_model_version(
         self,
         dr_client,

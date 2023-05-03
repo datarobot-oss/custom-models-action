@@ -17,6 +17,7 @@ from abc import abstractmethod
 
 import pytest
 import responses
+import schema
 from bson import ObjectId
 from mock import Mock
 from mock import patch
@@ -78,6 +79,7 @@ def fixture_minimal_regression_model_info():
         ModelSchema.MODEL_ID_KEY: "abc123",
         ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
         ModelSchema.SETTINGS_SECTION_KEY: {
+            ModelSchema.NAME_KEY: "minimal-regression-model",
             ModelSchema.TARGET_NAME_KEY: "target_column",
             ModelSchema.PREDICTION_THRESHOLD_KEY: 0.5,
         },
@@ -88,7 +90,7 @@ def fixture_minimal_regression_model_info():
     return ModelInfo(
         yaml_filepath="/dummy/yaml/filepath",
         model_path="/dummy/model/path",
-        metadata=metadata,
+        metadata=ModelSchema.validate_and_transform_single(metadata),
     )
 
 
@@ -265,13 +267,13 @@ class TestCustomModelRoutes(SharedRouteTests):
 
     @staticmethod
     def _validate_mandatory_attributes_for_regression_model(payload, optional_exist):
+        assert "name" in payload
         assert "customModelType" in payload
         assert "targetType" in payload
         assert "targetName" in payload
         assert "isUnstructuredModelKind" in payload
         assert "userProvidedId" in payload
         assert "predictionThreshold" in payload
-        assert ("name" in payload) == optional_exist
         assert ("description" in payload) == optional_exist
         assert ("language" in payload) == optional_exist
 
@@ -1815,3 +1817,40 @@ class TestSetupSegmentAnalysis:
             "enabled": True,
             "attributes": new_segment_analysis_attrs,
         }
+
+
+class TestModelReplacementPayloadConstruction:
+    """Contains unit-test for the method to set up model replacement payload in a deployment."""
+
+    def test_default_replacement_reason(self, minimal_regression_model_info):
+        """
+        Test a case where user does not provide a replacement reason in the model's definition file.
+        """
+
+        payload = DrClient._setup_model_replacement_payload(
+            minimal_regression_model_info, ObjectId()
+        )
+        assert payload["reason"] == ModelSchema.MODEL_REPLACEMENT_REASON_OTHER
+
+    def test_replacement_reason_success(self, minimal_regression_model_info):
+        """Test all valid model replacement values in a model's definition file."""
+
+        model_replacement_values = None
+        schema_version_section = ModelSchema.MODEL_SCHEMA.schema[ModelSchema.VERSION_KEY]
+        for key, value in schema_version_section.items():
+            if (
+                isinstance(key, schema.Optional)
+                and key.schema == ModelSchema.MODEL_REPLACEMENT_REASON_KEY
+            ):
+                model_replacement_values = value.args
+        assert model_replacement_values is not None
+        for replacement_reason in model_replacement_values:
+            minimal_regression_model_info.set_value(
+                ModelSchema.VERSION_KEY,
+                ModelSchema.MODEL_REPLACEMENT_REASON_KEY,
+                value=replacement_reason,
+            )
+            payload = DrClient._setup_model_replacement_payload(
+                minimal_regression_model_info, ObjectId()
+            )
+            assert payload["reason"] == replacement_reason

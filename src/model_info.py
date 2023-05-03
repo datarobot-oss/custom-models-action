@@ -19,12 +19,18 @@ from typing import List
 
 from model_file_path import ModelFilePath
 from schema_validator import ModelSchema
+from schema_validator import SharedSchema
 
 logger = logging.getLogger()
 
 
 class InfoBase(ABC):
     """An abstract base class for models and deployments information classes."""
+
+    @property
+    @abstractmethod
+    def schema_validator(self):
+        """The schema validator glass."""
 
     @property
     @abstractmethod
@@ -44,10 +50,9 @@ class InfoBase(ABC):
         the metadata.
         """
 
-    @abstractmethod
     def get_value(self, key, *sub_keys):
         """
-        Get a value from the model's metadata given a key and sub-keys.
+        Get a value from the entity metadata given a key and sub-keys.
 
         Parameters
         ----------
@@ -62,7 +67,8 @@ class InfoBase(ABC):
             The value associated with the provided key (and sub-keys) or None if not exists.
         """
 
-    @abstractmethod
+        return self.schema_validator.get_value(self.metadata, key, *sub_keys)
+
     def get_settings_value(self, key, *sub_keys):
         """
         Get a value from the metadata settings section, given a key and sub-keys under
@@ -82,6 +88,49 @@ class InfoBase(ABC):
         Any or None,
             The value associated with the provided key (and sub-keys) or None if not exists.
         """
+        return self.get_value(self.schema_validator.SETTINGS_SECTION_KEY, key, *sub_keys)
+
+    def set_value(self, key, *sub_keys, value):
+        """
+        Set a value in an entity metadata.
+
+        Parameters
+        ----------
+        key : str
+            A key name of an entity schema.
+        sub_keys : list
+            An optional dynamic sub-keys from the entity schema.
+        value : Any
+            A value to set for the given key and optionally sub keys.
+
+        Returns
+        -------
+        dict,
+            The revised metadata after the value was set.
+        """
+
+        return self.schema_validator.set_value(self.metadata, key, *sub_keys, value=value)
+
+    def set_settings_value(self, key, *sub_keys, value):
+        """
+        Set a value in the entity metadata settings section.
+
+        Parameters
+        ----------
+        key : str
+            A key from the SharedSchema.SETTINGS_SECTION_KEY of the given schema validator.
+        sub_keys: list
+            An optional dynamic sub-keys from the enity schema.
+        value : Any
+            A value to set.
+
+        Returns
+        -------
+        dict,
+            The revised metadata after the value was set.
+        """
+
+        return self.set_value(SharedSchema.SETTINGS_SECTION_KEY, key, *sub_keys, value=value)
 
 
 class ModelInfo(InfoBase):
@@ -128,6 +177,12 @@ class ModelInfo(InfoBase):
         self._model_file_paths = {}
         self.file_changes = self.FileChanges()
         self.flags = self.Flags()
+
+    @property
+    def schema_validator(self):
+        """Return the schema validator class."""
+
+        return ModelSchema
 
     @property
     def yaml_filepath(self):
@@ -307,44 +362,3 @@ class ModelInfo(InfoBase):
         return ModelSchema.TEST_KEY in self.metadata and not self.get_value(
             ModelSchema.TEST_KEY, ModelSchema.TEST_SKIP_KEY
         )
-
-    def get_value(self, key, *sub_keys):
-        """
-        Get a value from the model's metadata given a key and sub-keys.
-
-        Parameters
-        ----------
-        key : str
-            A key name from the ModelSchema.
-        sub_keys :
-            An optional dynamic sub-keys from the ModelSchema.
-
-        Returns
-        -------
-        Any or None,
-            The value associated with the provided key (and sub-keys) or None if not exists.
-        """
-
-        return ModelSchema.get_value(self.metadata, key, *sub_keys)
-
-    def get_settings_value(self, key, *sub_keys):
-        """
-        Get a value from the model's metadata settings section, given a key and sub-keys under
-        the settings section.
-
-        Parameters
-        ----------
-        key : str
-            A key name from the ModelSchema, which is supposed to be under the
-            SharedSchema.SETTINGS_SECTION_KEY section.
-        sub_keys :
-            An optional dynamic sub-keys from the ModelSchema, which are under the
-            SharedSchema.SETTINGS_SECTION_KEY section.
-
-        Returns
-        -------
-        Any or None,
-            The value associated with the provided key (and sub-keys) or None if not exists.
-        """
-
-        return self.get_value(ModelSchema.SETTINGS_SECTION_KEY, key, *sub_keys)

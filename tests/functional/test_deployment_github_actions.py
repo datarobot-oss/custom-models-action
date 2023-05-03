@@ -26,10 +26,12 @@ from common.namepsace import Namespace
 from deployment_info import DeploymentInfo
 from metrics import Metrics
 from schema_validator import DeploymentSchema
+from schema_validator import ModelSchema
 from tests.conftest import unique_str
 from tests.functional.conftest import cleanup_models
 from tests.functional.conftest import increase_model_memory_by_1mb
 from tests.functional.conftest import printout
+from tests.functional.conftest import replace_and_store_schema
 from tests.functional.conftest import run_github_action
 from tests.functional.conftest import save_new_metadata_and_commit
 from tests.functional.conftest import temporarily_replace_schema
@@ -253,7 +255,19 @@ class TestDeploymentGitHubActions:
             git_repo, model_metadata_yaml_file, do_commit=False
         )
 
-        cls._commit_changes_by_event(f"Increase memory to {new_memory}", event_name, git_repo)
+        # Set the reason for the replacement
+        replace_and_store_schema(
+            model_metadata_yaml_file,
+            ModelSchema.VERSION_KEY,
+            ModelSchema.MODEL_REPLACEMENT_REASON_KEY,
+            metadata_or_value=ModelSchema.MODEL_REPLACEMENT_REASON_ERRORS,
+        )
+
+        cls._commit_changes_by_event(
+            f"Increase memory to {new_memory} and update the reason for replacement",
+            event_name,
+            git_repo,
+        )
 
         # Run the GitHub action to replace the latest model in a deployment
         printout(f"Run the GitHub action ({event_name} event)")
