@@ -643,10 +643,12 @@ class TestModelGitHubActions:
             dr_client,
         )
 
+        # All the changes in DataRobot were accomplished during the PR, so it is not expected to
+        # have any affected model after merging to the main branch.
         self._validate_custom_model_action_metrics(
-            expected_num_affected_models=1,
+            expected_num_affected_models=0,
             expected_num_updated_settings=0,
-            expected_num_created_versions=1,
+            expected_num_created_versions=0,
         )
 
         # 4. Validate that a new version was only created to the second model
