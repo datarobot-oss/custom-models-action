@@ -519,6 +519,7 @@ version:
     - ./
   memory: 128Mi
   replicas: 2
+  model_replacement_reason: DATA_DRIFT
 
 test:
   memory: 128Mi
