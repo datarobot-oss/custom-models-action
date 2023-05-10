@@ -14,7 +14,7 @@ are skipped.
 import contextlib
 import os
 import shutil
-from enum import Enum
+from collections import namedtuple
 
 import pytest
 
@@ -37,13 +37,7 @@ from tests.functional.conftest import webserver_accessible
 class TestModelGitHubActions:
     """Contains an end-to-end test cases for the custom inference model GitHub action."""
 
-    class Change(Enum):
-        """An enum to indicate the type of change."""
-
-        INCREASE_MEMORY = 1
-        ADD_FILE = 2
-        REMOVE_FILE = 3
-        DELETE_MODEL = 4
+    ExpectedChange = namedtuple("ExpectedChange", ["settings_updated", "version_created"])
 
     @staticmethod
     @contextlib.contextmanager
@@ -75,12 +69,27 @@ class TestModelGitHubActions:
         executed from a pull request branch with multiple commits.
         """
 
-        printout("Create models as a prerequisite for this test ...")
+        assert NUMBER_OF_MODELS_IN_TEST >= 2, (
+            "The given test requires at least 2 models in order to validate expected git model "
+            "versions."
+        )
+
+        printout("Create models as a prerequisite for this test")
         run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
+
+        origin_commit_sha = git_repo.head.commit.hexsha
+        self._validate_git_model_version(
+            dr_client, git_repo, origin_commit_sha, in_feature_branch=False, model_created=True
+        )
 
         printout("Create a feature branch ...")
         feature_branch = git_repo.create_head(feature_branch_name)
-        checks = [self._increase_memory_check, self._add_file_check, self._remove_file_check]
+        checks = [
+            self._increase_memory_check,
+            self._rename_model,
+            self._add_file_check,
+            self._remove_file_check,
+        ]
         self._run_checks(
             checks,
             feature_branch,
@@ -91,6 +100,7 @@ class TestModelGitHubActions:
             model_metadata_yaml_file,
             merge_branch_name,
             dr_client,
+            origin_commit_sha,
         )
         self._run_github_action_with_testing_enabled(
             dr_client,
@@ -101,6 +111,67 @@ class TestModelGitHubActions:
             model_metadata_yaml_file,
         )
         printout("Done")
+
+    @staticmethod
+    def _validate_git_model_version(
+        dr_client,
+        git_repo,
+        origin_commit_sha,
+        in_feature_branch,
+        model_created=False,
+        settings_updated=False,
+        version_created=False,
+    ):
+        """
+        Validates git model version in custom models and latest versions. The assumption is that
+        there are at least 2 models that are created and any followed changed is done on a single
+        model, whose user provided ID contains the substring '-1-'.
+        """
+
+        if not origin_commit_sha or (settings_updated is None and version_created is None):
+            return
+
+        printout("Validate git model versions.")
+        head_commit_sha = git_repo.head.commit.hexsha
+        custom_models = dr_client.fetch_custom_models()
+        for custom_model in custom_models:
+            user_provided_id = custom_model["userProvidedId"]
+            latest_version = dr_client.fetch_custom_model_latest_version_by_user_provided_id(
+                user_provided_id
+            )
+
+            if model_created:
+                assert head_commit_sha == origin_commit_sha
+                assert head_commit_sha == custom_model["gitModelVersion"]["mainBranchCommitSha"]
+                assert head_commit_sha == latest_version["gitModelVersion"]["mainBranchCommitSha"]
+            else:
+                # Model IDs are indexed starting from '1'
+                if "-1-" not in user_provided_id:
+                    # Unchanged models
+                    assert (
+                        origin_commit_sha == custom_model["gitModelVersion"]["mainBranchCommitSha"]
+                    )
+                    assert (
+                        origin_commit_sha
+                        == latest_version["gitModelVersion"]["mainBranchCommitSha"]
+                    )
+                else:
+                    if in_feature_branch:
+                        sha_ref = "pullRequestCommitSha"
+                        feature_branch_top_commit = git_repo.head.commit.parents[1]
+                        head_commit_sha = feature_branch_top_commit.hexsha
+                    else:
+                        sha_ref = "mainBranchCommitSha"
+
+                    if settings_updated:
+                        assert head_commit_sha == custom_model["gitModelVersion"][sha_ref]
+                    else:
+                        assert head_commit_sha != custom_model["gitModelVersion"][sha_ref]
+
+                    if version_created:
+                        assert head_commit_sha == latest_version["gitModelVersion"][sha_ref]
+                    else:
+                        assert head_commit_sha != latest_version["gitModelVersion"][sha_ref]
 
     @classmethod
     def _run_checks(
@@ -114,6 +185,7 @@ class TestModelGitHubActions:
         model_metadata_yaml_file,
         merge_branch_name,
         dr_client,
+        origin_commit_sha=None,
     ):
         # Make changes, one at a time on a feature branch
         printout("Make several changes on a feature branch, one at a time.")
@@ -126,7 +198,9 @@ class TestModelGitHubActions:
                 # Delete the merge branch to enable creation of another merge branch
                 git_repo.delete_head(merge_branch, "--force")
 
-            with check_method(git_repo, dr_client, model_metadata, model_metadata_yaml_file):
+            with check_method(
+                git_repo, dr_client, model_metadata, model_metadata_yaml_file
+            ) as expected_change:
                 # Create merge branch from master and check it out
                 merge_branch = git_repo.create_head(merge_branch_name, main_branch_name)
                 git_repo.head.reference = merge_branch
@@ -145,15 +219,45 @@ class TestModelGitHubActions:
                     is_deploy=False,
                     # main_branch_head_sha=merge_branch_name,
                 )
+                cls._validate_git_model_version(
+                    dr_client,
+                    git_repo,
+                    origin_commit_sha,
+                    in_feature_branch=True,
+                    settings_updated=expected_change.settings_updated,
+                    version_created=expected_change.version_created,
+                )
+
         cls._merge_changes_into_the_main_branch(git_repo, merge_branch)
 
-    @staticmethod
+        # Note: in GitHub, as part of a merging process to the main branch, a PUSH event is also
+        # triggered, which results in the action to be executed.
+
+        run_github_action(
+            workspace_path,
+            git_repo,
+            main_branch_name,
+            event_name="push",
+            is_deploy=False,
+        )
+
+        cls._validate_git_model_version(
+            dr_client,
+            git_repo,
+            origin_commit_sha,
+            in_feature_branch=False,
+            settings_updated=True,  # Updated during the PR
+            version_created=True,  # Updated during the PR
+        )
+
+    @classmethod
     @contextlib.contextmanager
-    def _increase_memory_check(git_repo, dr_client, model_metadata, model_metadata_yaml_file):
+    def _increase_memory_check(cls, git_repo, dr_client, model_metadata, model_metadata_yaml_file):
         printout("Increase the model memory ...")
         new_memory = increase_model_memory_by_1mb(git_repo, model_metadata_yaml_file)
+        model_metadata[ModelSchema.VERSION_KEY][ModelSchema.MEMORY_KEY] = new_memory
 
-        yield
+        yield cls.ExpectedChange(settings_updated=False, version_created=True)
 
         printout("Validate the increase memory check")
         cm_version = dr_client.fetch_custom_model_latest_version_by_user_provided_id(
@@ -164,11 +268,31 @@ class TestModelGitHubActions:
 
     @classmethod
     @contextlib.contextmanager
+    def _rename_model(cls, git_repo, dr_client, model_metadata, model_metadata_yaml_file):
+        printout("Rename model label ...")
+        origin_name = model_metadata[ModelSchema.SETTINGS_SECTION_KEY][ModelSchema.NAME_KEY]
+        model_metadata[ModelSchema.SETTINGS_SECTION_KEY][
+            ModelSchema.NAME_KEY
+        ] = f"{origin_name}-new"
+        save_new_metadata_and_commit(
+            model_metadata, model_metadata_yaml_file, git_repo, "Change model's label"
+        )
+
+        yield cls.ExpectedChange(settings_updated=True, version_created=False)
+
+        printout("Validate model renaming")
+        model = dr_client.fetch_custom_model_by_git_id(model_metadata[ModelSchema.MODEL_ID_KEY])
+        assert (
+            model["name"] == model_metadata[ModelSchema.SETTINGS_SECTION_KEY][ModelSchema.NAME_KEY]
+        )
+
+    @classmethod
+    @contextlib.contextmanager
     def _add_file_check(cls, git_repo, dr_client, model_metadata, model_metadata_yaml_file):
         with cls._add_remove_file_check(
             dr_client, git_repo, model_metadata, model_metadata_yaml_file, is_add=True
         ):
-            yield
+            yield cls.ExpectedChange(settings_updated=False, version_created=True)
 
     @classmethod
     @contextlib.contextmanager
@@ -176,12 +300,12 @@ class TestModelGitHubActions:
         with cls._add_remove_file_check(
             dr_client, git_repo, model_metadata, model_metadata_yaml_file, is_add=False
         ):
-            yield
+            yield cls.ExpectedChange(settings_updated=False, version_created=True)
 
-    @staticmethod
+    @classmethod
     @contextlib.contextmanager
     def _add_remove_file_check(
-        dr_client, git_repo, model_metadata, model_metadata_yaml_file, is_add=True
+        cls, dr_client, git_repo, model_metadata, model_metadata_yaml_file, is_add=True
     ):
         printout("Add a new file to the mode ...")
 
@@ -199,7 +323,7 @@ class TestModelGitHubActions:
         commit_msg = "Add new files." if is_add else "Remove the files."
         git_repo.git.commit("-m", commit_msg)
 
-        yield
+        yield cls.ExpectedChange(settings_updated=False, version_created=True)
 
         printout("Validate the increase memory check")
         cm_version = dr_client.fetch_custom_model_latest_version_by_user_provided_id(
@@ -258,6 +382,12 @@ class TestModelGitHubActions:
         which should delete the model in DataRobot.
         """
 
+        # Used to validate git commit version info in model/model-version entities
+        origin_commit_sha = git_repo.head.commit.hexsha
+
+        printout("Create models as a prerequisite for this test")
+        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
+
         # Create a feature branch
         printout("Create a feature branch ...")
         feature_branch = git_repo.create_head(feature_branch_name)
@@ -275,6 +405,7 @@ class TestModelGitHubActions:
             model_metadata_yaml_file,
             merge_branch_name,
             dr_client,
+            origin_commit_sha,
         )
 
         printout("Run custom model GitHub action (push event) ...")
@@ -290,15 +421,15 @@ class TestModelGitHubActions:
             )
         printout("Done")
 
-    @staticmethod
+    @classmethod
     @contextlib.contextmanager
-    def _delete_model_check(git_repo, dr_client, model_metadata, model_metadata_yaml_file):
+    def _delete_model_check(cls, git_repo, dr_client, model_metadata, model_metadata_yaml_file):
         # pylint: disable=unused-argument
         printout("Delete the model ...")
         os.remove(model_metadata_yaml_file)
         git_repo.git.add(model_metadata_yaml_file)
         git_repo.git.commit("-m", "Delete the model definition file")
-        yield
+        yield cls.ExpectedChange(settings_updated=False, version_created=False)
 
     @pytest.mark.usefixtures("cleanup")
     def test_e2e_push_event_with_multiple_changes_and_a_frozen_version_in_between(
@@ -387,10 +518,7 @@ class TestModelGitHubActions:
         user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
 
         # 1. Create a model just as a preliminary requirement (use GitHub action)
-        printout(
-            "Create a custom model as a preliminary requirement. "
-            "Run custom model GitHub action (push event) ..."
-        )
+        printout("Create models as a prerequisite for this test")
         run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
 
         unique_string = unique_str()
@@ -453,10 +581,7 @@ class TestModelGitHubActions:
         assert NUMBER_OF_MODELS_IN_TEST == 2
 
         # 1. Create two models as a preliminary requirement (use GitHub action)
-        printout(
-            "Create 2 custom models as a preliminary requirement. "
-            "Run custom model GitHub action (push event) ..."
-        )
+        printout("Create models as a prerequisite for this test")
         run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
 
         model_1_metadata = numbered_model_metadata(model_number=1)
@@ -518,10 +643,12 @@ class TestModelGitHubActions:
             dr_client,
         )
 
+        # All the changes in DataRobot were accomplished during the PR, so it is not expected to
+        # have any affected model after merging to the main branch.
         self._validate_custom_model_action_metrics(
-            expected_num_affected_models=1,
+            expected_num_affected_models=0,
             expected_num_updated_settings=0,
-            expected_num_created_versions=1,
+            expected_num_created_versions=0,
         )
 
         # 4. Validate that a new version was only created to the second model

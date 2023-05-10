@@ -259,10 +259,26 @@ class TestCustomModelRoutes(SharedRouteTests):
 
         return custom_models_url_factory(page=0)
 
-    def test_full_payload_setup_for_custom_model_creation(self, regression_model_info):
+    @pytest.fixture
+    def git_model_version(self):
+        """A fixture to return a dummy git model version."""
+
+        pull_request_commit_sha = "1" * 40
+        return Mock(
+            ref_name="feature-branch",
+            commit_url=f"https://github.com/user/project/{pull_request_commit_sha}",
+            main_branch_commit_sha="2" * 40,
+            pull_request_commit_sha=pull_request_commit_sha,
+        )
+
+    def test_full_payload_setup_for_custom_model_creation(
+        self, regression_model_info, git_model_version
+    ):
         """A case to test full payload setup to create a custom model."""
 
-        payload = DrClient._setup_payload_for_custom_model_creation(regression_model_info)
+        payload = DrClient._setup_payload_for_custom_model_creation(
+            regression_model_info, git_model_version
+        )
         self._validate_mandatory_attributes_for_regression_model(payload, optional_exist=True)
 
     @staticmethod
@@ -277,10 +293,14 @@ class TestCustomModelRoutes(SharedRouteTests):
         assert ("description" in payload) == optional_exist
         assert ("language" in payload) == optional_exist
 
-    def test_minimal_payload_setup_for_custom_model_creation(self, minimal_regression_model_info):
+    def test_minimal_payload_setup_for_custom_model_creation(
+        self, minimal_regression_model_info, git_model_version
+    ):
         """A case to test a minimal payload setup to create a custom model."""
 
-        payload = DrClient._setup_payload_for_custom_model_creation(minimal_regression_model_info)
+        payload = DrClient._setup_payload_for_custom_model_creation(
+            minimal_regression_model_info, git_model_version
+        )
         self._validate_mandatory_attributes_for_regression_model(payload, optional_exist=False)
 
     @responses.activate
@@ -290,21 +310,24 @@ class TestCustomModelRoutes(SharedRouteTests):
         regression_model_info,
         custom_models_url,
         regression_model_response,
+        git_model_version,
     ):
         """A case to test a successful custom model creation."""
 
         responses.add(responses.POST, custom_models_url, json=regression_model_response, status=201)
-        custom_model = dr_client.create_custom_model(regression_model_info)
+        custom_model = dr_client.create_custom_model(regression_model_info, git_model_version)
         assert custom_model is not None
 
     @responses.activate
-    def test_create_custom_model_failure(self, dr_client, regression_model_info, custom_models_url):
+    def test_create_custom_model_failure(
+        self, dr_client, regression_model_info, custom_models_url, git_model_version
+    ):
         """A case to test a failure in custom model creation."""
 
         status_code = 422
         responses.add(responses.POST, custom_models_url, json={}, status=status_code)
         with pytest.raises(DataRobotClientError) as ex:
-            dr_client.create_custom_model(regression_model_info)
+            dr_client.create_custom_model(regression_model_info, git_model_version)
         assert ex.value.code == status_code
 
     @responses.activate
