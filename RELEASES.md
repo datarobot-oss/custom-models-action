@@ -1,5 +1,9 @@
 # RELEASES
 
+## 1.4.0 [2023-05-11]
+  * Enable users to specify a reason for a model replacement in a deployment
+  * Separately track model's settings from its versions
+
 ## 1.3.0 [2023-04-27]
   * Fetch and print deployment's log in case of a deployment's creation failure
   * Add a missing mapping of Anomaly target type
