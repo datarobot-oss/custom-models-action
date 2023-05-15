@@ -126,3 +126,9 @@ class NamespaceNotInitialized(GenericException):
 
 class IllegalDeletion(GenericException):
     """Raised when trying to delete a model or deployment, when it is not eligible for deletion."""
+
+
+class TrainingHoldoutError(GenericException):
+    """
+    Raised when an invalid training/holdout attribute(s) values exist in the model's definition.
+    """

@@ -27,6 +27,7 @@ from common.exceptions import IllegalModelDeletion
 from common.exceptions import ModelMainEntryPointNotFound
 from common.exceptions import ModelMetadataAlreadyExists
 from common.exceptions import SharedAndLocalPathCollision
+from common.exceptions import TrainingHoldoutError
 from common.exceptions import UnexpectedResult
 from common.git_model_version import GitModelVersion
 from common.git_tool import GitTool
@@ -405,16 +406,30 @@ class ModelController(ControllerBase):
                 "Searching model %s changes since its last update in DR.",
                 model_info.user_provided_id,
             )
-            self._handle_affected_models_by_settings(model_info)
-            self._handle_affected_models_by_versions(model_info)
-            self._handle_deleted_files(model_info)
+            # Only handle a model that was already created
+            if self.datarobot_models.get(model_info.user_provided_id):
+                self._validate_training_holdout_data_for_version(model_info)
+                self._handle_affected_models_by_settings(model_info)
+                self._handle_affected_models_by_versions(model_info)
+                self._handle_deleted_files(model_info)
+
+    def _validate_training_holdout_data_for_version(self, model_info):
+        latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
+        train_changed = model_info.is_there_a_change_in_training_or_holdout_data_at_version_level(
+            latest_version
+        )
+        assignment_error = latest_version.get("assignmentError")
+        if assignment_error and not train_changed:
+            raise TrainingHoldoutError(
+                "An assignment of training/holdout data with same value(s) in a previous model "
+                "version was failed! "
+                f"model_path: {model_info.model_path}, "
+                f"model_git_id: {model_info.user_provided_id}, "
+                f"Error from previous version: {assignment_error.get('message')}"
+            )
 
     def _handle_affected_models_by_settings(self, model_info):
-        if not self.datarobot_models.get(model_info.user_provided_id):
-            # The model has not yet been created or
-            return
-
-        from_commit_sha = self._get_git_commit_ancestor(model_info)
+        from_commit_sha = self._get_model_git_commit_ancestor(model_info)
         if not from_commit_sha:
             raise UnexpectedResult(
                 "Unexpected None ancestor commit sha, "
@@ -434,7 +449,7 @@ class ModelController(ControllerBase):
         for changed_file in changed_files:
             self._mark_changes_in_model_settings(model_info, changed_file)
 
-    def _get_git_commit_ancestor(self, model_info):
+    def _get_model_git_commit_ancestor(self, model_info):
         model = self.datarobot_models[model_info.user_provided_id].model
         git_model_version = model.get("gitModelVersion")
         if not git_model_version:
@@ -583,33 +598,31 @@ class ModelController(ControllerBase):
                 self.datarobot_models[user_provided_id].latest_version if already_exists else None
             )
 
-            if model_info.is_affected_by_commit(latest_version):
-                logger.info("Model '%s' is affected by commit.", model_info.model_path)
+            commit_effects = model_info.get_commit_effects(latest_version)
+            if commit_effects:
+                logger.info(
+                    "Model '%s' is affected by commit. Effects: %s",
+                    model_info.model_path,
+                    commit_effects,
+                )
 
-                if model_info.should_create_new_version(latest_version):
+                if model_info.should_create_new_version_by_effect(commit_effects):
                     if not custom_model:
-                        custom_model = self._create_custom_model(model_info)
+                        custom_model = self._create_custom_model(model_info, commit_effects)
                         self.metrics.total_created.value += 1
+                    else:
+                        self._permanently_enable_training_data_for_versions_if_required(
+                            model_info, custom_model, commit_effects
+                        )
 
-                    custom_model_id = custom_model["id"]
                     is_major_update = bool(latest_version and latest_version["isFrozen"])
                     latest_version = self._create_custom_model_version(
-                        custom_model_id, is_major_update, model_info
+                        custom_model["id"], is_major_update, model_info, commit_effects
                     )
                     self._cache_new_custom_model_version(user_provided_id, latest_version)
                     self._dr_client.build_dependency_environment_if_required(latest_version)
 
-                if model_info.is_there_a_change_in_training_or_holdout_data_at_version_level(
-                    latest_version
-                ):
-                    latest_version = (
-                        self._dr_client.create_version_from_latest_with_training_and_holdout_data(
-                            model_info, custom_model, self._git_model_version
-                        )
-                    )
-                    self._cache_new_custom_model_version(user_provided_id, latest_version)
-
-                if model_info.flags.should_update_settings:
+                if model_info.should_update_model_settings_by_effect(commit_effects):
                     self._update_settings(custom_model, model_info)
 
                 self.metrics.total_affected.value += 1
@@ -628,6 +641,16 @@ class ModelController(ControllerBase):
                 self._test_custom_model_version(
                     custom_model["id"], latest_version["id"], model_info
                 )
+
+    def _permanently_enable_training_data_for_versions_if_required(
+        self, model_info, custom_model, commit_effects
+    ):
+        if model_info.should_set_training_for_version_by_effect(
+            commit_effects
+        ) and not custom_model.get("isTrainingDataForVersionsPermanentlyEnabled"):
+            self._dr_client.permanently_enable_training_data_for_versions_in_model(
+                model_info, custom_model
+            )
 
     @staticmethod
     def _was_new_version_created(previous_latest_version, latest_version):
@@ -690,14 +713,18 @@ class ModelController(ControllerBase):
             custom_model_version, main_branch_commit_sha, commit_url, ref_name
         )
 
-    def _create_custom_model(self, model_info):
-        custom_model = self._dr_client.create_custom_model(model_info, self._git_model_version)
+    def _create_custom_model(self, model_info, commit_effects):
+        custom_model = self._dr_client.create_custom_model(
+            model_info, commit_effects, self._git_model_version
+        )
 
         self._set_datarobot_custom_model(model_info.user_provided_id, custom_model)
         logger.info("Custom inference model was created: %s", custom_model["id"])
         return custom_model
 
-    def _create_custom_model_version(self, custom_model_id, is_major_update, model_info):
+    def _create_custom_model_version(
+        self, custom_model_id, is_major_update, model_info, commit_effects
+    ):
         if model_info.flags.should_upload_all_files:
             changed_file_paths = list(model_info.model_file_paths.values())
         else:
@@ -721,6 +748,7 @@ class ModelController(ControllerBase):
             is_major_update,
             model_info,
             self._git_model_version,
+            commit_effects,
             changed_file_paths,
             model_info.file_changes.deleted_file_ids,
             from_latest=model_info.flags.should_create_version_from_latest,

@@ -160,55 +160,54 @@ class TestCustomInferenceModel:
         make_a_change_and_commit(git_repo, [str(common_filepath)], 1)
 
         models_info = list(model_controller.models_info.values())
+        model_controller._datarobot_models = {
+            m_info.user_provided_id: DataRobotModel(model={"id": "dummy"}, latest_version={})
+            for m_info in models_info
+        }
         for model_index in range(num_models):
             model_main_program_filepath = models_info[model_index].main_program_filepath()
             make_a_change_and_commit(
                 git_repo, [model_main_program_filepath.resolved], 2 + model_index
             )
 
-        head_git_sha = "HEAD"
         for last_provision_git_sha in [None, f"HEAD~{num_models}"]:
-            with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.dict(
-                os.environ, {"GITHUB_SHA": head_git_sha}
-            ), patch.object(
-                ModelController,
-                "_get_latest_model_version_git_commit_ancestor",
-                return_value=last_provision_git_sha,
-            ):
+            with self._mock_private_methods(num_models, last_provision_git_sha):
                 model_controller.lookup_affected_models_by_the_current_action()
 
-            models_info = list(model_controller.models_info.values())
-            assert (
-                len(
-                    [
-                        m_info
-                        for m_info in models_info
-                        if m_info.is_affected_by_commit(datarobot_latest_model_version={"id": "12"})
-                    ]
-                )
-                == num_models
-            )
+            affected_models = [
+                m_info
+                for m_info in models_info
+                if m_info.get_commit_effects(datarobot_latest_model_version={"id": "12"})
+            ]
+            assert len(affected_models) == num_models
 
         for reference in range(1, num_models):
-            head_git_sha = "HEAD"
             last_provision_git_sha = f"HEAD~{reference}"
-            with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.dict(
-                os.environ, {"GITHUB_SHA": head_git_sha}
-            ), patch.object(
-                ModelController,
-                "_get_latest_model_version_git_commit_ancestor",
-                return_value=last_provision_git_sha,
-            ):
+            with self._mock_private_methods(num_models, last_provision_git_sha):
                 model_controller.lookup_affected_models_by_the_current_action()
 
-            num_affected_models = len(
-                [
-                    m_info
-                    for m_info in models_info
-                    if m_info.is_affected_by_commit(datarobot_latest_model_version={"id": "12"})
-                ]
-            )
-            assert num_affected_models == reference
+            affected_models = [
+                m_info
+                for m_info in models_info
+                if m_info.get_commit_effects(datarobot_latest_model_version={"id": "12"})
+            ]
+            assert len(affected_models) == reference
+
+    @contextlib.contextmanager
+    def _mock_private_methods(self, num_models, last_provision_git_sha):
+        head_git_sha = "HEAD"
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}), patch.dict(
+            os.environ, {"GITHUB_SHA": head_git_sha}
+        ), patch.object(
+            ModelController,
+            "_get_latest_model_version_git_commit_ancestor",
+            return_value=last_provision_git_sha,
+        ), patch.object(
+            ModelController,
+            "_get_model_git_commit_ancestor",
+            return_value=f"HEAD~{num_models+1}",
+        ):
+            yield
 
     @pytest.mark.usefixtures("no_models")
     def test_save_statistics(self, options, github_output):

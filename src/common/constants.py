@@ -16,3 +16,11 @@ class Label(Enum):
 
     MODELS = "models"
     DEPLOYMENTS = "deployments"
+
+
+class CommitEffect(Enum):
+    """An enum that list the effects/changes caused by a given commit."""
+
+    MODEL_SETTINGS = "model-settings"
+    MODEL_VERSION = "model-version"
+    TRAINING_DATA_FOR_VERSIONS = "training-data-for-versions"

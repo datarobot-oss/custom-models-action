@@ -22,6 +22,7 @@ from bson import ObjectId
 from mock import Mock
 from mock import patch
 
+from common.constants import CommitEffect
 from common.exceptions import DataRobotClientError
 from common.http_requester import HttpRequester
 from common.namepsace import Namespace
@@ -114,6 +115,8 @@ def fixture_regression_model_info():
             ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
             ModelSchema.MEMORY_KEY: 256 * 1024 * 1024,
             ModelSchema.REPLICAS_KEY: 3,
+            ModelSchema.TRAINING_DATASET_ID_KEY: "aaa111",
+            ModelSchema.PARTITIONING_COLUMN_KEY: "partition-col",
         },
     }
     return ModelInfo(
@@ -277,7 +280,7 @@ class TestCustomModelRoutes(SharedRouteTests):
         """A case to test full payload setup to create a custom model."""
 
         payload = DrClient._setup_payload_for_custom_model_creation(
-            regression_model_info, git_model_version
+            regression_model_info, list(CommitEffect), git_model_version
         )
         self._validate_mandatory_attributes_for_regression_model(payload, optional_exist=True)
 
@@ -292,6 +295,7 @@ class TestCustomModelRoutes(SharedRouteTests):
         assert "predictionThreshold" in payload
         assert ("description" in payload) == optional_exist
         assert ("language" in payload) == optional_exist
+        assert ("isTrainingDataForVersionsPermanentlyEnabled" in payload) == optional_exist
 
     def test_minimal_payload_setup_for_custom_model_creation(
         self, minimal_regression_model_info, git_model_version
@@ -299,7 +303,7 @@ class TestCustomModelRoutes(SharedRouteTests):
         """A case to test a minimal payload setup to create a custom model."""
 
         payload = DrClient._setup_payload_for_custom_model_creation(
-            minimal_regression_model_info, git_model_version
+            minimal_regression_model_info, commit_effects=[], git_model_version=git_model_version
         )
         self._validate_mandatory_attributes_for_regression_model(payload, optional_exist=False)
 
@@ -315,7 +319,9 @@ class TestCustomModelRoutes(SharedRouteTests):
         """A case to test a successful custom model creation."""
 
         responses.add(responses.POST, custom_models_url, json=regression_model_response, status=201)
-        custom_model = dr_client.create_custom_model(regression_model_info, git_model_version)
+        custom_model = dr_client.create_custom_model(
+            regression_model_info, list(CommitEffect), git_model_version
+        )
         assert custom_model is not None
 
     @responses.activate
@@ -327,7 +333,9 @@ class TestCustomModelRoutes(SharedRouteTests):
         status_code = 422
         responses.add(responses.POST, custom_models_url, json={}, status=status_code)
         with pytest.raises(DataRobotClientError) as ex:
-            dr_client.create_custom_model(regression_model_info, git_model_version)
+            dr_client.create_custom_model(
+                regression_model_info, list(CommitEffect), git_model_version
+            )
         assert ex.value.code == status_code
 
     @responses.activate
@@ -780,6 +788,7 @@ class TestCustomModelVersionRoutes:
                 True,
                 regression_model_info,
                 git_model_version,
+                list(CommitEffect),
                 changed_file_paths=changed_files_info,
                 file_ids_to_delete=None,
                 base_env_id=str(ObjectId()),
@@ -794,16 +803,12 @@ class TestCustomModelVersionRoutes:
 
     @staticmethod
     def _validate_mandatory_attributes_for_regression_model_version(payload, optional_exist):
-        keys, values = zip(*payload)
+        keys = [attr[0] for attr in payload]
         assert "baseEnvironmentId" in keys
         assert "isMajorUpdate" in keys
 
-        assert "gitModelVersion" in keys
-        git_model_version_json_str = [
-            v for v in values if isinstance(v, str) and "mainBranchCommitSha" in v
-        ]
-        assert git_model_version_json_str, values
-        git_model_version_json = json.loads(git_model_version_json_str[0])
+        git_version_attr = next((attr for attr in payload if attr[0] == "gitModelVersion"), None)
+        git_model_version_json = json.loads(git_version_attr[1])
         assert "refName" in git_model_version_json
         assert "commitUrl" in git_model_version_json
         assert "mainBranchCommitSha" in git_model_version_json
@@ -814,6 +819,11 @@ class TestCustomModelVersionRoutes:
             assert "filePath" in keys
             assert "maximumMemory" in keys
             assert "replicas" in keys
+            assert "keepTrainingHoldoutData" in keys
+            attr_data = next((attr for attr in payload if attr[0] == "trainingData"), None)
+            assert "datasetId" in attr_data[1]
+            attr_data = next((attr for attr in payload if attr[0] == "holdoutData"), None)
+            assert "partitionColumn" in attr_data[1]
 
     def test_minimal_payload_setup_for_custom_model_version_creation(
         self, minimal_regression_model_info, git_model_version
@@ -824,6 +834,7 @@ class TestCustomModelVersionRoutes:
             True,
             minimal_regression_model_info,
             git_model_version,
+            list(CommitEffect),
             None,
             None,
             base_env_id=str(ObjectId()),
@@ -850,7 +861,11 @@ class TestCustomModelVersionRoutes:
         url = custom_models_version_url_factory()
         responses.add(responses.POST, url, json=regression_model_version_response, status=201)
         version_id = dr_client.create_custom_model_version(
-            custom_model_id, is_major_update, regression_model_info, git_model_version
+            custom_model_id,
+            is_major_update,
+            regression_model_info,
+            git_model_version,
+            list(CommitEffect),
         )
         assert version_id is not None
 
@@ -870,7 +885,7 @@ class TestCustomModelVersionRoutes:
         responses.add(responses.POST, url, json={}, status=status_code)
         with pytest.raises(DataRobotClientError) as ex:
             dr_client.create_custom_model_version(
-                custom_model_id, True, regression_model_info, git_model_version
+                custom_model_id, True, regression_model_info, git_model_version, list(CommitEffect)
             )
         assert ex.value.code == status_code
 

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Dict
 from typing import List
 
+from common.constants import CommitEffect
 from model_file_path import ModelFilePath
 from schema_validator import ModelSchema
 from schema_validator import SharedSchema
@@ -278,18 +279,33 @@ class ModelInfo(InfoBase):
             p.under_model for _, p in self.model_file_paths.items() if p.relative_to == relative_to
         )
 
-    def is_affected_by_commit(self, datarobot_latest_model_version):
-        """Whether the given model is affected by the last commit"""
+    def get_commit_effects(self, datarobot_latest_model_version):
+        """
+        Returns the effects that were caused by the last commit.
 
-        return (
-            self.flags.should_update_settings
-            or self.should_create_new_version(datarobot_latest_model_version)
-            or self.is_there_a_change_in_training_or_holdout_data_at_version_level(
-                datarobot_latest_model_version
-            )
-        )
+        Returns
+        -------
+        list[CommitEffect],
+            A list of effects by the last commit.
+        """
 
-    def should_create_new_version(self, datarobot_latest_model_version):
+        effects = []
+        if self.flags.should_update_settings:
+            effects.append(CommitEffect.MODEL_SETTINGS)
+        if self.is_there_a_change_in_training_or_holdout_data_at_version_level(
+            datarobot_latest_model_version
+        ):
+            effects.append(CommitEffect.TRAINING_DATA_FOR_VERSIONS)
+            effects.append(CommitEffect.MODEL_VERSION)
+
+        if CommitEffect.MODEL_VERSION not in effects and self._should_create_new_version(
+            datarobot_latest_model_version
+        ):
+            effects.append(CommitEffect.MODEL_VERSION)
+
+        return effects
+
+    def _should_create_new_version(self, datarobot_latest_model_version):
         """Whether a new custom inference model version should be created"""
 
         if (
@@ -306,6 +322,11 @@ class ModelInfo(InfoBase):
 
         configured_replicas = self.get_value(ModelSchema.VERSION_KEY, ModelSchema.REPLICAS_KEY)
         if configured_replicas != datarobot_latest_model_version.get("replicas"):
+            return True
+
+        if self.is_there_a_change_in_training_or_holdout_data_at_version_level(
+            datarobot_latest_model_version
+        ):
             return True
 
         return False
@@ -353,6 +374,63 @@ class ModelInfo(InfoBase):
                 return True
 
         return False
+
+    @classmethod
+    def should_create_new_version_by_effect(cls, commit_effects):
+        """
+        Whether a new custom model version should be created.
+
+        Parameters
+        ----------
+        commit_effects : list[CommitEffect]
+            A list of commit effects
+
+        Returns
+        -------
+        bool,
+            Whether needs to create a new custom model version
+        """
+
+        return (
+            CommitEffect.MODEL_VERSION in commit_effects
+            or cls.should_set_training_for_version_by_effect(commit_effects)
+        )
+
+    @staticmethod
+    def should_set_training_for_version_by_effect(commit_effects):
+        """
+        Whether a training/holdout data should be set in the new version.
+
+        Parameters
+        ----------
+        commit_effects : list[CommitEffect]
+            A list of commit effects
+
+        Returns
+        -------
+        bool,
+            Whether a training/holdout data should be set in the new version.
+        """
+
+        return CommitEffect.TRAINING_DATA_FOR_VERSIONS in commit_effects
+
+    @staticmethod
+    def should_update_model_settings_by_effect(commit_effects):
+        """
+        Whether to update a model's settings.
+
+        Parameters
+        ----------
+        commit_effects : list[CommitEffect]
+            A list of commit effects
+
+        Returns
+        -------
+        bool,
+            Whether to update a model's settings.
+        """
+
+        return CommitEffect.MODEL_SETTINGS in commit_effects
 
     @property
     def should_run_test(self):

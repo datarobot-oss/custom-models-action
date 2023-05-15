@@ -314,9 +314,9 @@ class ModelSchema(SharedSchema):
                 ),
                 Optional(MEMORY_KEY): Use(MemoryConvertor.to_bytes),
                 Optional(REPLICAS_KEY): And(int, lambda r: r > 0),
-                # Optional(PARTITIONING_COLUMN_KEY): And(str, len),
-                # Optional(TRAINING_DATASET_ID_KEY): And(str, ObjectId.is_valid),
-                # Optional(HOLDOUT_DATASET_ID_KEY): And(str, ObjectId.is_valid),
+                Optional(PARTITIONING_COLUMN_KEY): And(str, len),
+                Optional(TRAINING_DATASET_ID_KEY): And(str, ObjectId.is_valid),
+                Optional(HOLDOUT_DATASET_ID_KEY): And(str, ObjectId.is_valid),
                 Optional(MODEL_REPLACEMENT_REASON_KEY, default=MODEL_REPLACEMENT_REASON_OTHER): Or(
                     MODEL_REPLACEMENT_REASON_ACCURACY,
                     MODEL_REPLACEMENT_REASON_DATA_DRIFT,

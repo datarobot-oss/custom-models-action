@@ -198,7 +198,7 @@ class DrClient:
 
         return total_entities
 
-    def create_custom_model(self, model_info, git_model_version):
+    def create_custom_model(self, model_info, commit_effects, git_model_version):
         """
         Create a custom model in DataRobot.
 
@@ -206,6 +206,8 @@ class DrClient:
         ----------
         model_info : model_info.ModelInfo
             A local model info as loaded from the local source tree.
+        commit_effects : list[common.constants.CommitEffect]
+            A list of effect of the last commit.
         git_model_version : common.GitModelVersion
             A class that contains required information about the model's version in Git.
 
@@ -215,7 +217,9 @@ class DrClient:
             A DataRobot custom model entity.
         """
 
-        payload = self._setup_payload_for_custom_model_creation(model_info, git_model_version)
+        payload = self._setup_payload_for_custom_model_creation(
+            model_info, commit_effects, git_model_version
+        )
         response = self._http_requester.post(self.CUSTOM_MODELS_ROUTE, json=payload)
         if response.status_code != 201:
             raise DataRobotClientError(
@@ -230,7 +234,9 @@ class DrClient:
         return custom_model
 
     @classmethod
-    def _setup_payload_for_custom_model_creation(cls, model_info, git_model_version):
+    def _setup_payload_for_custom_model_creation(
+        cls, model_info, commit_effects, git_model_version
+    ):
         target_type = model_info.get_value(ModelSchema.TARGET_TYPE_KEY)
 
         payload = {
@@ -279,9 +285,7 @@ class DrClient:
         elif model_info.is_multiclass:
             payload["classLabels"] = model_info.get_settings_value(ModelSchema.CLASS_LABELS_KEY)
 
-        if model_info.is_there_a_change_in_training_or_holdout_data_at_version_level(
-            datarobot_latest_model_version=None
-        ):
+        if model_info.should_set_training_for_version_by_effect(commit_effects):
             payload["isTrainingDataForVersionsPermanentlyEnabled"] = True
 
         return payload
@@ -379,6 +383,7 @@ class DrClient:
         is_major_update,
         model_info,
         git_model_version,
+        commit_effects,
         changed_file_paths=None,
         file_ids_to_delete=None,
         from_latest=False,
@@ -396,6 +401,8 @@ class DrClient:
             An information about the model in the local source tree.
         git_model_version : common.GitModelVersion
             A class that contains required information about the model's version in Git.
+        commit_effects : list[common.constants.CommitEffect]
+            A list of effects of the last commit.
         changed_file_paths : list[ModelFilePath] or None
             A list of changed files related to the last GitHub action.
         file_ids_to_delete : list[str] or None
@@ -419,6 +426,7 @@ class DrClient:
                 is_major_update,
                 model_info,
                 git_model_version,
+                commit_effects,
                 changed_file_paths,
                 file_ids_to_delete=file_ids_to_delete,
                 base_env_id=base_env_id,
@@ -454,6 +462,7 @@ class DrClient:
         is_major_update,
         model_info,
         git_model_version,
+        commit_effects,
         changed_file_paths,
         file_ids_to_delete=None,
         base_env_id=None,
@@ -486,7 +495,38 @@ class DrClient:
         if replicas:
             payload.append(("replicas", str(replicas)))
 
+        if model_info.should_set_training_for_version_by_effect(commit_effects):
+            training_holdout_payload = cls._build_training_and_holdout_payload(model_info)
+            for key, value in training_holdout_payload.items():
+                payload.append((key, json.dumps(value)))
+
         return payload, file_objs
+
+    @staticmethod
+    def _build_training_and_holdout_payload(model_info):
+        holdout_data = (
+            {
+                "datasetId": model_info.get_value(
+                    ModelSchema.VERSION_KEY, ModelSchema.HOLDOUT_DATASET_ID_KEY
+                )
+            }
+            if model_info.is_unstructured
+            else {
+                "partitionColumn": model_info.get_value(
+                    ModelSchema.VERSION_KEY, ModelSchema.PARTITIONING_COLUMN_KEY
+                )
+            }
+        )
+
+        return {
+            "keepTrainingHoldoutData": False,
+            "trainingData": {
+                "datasetId": model_info.get_value(
+                    ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_ID_KEY
+                )
+            },
+            "holdoutData": holdout_data,
+        }
 
     @staticmethod
     def _setup_model_version_files(changed_file_paths, file_ids_to_delete, payload):
@@ -572,7 +612,7 @@ class DrClient:
         """
 
         if not datarobot_custom_model.get("isTrainingDataForVersionsPermanentlyEnabled"):
-            self._permanently_enable_training_data_for_versions_in_model(
+            self.permanently_enable_training_data_for_versions_in_model(
                 model_info, datarobot_custom_model
             )
 
@@ -620,9 +660,26 @@ class DrClient:
         response = self._http_requester.get(location, raw=True)
         return response.json()
 
-    def _permanently_enable_training_data_for_versions_in_model(
+    def permanently_enable_training_data_for_versions_in_model(
         self, model_info, datarobot_custom_model
     ):
+        """
+        Set the related custom model attribute in DataRobot to indicate that a training/holdout
+        data at model version level was permanently enabled.
+
+        Parameters
+        ----------
+        model_info : model_info.ModelInfo
+            A class that contains full information about a single model from the local source tree.
+        datarobot_custom_model : dict
+            A DataRobot custom model entity.
+
+        Returns
+        -------
+        dict,
+            A custom model entity.
+        """
+
         logger.info(
             "Permanently enable training data for version in model '%s'.",
             model_info.user_provided_id,
