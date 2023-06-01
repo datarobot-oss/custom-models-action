@@ -128,24 +128,24 @@ class DeploymentController(ControllerBase):
 
         logger.info("Validating deployments integrity ...")
         for user_provided_id, deployment_info in self.deployments_info.items():
+            # Verify existing and valid local custom model that is associated with the
+            # deployment.
+            model_info = self._model_controller.models_info.get(
+                deployment_info.user_provided_model_id
+            )
+            if not model_info:
+                raise AssociatedModelNotFound(
+                    "Data integrity in local repository is broken. "
+                    "There's no associated git model definition for given deployment. "
+                    f"User provided deployment id: {user_provided_id}, "
+                    f"User provided model id: {deployment_info.user_provided_model_id}."
+                )
+
             datarobot_deployment = self.datarobot_deployments.get(user_provided_id)
             if datarobot_deployment:
                 model_version = datarobot_deployment.model_version
             else:
-                # 1. Verify existing and valid local custom model that is associated with the
-                #    deployment.
-                model_info = self._model_controller.models_info.get(
-                    deployment_info.user_provided_model_id
-                )
-                if not model_info:
-                    raise AssociatedModelNotFound(
-                        "Data integrity in local repository is broken. "
-                        "There's no associated git model definition for given deployment. "
-                        f"User provided deployment id: {user_provided_id}, "
-                        f"User provided model id: {deployment_info.user_provided_model_id}."
-                    )
-
-                # 2. Validate that the associated model was already created in DataRobot
+                # Validate that the associated model was already created in DataRobot
                 custom_model = self._model_controller.datarobot_models.get(
                     deployment_info.user_provided_model_id
                 )
@@ -156,7 +156,7 @@ class DeploymentController(ControllerBase):
                         f"User provided model id: {deployment_info.user_provided_model_id}."
                     )
 
-                # 3. Validate at least one version
+                # Validate at least one version
                 if not custom_model.latest_version:
                     raise AssociatedModelVersionNotFound(
                         "Unexpected missing DataRobot model version. A custom model with at least "
@@ -167,7 +167,7 @@ class DeploymentController(ControllerBase):
                     )
                 model_version = custom_model.latest_version
 
-            # 4. Validate that the associated model's version SHA is an ancestor in the current tree
+            # Validate that the associated model's version SHA is an ancestor in the current tree
             git_main_branch_sha = model_version["gitModelVersion"]["mainBranchCommitSha"]
             if not self._repo.is_ancestor_of(git_main_branch_sha, "HEAD"):
                 raise NoValidAncestor(
