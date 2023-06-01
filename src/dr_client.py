@@ -171,6 +171,10 @@ class DrClient:
 
     def _paginated_fetch(self, route_url, **kwargs):
         def _fetch_single_page(url, raw):
+            if raw:
+                # 'params' are added to the url in the form of '&attr=value', so we want to skip
+                # it in case it is a 'raw' call that should not alter the url.
+                kwargs.pop("params", None)
             response = self._http_requester.get(url, raw, **kwargs)
             if response.status_code != 200:
                 raise DataRobotClientError(

@@ -15,6 +15,7 @@ import logging
 from abc import ABC
 from abc import abstractmethod
 
+import mock
 import pytest
 import responses
 import schema
@@ -158,6 +159,86 @@ def mock_paginated_responses(
                 quotient, remainder, has_next=False
             )
     return total_entities
+
+
+class TestPaginator:
+    """
+    A class to test the DrClient when it fetched entities from DataRobot from URLs that support
+    pagination.
+    """
+
+    @pytest.fixture
+    def mock_response_with_two_pages(self):
+        """A fixture to mock a response for get method with two sequenced paginated pages."""
+
+        total_entities_num = 5
+        page_one_num_entities = 3
+        dummy_responses = [
+            Mock(
+                status_code=200,
+                json=Mock(
+                    return_value={
+                        "totalCount": total_entities_num,
+                        "count": 3,
+                        "next": "https://next-page",
+                        "data": list(range(page_one_num_entities)),
+                    }
+                ),
+            ),
+            Mock(
+                status_code=200,
+                json=Mock(
+                    return_value={
+                        "totalCount": total_entities_num,
+                        "count": total_entities_num - 3,
+                        "next": None,
+                        "data": list(range(page_one_num_entities, total_entities_num)),
+                    }
+                ),
+            ),
+        ]
+        with patch.object(HttpRequester, "get", side_effect=dummy_responses) as mock_get:
+            yield mock_get, total_entities_num
+
+    def test_paginator_success_without_arguments(self, mock_response_with_two_pages):
+        """A case to test fetching without arguments of paginated pages."""
+
+        mock_get, total_entities_num = mock_response_with_two_pages
+        dr_client = DrClient("https://dummy", "123abc")
+        total_entities_in_response = dr_client._paginated_fetch("/deployments")
+        assert total_entities_num == len(total_entities_in_response)
+        mock_get.assert_has_calls(
+            [mock.call("/deployments", False), mock.call("https://next-page", True)]
+        )
+
+    def test_paginator_success_with_json(self, mock_response_with_two_pages):
+        """A case to test fetching with 'json' argument of paginated pages."""
+
+        mock_get, total_entities_num = mock_response_with_two_pages
+        dr_client = DrClient("https://dummy", "123abc")
+        total_entities_in_response = dr_client._paginated_fetch("/deployments", json={"x": 3})
+        assert total_entities_num == len(total_entities_in_response)
+        mock_get.assert_has_calls(
+            [
+                mock.call("/deployments", False, json={"x": 3}),
+                mock.call("https://next-page", True, json={"x": 3}),
+            ]
+        )
+
+    def test_paginator_success_with_params(self, mock_response_with_two_pages):
+        """A case to test fetching with 'params' argument of paginated pages."""
+
+        mock_get, total_entities_num = mock_response_with_two_pages
+        dr_client = DrClient("https://dummy", "123abc")
+        total_entities_in_response = dr_client._paginated_fetch("/deployments", params={"x": 3})
+        assert total_entities_num == len(total_entities_in_response)
+        mock_get.assert_called_with("https://next-page", True)
+        mock_get.assert_has_calls(
+            [
+                mock.call("/deployments", False, params={"x": 3}),
+                mock.call("https://next-page", True),
+            ]
+        )
 
 
 # pylint: disable=too-few-public-methods
