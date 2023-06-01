@@ -20,6 +20,7 @@ import pytest
 import yaml
 
 from common import constants
+from common.exceptions import AssociatedModelNotFound
 from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
 from common.namepsace import Namespace
@@ -185,6 +186,65 @@ class TestDeploymentGitHubActions:
         else:
             assert False, f"Unsupported GitHub event name: {event_name}"
 
+        printout("Done")
+
+    @pytest.mark.usefixtures("skip_model_testing")
+    def test_e2e_existing_deployment_with_deleted_model_metadata(
+        self,
+        dr_client,
+        workspace_path,
+        git_repo,
+        deployment_metadata,
+        deployment_metadata_yaml_file,
+        main_branch_name,
+        feature_branch_name,
+        merge_branch_name,
+        model_metadata_yaml_file,
+    ):
+        """
+        An end-to-end case to test a scenario in which the user deletes a model metadata
+        definition in a PR while the model is deployed in DataRobot.
+        """
+
+        # Upload actuals dataset and set the deployment metadata with the dataset ID
+        printout("Upload actuals dataset")
+        with self._upload_actuals_dataset(
+            dr_client, deployment_metadata, deployment_metadata_yaml_file
+        ):
+            self._commit_changes_by_event("Update actuals dataset", "push", git_repo)
+
+            printout("Run the GitHub action to create a model and deployment")
+            run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=True)
+
+            # Validate that the deployment was created in DataRobot
+            local_user_provided_id = deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+            assert dr_client.fetch_deployment_by_git_id(local_user_provided_id) is not None
+
+            # Create a feature branch and checkout
+            printout("Create a feature branch ...")
+            feature_branch = git_repo.create_head(feature_branch_name)
+            feature_branch.checkout()
+
+            # Delete the local model definition (metadata) YAML file
+            os.remove(model_metadata_yaml_file)
+            git_repo.git.add(model_metadata_yaml_file)
+            git_repo.git.commit("-m", "Removed model's definition")
+
+            # Create a merge branch
+            merge_branch = git_repo.create_head(merge_branch_name, main_branch_name)
+            git_repo.head.reference = merge_branch
+            git_repo.head.reset(index=True, working_tree=True)
+            git_repo.git.merge(feature_branch, "--no-ff")
+
+            # Run the action and expect for exception
+            printout(
+                "Run the GitHub action in a feature branch and expect for"
+                "AssociatedModelNotFound exception"
+            )
+            with pytest.raises(AssociatedModelNotFound):
+                run_github_action(
+                    workspace_path, git_repo, main_branch_name, "pull_request", is_deploy=True
+                )
         printout("Done")
 
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])

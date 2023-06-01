@@ -565,11 +565,11 @@ def skip_model_testing(git_repo, numbered_model_metadata, numbered_model_metadat
             model_metadata_yaml_file = numbered_model_metadata_yaml_file(model_number)
             save_new_metadata(model_metadata, model_metadata_yaml_file)
             git_repo.git.add(model_metadata_yaml_file)
+
+        git_repo.git.commit("-m", "Restore model(s) testing section")
     except StopIteration:
         # It's a kind of best-effort operation. The test may change the models' hierarchy.
         pass
-
-    git_repo.git.commit("-m", "Restore model(s) testing section")
 
 
 # NOTE: it was rather better to use the pytest.mark.usefixture for 'build_repo_for_testing'
