@@ -1,5 +1,8 @@
 # RELEASES
 
+## 1.4.1 [2023-06-01]
+* Bug fixes
+
 ## 1.4.0 [2023-05-11]
   * Enable users to specify a reason for a model replacement in a deployment
   * Separately track model's settings from its versions
