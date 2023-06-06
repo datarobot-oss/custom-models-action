@@ -805,10 +805,10 @@ class ModelController(ControllerBase):
                     "User provided ID: %s. Training dataset name: %s. Training dataset ID: %s. "
                     "Holdout dataset name: %s. Holdout dataset ID: %s",
                     model_info.user_provided_id,
-                    custom_model["externalMlopsStatsConfig"]["trainingDatasetName"],
-                    custom_model["externalMlopsStatsConfig"]["trainingDatasetId"],
-                    custom_model["externalMlopsStatsConfig"]["holdoutDatasetName"],
-                    custom_model["externalMlopsStatsConfig"]["holdoutDatasetId"],
+                    custom_model["externalMlopsStatsConfig"].get("trainingDatasetName"),
+                    custom_model["externalMlopsStatsConfig"].get("trainingDatasetId"),
+                    custom_model["externalMlopsStatsConfig"].get("holdoutDatasetName"),
+                    custom_model["externalMlopsStatsConfig"].get("holdoutDatasetId"),
                 )
         else:
             custom_model = self._dr_client.update_training_dataset_for_structured_models(
