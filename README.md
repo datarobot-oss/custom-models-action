@@ -517,12 +517,12 @@ version:
     - out/
   include_glob_pattern:
     - ./
-  memory: 128Mi
+  memory: 256Mi
   replicas: 2
   model_replacement_reason: DATA_DRIFT
 
 test:
-  memory: 128Mi
+  memory: 256Mi
   skip: false
   test_data_id: 62779143562155aa34a3d65b
   checks:
