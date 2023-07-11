@@ -490,6 +490,12 @@ class DrClient:
         if replicas:
             payload.append(("replicas", str(replicas)))
 
+        egress_network_policy = model_info.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.EGRESS_NETWORK_POLICY_KEY
+        )
+        if egress_network_policy:
+            payload.append(("networkEgressPolicy", str(egress_network_policy)))
+
         return payload, file_objs
 
     @staticmethod

@@ -300,13 +300,14 @@ class ModelInfo(InfoBase):
         ):
             return True
 
-        configured_memory = self.get_value(ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY)
-        if configured_memory != datarobot_latest_model_version.get("maximumMemory"):
-            return True
-
-        configured_replicas = self.get_value(ModelSchema.VERSION_KEY, ModelSchema.REPLICAS_KEY)
-        if configured_replicas != datarobot_latest_model_version.get("replicas"):
-            return True
+        for resource_key, dr_attribute_key in (
+            (ModelSchema.MEMORY_KEY, "maximumMemory"),
+            (ModelSchema.REPLICAS_KEY, "replicas"),
+            (ModelSchema.EGRESS_NETWORK_POLICY_KEY, "networkEgressPolicy"),
+        ):
+            configured_resource = self.get_value(ModelSchema.VERSION_KEY, resource_key)
+            if configured_resource != datarobot_latest_model_version.get(dr_attribute_key):
+                return True
 
         return False
 

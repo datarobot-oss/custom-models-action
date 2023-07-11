@@ -243,6 +243,9 @@ class ModelSchema(SharedSchema):
     EXCLUDE_GLOB_KEY = "exclude_glob_pattern"
     MEMORY_KEY = "memory"
     REPLICAS_KEY = "replicas"
+    EGRESS_NETWORK_POLICY_KEY = "egress_network_policy"
+    EGRESS_NETWORK_POLICY_NONE = "NONE"
+    EGRESS_NETWORK_POLICY_PUBLIC = "PUBLIC"
 
     MODEL_REPLACEMENT_REASON_KEY = "model_replacement_reason"
     MODEL_REPLACEMENT_REASON_ACCURACY = "ACCURACY"
@@ -314,6 +317,9 @@ class ModelSchema(SharedSchema):
                 ),
                 Optional(MEMORY_KEY): Use(MemoryConvertor.to_bytes),
                 Optional(REPLICAS_KEY): And(int, lambda r: r > 0),
+                Optional(EGRESS_NETWORK_POLICY_KEY): Or(
+                    EGRESS_NETWORK_POLICY_NONE, EGRESS_NETWORK_POLICY_PUBLIC
+                ),
                 # Optional(PARTITIONING_COLUMN_KEY): And(str, len),
                 # Optional(TRAINING_DATASET_ID_KEY): And(str, ObjectId.is_valid),
                 # Optional(HOLDOUT_DATASET_ID_KEY): And(str, ObjectId.is_valid),

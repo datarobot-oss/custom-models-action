@@ -493,6 +493,7 @@ def mock_full_binary_model_schema(mock_full_custom_model_checks):
             ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
             ModelSchema.MEMORY_KEY: "100Mi",
             ModelSchema.REPLICAS_KEY: 3,
+            ModelSchema.EGRESS_NETWORK_POLICY_KEY: ModelSchema.EGRESS_NETWORK_POLICY_PUBLIC,
         },
         ModelSchema.TEST_KEY: {
             ModelSchema.TEST_DATA_ID_KEY: "62779143562155aa34a3d65b",
