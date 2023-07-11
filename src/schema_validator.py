@@ -210,6 +210,7 @@ class ModelSchema(SharedSchema):
     TARGET_TYPE_REGRESSION = "Regression"
     TARGET_TYPE_MULTICLASS = "Multiclass"
     TARGET_TYPE_ANOMALY_DETECTION = "Anomaly Detection"
+    TARGET_TYPE_TEXT_GENERATION = "TextGeneration"
     TARGET_TYPE_UNSTRUCTURED_BINARY = "Unstructured (Binary)"
     TARGET_TYPE_UNSTRUCTURED_REGRESSION = "Unstructured (Regression)"
     TARGET_TYPE_UNSTRUCTURED_MULTICLASS = "Unstructured (Multiclass)"
@@ -289,6 +290,7 @@ class ModelSchema(SharedSchema):
                 TARGET_TYPE_REGRESSION,
                 TARGET_TYPE_MULTICLASS,
                 TARGET_TYPE_ANOMALY_DETECTION,
+                TARGET_TYPE_TEXT_GENERATION,
                 TARGET_TYPE_UNSTRUCTURED_BINARY,
                 TARGET_TYPE_UNSTRUCTURED_REGRESSION,
                 TARGET_TYPE_UNSTRUCTURED_MULTICLASS,
