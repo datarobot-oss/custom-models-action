@@ -56,7 +56,7 @@ class TestModelSchemaValidator:
 
     @pytest.mark.parametrize(
         "binary_target_type",
-        [ModelSchema.TARGET_TYPE_BINARY_KEY, ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY],
+        [ModelSchema.TARGET_TYPE_BINARY, ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY],
     )
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
     def test_for_binary_model(self, binary_target_type, is_single):
@@ -108,7 +108,7 @@ class TestModelSchemaValidator:
 
     @pytest.mark.parametrize(
         "binary_target_type",
-        [ModelSchema.TARGET_TYPE_BINARY_KEY, ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY],
+        [ModelSchema.TARGET_TYPE_BINARY, ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY],
     )
     @pytest.mark.parametrize(
         "class_label_key",
@@ -129,8 +129,8 @@ class TestModelSchemaValidator:
     @pytest.mark.parametrize(
         "regression_target_type",
         [
-            ModelSchema.TARGET_TYPE_REGRESSION_KEY,
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY,
+            ModelSchema.TARGET_TYPE_REGRESSION,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION,
         ],
     )
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
@@ -145,8 +145,8 @@ class TestModelSchemaValidator:
     @pytest.mark.parametrize(
         "multiclass_target_type",
         [
-            ModelSchema.TARGET_TYPE_MULTICLASS_KEY,
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
+            ModelSchema.TARGET_TYPE_MULTICLASS,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS,
         ],
     )
     @pytest.mark.parametrize("is_single", [True, False], ids=["single", "multi"])
@@ -164,7 +164,7 @@ class TestModelSchemaValidator:
         """A case to test a missing key in a Multi-Class model schema."""
 
         def _set_multiclass_keys(schema):
-            schema[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_MULTICLASS_KEY
+            schema[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_MULTICLASS
 
         with pytest.raises(InvalidModelSchema):
             self._validate_for_model_type(is_single, _set_multiclass_keys)
@@ -174,7 +174,7 @@ class TestModelSchemaValidator:
         """A case to test an unstructured model schema."""
 
         def _set_unstructured_keys(schema):
-            schema[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY
+            schema[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER
 
         self._validate_for_model_type(is_single, _set_unstructured_keys)
 
@@ -185,24 +185,24 @@ class TestModelSchemaValidator:
         Key = namedtuple("Key", ["type", "name", "value"])
         mutual_exclusive_keys = {
             Key(
-                type=ModelSchema.TARGET_TYPE_REGRESSION_KEY,
+                type=ModelSchema.TARGET_TYPE_REGRESSION,
                 name=ModelSchema.PREDICTION_THRESHOLD_KEY,
                 value=0.5,
             ),
             (
                 Key(
-                    type=ModelSchema.TARGET_TYPE_BINARY_KEY,
+                    type=ModelSchema.TARGET_TYPE_BINARY,
                     name=ModelSchema.POSITIVE_CLASS_LABEL_KEY,
                     value="1",
                 ),
                 Key(
-                    type=ModelSchema.TARGET_TYPE_BINARY_KEY,
+                    type=ModelSchema.TARGET_TYPE_BINARY,
                     name=ModelSchema.NEGATIVE_CLASS_LABEL_KEY,
                     value="0",
                 ),
             ),
             Key(
-                type=ModelSchema.TARGET_TYPE_MULTICLASS_KEY,
+                type=ModelSchema.TARGET_TYPE_MULTICLASS,
                 name=ModelSchema.CLASS_LABELS_KEY,
                 value=("a", "b", "c"),
             ),

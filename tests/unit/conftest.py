@@ -81,7 +81,7 @@ def create_partial_model_schema(is_single=True, num_models=1, with_target_type=F
             ModelSchema.VERSION_KEY: {ModelSchema.MODEL_ENV_ID_KEY: str(ObjectId())},
         }
         if with_target_type:
-            partial_schema[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_REGRESSION_KEY
+            partial_schema[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_REGRESSION
         return partial_schema
 
     if is_single:
@@ -218,7 +218,7 @@ def fixture_single_model_factory(workspace_path, common_path_with_code):
 
         single_model_metadata = {
             ModelSchema.MODEL_ID_KEY: Namespace.namespaced(user_provided_id or str(uuid.uuid4())),
-            ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
+            ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION,
             ModelSchema.SETTINGS_SECTION_KEY: {
                 ModelSchema.NAME_KEY: name,
                 ModelSchema.TARGET_NAME_KEY: "Grade 2014",
@@ -476,7 +476,7 @@ def mock_full_binary_model_schema(mock_full_custom_model_checks):
 
     return {
         ModelSchema.MODEL_ID_KEY: "abc123",
-        ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_BINARY_KEY,
+        ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_BINARY,
         ModelSchema.SETTINGS_SECTION_KEY: {
             ModelSchema.NAME_KEY: "Awesome Model",
             ModelSchema.DESCRIPTION_KEY: "My awesome model",
