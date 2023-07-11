@@ -115,6 +115,7 @@ def fixture_regression_model_info():
             ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
             ModelSchema.MEMORY_KEY: 256 * 1024 * 1024,
             ModelSchema.REPLICAS_KEY: 3,
+            ModelSchema.EGRESS_NETWORK_POLICY_KEY: ModelSchema.EGRESS_NETWORK_POLICY_PUBLIC,
         },
     }
     return ModelInfo(
@@ -895,6 +896,7 @@ class TestCustomModelVersionRoutes:
             assert "filePath" in keys
             assert "maximumMemory" in keys
             assert "replicas" in keys
+            assert "networkEgressPolicy" in keys
 
     def test_minimal_payload_setup_for_custom_model_version_creation(
         self, minimal_regression_model_info, git_model_version
