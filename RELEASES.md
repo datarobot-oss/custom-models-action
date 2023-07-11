@@ -1,5 +1,10 @@
 # RELEASES
 
+## 1.5.0 [2023-07-11]
+* Add support for LLM (text generation) custom models
+* Add support for egress network policy for a custom model
+* Bug fix
+
 ## 1.4.2 [2023-06-06]
 * Bug fix
 
