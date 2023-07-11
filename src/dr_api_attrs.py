@@ -103,14 +103,14 @@ class DrApiTargetType:  # pylint: disable=too-few-public-methods
     """
 
     MAPPING = {
-        ModelSchema.TARGET_TYPE_BINARY_KEY: "Binary",
-        ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY: "Binary",
-        ModelSchema.TARGET_TYPE_REGRESSION_KEY: "Regression",
-        ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY: "Regression",
-        ModelSchema.TARGET_TYPE_MULTICLASS_KEY: "Multiclass",
-        ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY: "Multiclass",
-        ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY: "Unstructured",
-        ModelSchema.TARGET_TYPE_ANOMALY_DETECTION_KEY: "Anomaly",
+        ModelSchema.TARGET_TYPE_BINARY: "Binary",
+        ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY: "Binary",
+        ModelSchema.TARGET_TYPE_REGRESSION: "Regression",
+        ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION: "Regression",
+        ModelSchema.TARGET_TYPE_MULTICLASS: "Multiclass",
+        ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS: "Multiclass",
+        ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER: "Unstructured",
+        ModelSchema.TARGET_TYPE_ANOMALY_DETECTION: "Anomaly",
     }
 
     @classmethod

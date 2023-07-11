@@ -78,7 +78,7 @@ def fixture_minimal_regression_model_info():
     """A fixture to create a ModelInfo with a minimal regression model information."""
     metadata = {
         ModelSchema.MODEL_ID_KEY: "abc123",
-        ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
+        ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION,
         ModelSchema.SETTINGS_SECTION_KEY: {
             ModelSchema.NAME_KEY: "minimal-regression-model",
             ModelSchema.TARGET_NAME_KEY: "target_column",
@@ -101,7 +101,7 @@ def fixture_regression_model_info():
 
     metadata = {
         ModelSchema.MODEL_ID_KEY: "abc123",
-        ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION_KEY,
+        ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION,
         ModelSchema.SETTINGS_SECTION_KEY: {
             ModelSchema.NAME_KEY: "Awesome Model",
             ModelSchema.TARGET_NAME_KEY: "target_column",
@@ -615,10 +615,10 @@ class TestCustomModelTrainingHoldoutPayload:
             if is_unstructured:
                 metadata[
                     ModelSchema.TARGET_TYPE_KEY
-                ] = ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY
+                ] = ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION
                 settings_section[ModelSchema.HOLDOUT_DATASET_ID_KEY] = holdout_dataset_id
             else:
-                metadata[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_REGRESSION_KEY
+                metadata[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_REGRESSION
                 settings_section[ModelSchema.PARTITIONING_COLUMN_KEY] = partitioning_column
 
             return ModelInfo(yaml_filepath="/tmp/dummy", model_path="/tmp/model", metadata=metadata)
@@ -1562,8 +1562,8 @@ class TestDeploymentPayloadConstruction:
                 "actual": "Origin description",
             },
             DeploymentSchema.IMPORTANCE_KEY: {
-                "desired": DeploymentSchema.IMPORTANCE_MODERATE_VALUE,
-                "actual": DeploymentSchema.IMPORTANCE_LOW_VALUE,
+                "desired": DeploymentSchema.IMPORTANCE_MODERATE,
+                "actual": DeploymentSchema.IMPORTANCE_LOW,
             },
         }
         deployment = {attr: body["actual"] for attr, body in attr_map.items()}
@@ -1586,7 +1586,7 @@ class TestDeploymentPayloadConstruction:
 
         label_value = "Origin label"
         description_value = "Origin description"
-        importance_value = DeploymentSchema.IMPORTANCE_LOW_VALUE
+        importance_value = DeploymentSchema.IMPORTANCE_LOW
         attr_map = {
             DeploymentSchema.LABEL_KEY: {"desired": label_value, "actual": label_value},
             DeploymentSchema.DESCRIPTION_KEY: {
@@ -1615,8 +1615,8 @@ class TestDeploymentPayloadConstruction:
                 "actual": "Origin description",
             },
             DeploymentSchema.IMPORTANCE_KEY: {
-                "desired": DeploymentSchema.IMPORTANCE_LOW_VALUE,
-                "actual": DeploymentSchema.IMPORTANCE_LOW_VALUE,
+                "desired": DeploymentSchema.IMPORTANCE_LOW,
+                "actual": DeploymentSchema.IMPORTANCE_LOW,
             },
         }
         deployment = {attr: body["actual"] for attr, body in attr_map.items()}
@@ -1640,7 +1640,7 @@ class TestDeploymentPayloadConstruction:
             },
             DeploymentSchema.IMPORTANCE_KEY: {
                 "desired": None,
-                "actual": DeploymentSchema.IMPORTANCE_LOW_VALUE,
+                "actual": DeploymentSchema.IMPORTANCE_LOW,
             },
         }
         deployment = {attr: body["actual"] for attr, body in attr_map.items()}
@@ -1666,7 +1666,7 @@ class TestDeploymentPayloadConstruction:
             },
             DeploymentSchema.IMPORTANCE_KEY: {
                 "desired": empty_importance,
-                "actual": DeploymentSchema.IMPORTANCE_LOW_VALUE,
+                "actual": DeploymentSchema.IMPORTANCE_LOW,
             },
         }
         deployment = {attr: body["actual"] for attr, body in attr_map.items()}

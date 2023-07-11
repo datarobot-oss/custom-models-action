@@ -308,7 +308,7 @@ class TestModelTrainingHoldoutData:
         with temporarily_replace_schema_value(
             model_metadata_yaml_file,
             ModelSchema.TARGET_TYPE_KEY,
-            new_value=ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY,
+            new_value=ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER,
         ):
             # 1. Create a model just as a preliminary requirement (use GitHub action)
             printout(
@@ -409,7 +409,7 @@ class TestModelTrainingHoldoutData:
         with temporarily_replace_schema_value(
             model_metadata_yaml_file,
             ModelSchema.TARGET_TYPE_KEY,
-            new_value=ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY,
+            new_value=ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER,
         ):
             # 1. Create a model just as a preliminary requirement (use GitHub action)
             printout(

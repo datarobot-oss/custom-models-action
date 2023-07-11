@@ -206,14 +206,14 @@ class ModelSchema(SharedSchema):
     MODEL_ENTRY_META_KEY = "model_metadata"
 
     TARGET_TYPE_KEY = "target_type"
-    TARGET_TYPE_BINARY_KEY = "Binary"
-    TARGET_TYPE_REGRESSION_KEY = "Regression"
-    TARGET_TYPE_MULTICLASS_KEY = "Multiclass"
-    TARGET_TYPE_ANOMALY_DETECTION_KEY = "Anomaly Detection"
-    TARGET_TYPE_UNSTRUCTURED_BINARY_KEY = "Unstructured (Binary)"
-    TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY = "Unstructured (Regression)"
-    TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY = "Unstructured (Multiclass)"
-    TARGET_TYPE_UNSTRUCTURED_OTHER_KEY = "Unstructured (Other)"
+    TARGET_TYPE_BINARY = "Binary"
+    TARGET_TYPE_REGRESSION = "Regression"
+    TARGET_TYPE_MULTICLASS = "Multiclass"
+    TARGET_TYPE_ANOMALY_DETECTION = "Anomaly Detection"
+    TARGET_TYPE_UNSTRUCTURED_BINARY = "Unstructured (Binary)"
+    TARGET_TYPE_UNSTRUCTURED_REGRESSION = "Unstructured (Regression)"
+    TARGET_TYPE_UNSTRUCTURED_MULTICLASS = "Unstructured (Multiclass)"
+    TARGET_TYPE_UNSTRUCTURED_OTHER = "Unstructured (Other)"
 
     TARGET_NAME_KEY = "target_name"
 
@@ -282,14 +282,14 @@ class ModelSchema(SharedSchema):
         {
             SharedSchema.MODEL_ID_KEY: And(str, len, Use(Namespace.namespaced)),
             TARGET_TYPE_KEY: Or(
-                TARGET_TYPE_BINARY_KEY,
-                TARGET_TYPE_REGRESSION_KEY,
-                TARGET_TYPE_MULTICLASS_KEY,
-                TARGET_TYPE_ANOMALY_DETECTION_KEY,
-                TARGET_TYPE_UNSTRUCTURED_BINARY_KEY,
-                TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY,
-                TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
-                TARGET_TYPE_UNSTRUCTURED_OTHER_KEY,
+                TARGET_TYPE_BINARY,
+                TARGET_TYPE_REGRESSION,
+                TARGET_TYPE_MULTICLASS,
+                TARGET_TYPE_ANOMALY_DETECTION,
+                TARGET_TYPE_UNSTRUCTURED_BINARY,
+                TARGET_TYPE_UNSTRUCTURED_REGRESSION,
+                TARGET_TYPE_UNSTRUCTURED_MULTICLASS,
+                TARGET_TYPE_UNSTRUCTURED_OTHER,
             ),
             SharedSchema.SETTINGS_SECTION_KEY: {
                 NAME_KEY: And(str, len),
@@ -435,8 +435,8 @@ class ModelSchema(SharedSchema):
         """
 
         return metadata[ModelSchema.TARGET_TYPE_KEY] in [
-            cls.TARGET_TYPE_BINARY_KEY,
-            cls.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY,
+            cls.TARGET_TYPE_BINARY,
+            cls.TARGET_TYPE_UNSTRUCTURED_BINARY,
         ]
 
     @classmethod
@@ -456,8 +456,8 @@ class ModelSchema(SharedSchema):
         """
 
         return metadata[ModelSchema.TARGET_TYPE_KEY] in [
-            cls.TARGET_TYPE_REGRESSION_KEY,
-            cls.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY,
+            cls.TARGET_TYPE_REGRESSION,
+            cls.TARGET_TYPE_UNSTRUCTURED_REGRESSION,
         ]
 
     @classmethod
@@ -477,8 +477,8 @@ class ModelSchema(SharedSchema):
         """
 
         return metadata[ModelSchema.TARGET_TYPE_KEY] in [
-            cls.TARGET_TYPE_MULTICLASS_KEY,
-            cls.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
+            cls.TARGET_TYPE_MULTICLASS,
+            cls.TARGET_TYPE_UNSTRUCTURED_MULTICLASS,
         ]
 
     @classmethod
@@ -498,10 +498,10 @@ class ModelSchema(SharedSchema):
         """
 
         return metadata[ModelSchema.TARGET_TYPE_KEY] in [
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION_KEY,
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY_KEY,
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS_KEY,
-            ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER_KEY,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_BINARY,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS,
+            ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER,
         ]
 
     @classmethod
@@ -662,10 +662,10 @@ class DeploymentSchema(SharedSchema):
     LABEL_KEY = "label"  # Settings, Optional
     DESCRIPTION_KEY = "description"  # Settings, Optional
     IMPORTANCE_KEY = "importance"  # Settings, Optional
-    IMPORTANCE_CRITICAL_VALUE = "CRITICAL"
-    IMPORTANCE_HIGH_VALUE = "HIGH"
-    IMPORTANCE_MODERATE_VALUE = "MODERATE"
-    IMPORTANCE_LOW_VALUE = "LOW"
+    IMPORTANCE_CRITICAL = "CRITICAL"
+    IMPORTANCE_HIGH = "HIGH"
+    IMPORTANCE_MODERATE = "MODERATE"
+    IMPORTANCE_LOW = "LOW"
 
     ENABLE_TARGET_DRIFT_KEY = "enable_target_drift"  # Settings, Optional
     ENABLE_FEATURE_DRIFT_KEY = "enable_feature_drift"  # Settings, Optional
@@ -700,10 +700,7 @@ class DeploymentSchema(SharedSchema):
                 # the user will need to wait for approval from a reviewer in order to be able
                 # to apply new changes and merge them to the main branch.
                 Optional(IMPORTANCE_KEY): Or(  # fromModelPackage
-                    IMPORTANCE_CRITICAL_VALUE,
-                    IMPORTANCE_HIGH_VALUE,
-                    IMPORTANCE_MODERATE_VALUE,
-                    IMPORTANCE_LOW_VALUE,
+                    IMPORTANCE_CRITICAL, IMPORTANCE_HIGH, IMPORTANCE_MODERATE, IMPORTANCE_LOW
                 ),
                 Optional(ASSOCIATION_KEY): {
                     Optional(ASSOCIATION_ASSOCIATION_ID_COLUMN_KEY): And(str, len),
