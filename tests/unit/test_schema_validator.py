@@ -493,6 +493,20 @@ class TestModelSchemaSetValue:
         with pytest.raises(UnexpectedType):
             ModelSchema.set_value(input_metadata, section_name, key_name, value=value)
 
+    def test_target_type_value_definitions_are_all_included(self):
+        """
+        A case to test that all the target type value definitions are included in the target type
+        attribute in the model's schema.
+        """
+
+        target_type_value_definitions = {
+            v
+            for k, v in ModelSchema.__dict__.items()
+            if k.startswith("TARGET_TYPE_") and not k.endswith("_KEY")
+        }
+        target_type_choices = set(ModelSchema.MODEL_SCHEMA.schema["target_type"].args)
+        assert target_type_value_definitions == target_type_choices
+
 
 class TestDeploymentSchemaValidator:
     """Contains cases to test a deployment schema validator."""

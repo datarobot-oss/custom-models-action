@@ -111,6 +111,7 @@ class DrApiTargetType:  # pylint: disable=too-few-public-methods
         ModelSchema.TARGET_TYPE_UNSTRUCTURED_MULTICLASS: "Multiclass",
         ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER: "Unstructured",
         ModelSchema.TARGET_TYPE_ANOMALY_DETECTION: "Anomaly",
+        ModelSchema.TARGET_TYPE_TEXT_GENERATION: "TextGeneration",
     }
 
     @classmethod
