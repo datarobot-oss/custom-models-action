@@ -322,9 +322,9 @@ class ModelSchema(SharedSchema):
                 Optional(EGRESS_NETWORK_POLICY_KEY): Or(
                     EGRESS_NETWORK_POLICY_NONE, EGRESS_NETWORK_POLICY_PUBLIC
                 ),
-                # Optional(PARTITIONING_COLUMN_KEY): And(str, len),
-                # Optional(TRAINING_DATASET_ID_KEY): And(str, ObjectId.is_valid),
-                # Optional(HOLDOUT_DATASET_ID_KEY): And(str, ObjectId.is_valid),
+                Optional(PARTITIONING_COLUMN_KEY): And(str, len),
+                Optional(TRAINING_DATASET_ID_KEY): And(str, ObjectId.is_valid),
+                Optional(HOLDOUT_DATASET_ID_KEY): And(str, ObjectId.is_valid),
                 Optional(MODEL_REPLACEMENT_REASON_KEY, default=MODEL_REPLACEMENT_REASON_OTHER): Or(
                     MODEL_REPLACEMENT_REASON_ACCURACY,
                     MODEL_REPLACEMENT_REASON_DATA_DRIFT,

@@ -491,7 +491,7 @@ class TestDeploymentGitHubActions:
         """An end-to-end case to test changes in deployment settings."""
 
         with temporarily_upload_training_dataset_for_structured_model(
-            dr_client, model_metadata_yaml_file, is_model_level=True, event_name=event_name
+            dr_client, model_metadata_yaml_file, is_model_level=False, event_name=event_name
         ):
             try:
                 # Run the GitHub action to create a model and deployment
