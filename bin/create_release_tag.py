@@ -31,6 +31,12 @@ class ReleaseCreator:
 
         self._validate_integrity()
 
+        if not self._is_master_branch():
+            logger.info("Remember to create a tag after merging to the master branch.")
+            return
+
+        self._validate_coherent_master_branch()
+
         if self._tag_already_exists():
             logger.info("Tag already exists, tag: %s", self._args.tag)
             if not self._verify_override_conditions():
@@ -59,15 +65,16 @@ class ReleaseCreator:
                 return True
         return False
 
+    def _is_master_branch(self):
+        return self._repo.active_branch.name == "master"
+
     def _validate_integrity(self):
         if self._repo.is_dirty():
             raise AssertionError("There is probably an un-committed work. The repository is dirty.")
 
-        if self._repo.active_branch.name != "master":
-            raise AssertionError("A release can only be created from the 'master' branch.")
-
         self._verify_releases_history()
 
+    def _validate_coherent_master_branch(self):
         commits_behind = self._repo.iter_commits("master..origin/master")
         if sum(1 for c in commits_behind) > 0:
             raise AssertionError("Local 'master' branch is behind of its remote branch.")
