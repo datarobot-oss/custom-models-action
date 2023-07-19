@@ -219,6 +219,11 @@ class DeploymentController(ControllerBase):
                     updated = True
 
                 if updated:
+                    logger.info(
+                        "Deployment settings were updated, git_id: %s, deployment_id: %s.",
+                        deployment_info.user_provided_id,
+                        datarobot_deployment.deployment["id"],
+                    )
                     self.metrics.total_affected.value += 1
 
     def _create_deployment(self, deployment_info):
@@ -242,7 +247,7 @@ class DeploymentController(ControllerBase):
         deployment, _ = self._dr_client.update_deployment_settings(deployment, deployment_info)
 
         logger.info(
-            "A new deployment was created, git_id: %s, id: %s.",
+            "A new deployment was created, git_id: %s, deployment_id: %s.",
             deployment_info.user_provided_id,
             deployment["id"],
         )
