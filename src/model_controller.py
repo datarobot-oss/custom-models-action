@@ -773,6 +773,7 @@ class ModelController(ControllerBase):
             )
             is not None
         )
+        training_holdout_updated = False
         if not datarobot_custom_model.get("isTrainingDataForVersionsPermanentlyEnabled", False):
             # NOTE: training/holdout datasets update should always come after model's setting update
             training_holdout_updated = (
