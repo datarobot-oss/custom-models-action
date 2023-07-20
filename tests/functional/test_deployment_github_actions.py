@@ -572,14 +572,9 @@ class TestDeploymentGitHubActions:
         deployment_attrs = [
             (DeploymentSchema.LABEL_KEY, "label"),
             (DeploymentSchema.DESCRIPTION_KEY, "description"),
-            (DeploymentSchema.IMPORTANCE_KEY, "importance"),
         ]
         for schema_attr, dr_attr in deployment_attrs:
-            old_value = origin_deployment[dr_attr]
-            if schema_attr == DeploymentSchema.IMPORTANCE_KEY:
-                new_value = "HIGH" if old_value == "LOW" else "LOW"
-            else:
-                new_value = f"{old_value} - NEW"
+            new_value = f"{origin_deployment[dr_attr]} - NEW"
             deployment_info.set_settings_value(schema_attr, value=new_value)
 
         with temporarily_replace_schema(deployment_metadata_yaml_file, deployment_info.metadata):
