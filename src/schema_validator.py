@@ -707,7 +707,7 @@ class DeploymentSchema(SharedSchema):
                 # operation, such as 'create', 'update', 'delete', etc. So, practically
                 # the user will need to wait for approval from a reviewer in order to be able
                 # to apply new changes and merge them to the main branch.
-                Optional(IMPORTANCE_KEY): Or(  # fromModelPackage
+                Optional(IMPORTANCE_KEY, default=IMPORTANCE_LOW): Or(  # fromModelPackage
                     IMPORTANCE_CRITICAL, IMPORTANCE_HIGH, IMPORTANCE_MODERATE, IMPORTANCE_LOW
                 ),
                 Optional(ASSOCIATION_KEY): {
