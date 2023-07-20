@@ -16,7 +16,6 @@ is in progress.
 - [ ] Skip functional tests
 - [ ] Run all functional tests (>50 minutes)
 
-**NOTE**: to run a certain specifi functional test(s), write a comment that includes the following
-pattern `$FUNCTIONAL_TESTS=<test-to-run>`. The workflow will extract whatever test(s) specified
-after the assignment sign and will trigger an action to run it. The execution can be viewed under
-the `Actions` tab.
+**NOTE**: to run certain specific functional test(s), write a comment that includes the following
+pattern `$FUNCTIONAL_TESTS=<tests-to-run>`. The test(s) specified after the assignment sign will be
+executed. The execution can be viewed from the `Actions` tab.
