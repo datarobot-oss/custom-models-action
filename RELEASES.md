@@ -1,5 +1,10 @@
 # RELEASES
 
+## 1.6.0 [2023-07-19]
+* Add support for training/holdout dataset assignment as model version level
+* Internal improvements
+* Bug fixes
+
 ## 1.5.0 [2023-07-16]
 * Add support for LLM (text generation) custom models
 * Add support for egress network policy for a custom model
