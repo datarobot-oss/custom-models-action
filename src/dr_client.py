@@ -67,6 +67,8 @@ class DrClient:
     DEPLOYMENT_MODEL_CHALLENGER_ROUTE = DEPLOYMENT_ROUTE + "challengers/"
     DEPLOYMENT_ACTUALS_UPDATE_ROUTE = DEPLOYMENT_ROUTE + "actuals/fromDataset/"
     ENVIRONMENT_DROP_IN_ROUTE = "executionEnvironments/"
+    REGISTERED_MODELS_LIST_ROUTE = "registeredModels/"
+    REGISTERED_MODELS_VERSIONS_ROUTE = "registeredModels/{registered_model_id}/versions/"
 
     DEFAULT_MAX_WAIT_SEC = 600
 
@@ -451,6 +453,74 @@ class DrClient:
         model_version = response.json()
         logger.info("Custom model version created successfully (id: %s)", model_version["id"])
         return model_version
+
+    def create_or_update_registered_model(self, custom_model_version_id, registered_model_name):
+        """
+        Creates or updates a registered model from custom model version.
+        If a registered model named registered_model_name exists, it is updated with a new
+        version if needed. If it does not exist, it is created.
+
+        Parameters
+        ----------
+        custom_model_version_id : str
+            Custom model version id to create registered model version from.
+        registered_model_name : str
+            Registered model name to create or update.
+
+        Returns
+        -------
+        str,
+            Registered model version id of existing or newly created version.
+        """
+        registered_model_id = self.get_registered_model_by_name(registered_model_name)
+        if registered_model_id:
+            existing_registered_versions = self._get_registered_model_versions(registered_model_id)
+            existing_version_id = next(
+                (
+                    v["id"]
+                    for v in existing_registered_versions
+                    if v["modelId"] == custom_model_version_id
+                ),
+                None,
+            )
+            if existing_version_id:
+                logger.info(
+                    "Custom model version is already registered. Registered model name: %s, "
+                    "custom model version id: %s",
+                    registered_model_name,
+                    custom_model_version_id,
+                )
+                return existing_version_id
+            registered_model_name = None
+
+        return self.create_model_package_from_custom_model_version(
+            custom_model_version_id, registered_model_name, registered_model_id
+        )["id"]
+
+    def get_registered_model_by_name(self, registered_model_name):
+        """
+        Retrieves a registered model by name.
+
+        Parameters
+        ----------
+        registered_model_name : str
+            The name of the registered model to get.
+
+        Returns
+        -------
+        str or None,
+            Registered model id if found, otherwise None.
+        """
+        items = self._paginated_fetch(
+            self.REGISTERED_MODELS_LIST_ROUTE,
+            params={"search": registered_model_name},
+        )
+        return next((item["id"] for item in items if item["name"] == registered_model_name), None)
+
+    def _get_registered_model_versions(self, registered_model_id):
+        return self._paginated_fetch(
+            self.REGISTERED_MODELS_VERSIONS_ROUTE.format(registered_model_id=registered_model_id),
+        )
 
     @classmethod
     def _setup_payload_for_custom_model_version_creation(
@@ -1153,7 +1223,9 @@ class DrClient:
         deployment, _ = self.update_deployment_settings(deployment, deployment_info)
         return deployment
 
-    def create_model_package_from_custom_model_version(self, custom_model_version_id):
+    def create_model_package_from_custom_model_version(
+        self, custom_model_version_id, registered_model_name=None, registered_model_id=None
+    ):
         """
         Creates a model package in the model's registry from a custom model version.
 
@@ -1161,6 +1233,14 @@ class DrClient:
         ----------
         custom_model_version_id : str
             A custom model version ID
+        registered_model_name : str
+            Registered model name. This will add the model package as a registered model version
+            of a new registered model by this name.
+            If None, will be left out of request.
+        registered_model_id : str
+            Registered model id. This will add the model package as a registered model version
+            of an existing registered model by this id.
+            IF None, will be left out of request.
 
         Returns
         -------
@@ -1169,6 +1249,11 @@ class DrClient:
         """
 
         payload = {"customModelVersionId": custom_model_version_id}
+        if registered_model_name:
+            payload["registeredModelName"] = registered_model_name
+        if registered_model_id:
+            payload["registeredModelId"] = registered_model_id
+
         response = self._http_requester.post(self.MODEL_PACKAGES_CREATE_ROUTE, json=payload)
         if response.status_code != 201:
             raise DataRobotClientError(

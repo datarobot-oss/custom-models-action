@@ -356,6 +356,14 @@ class ModelInfo(InfoBase):
         return False
 
     @property
+    def should_register_model(self):
+        return self.registered_model_name is not None
+
+    @property
+    def registered_model_name(self):
+        return self.get_value(ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.MODEL_NAME)
+
+    @property
     def should_run_test(self):
         """
         Querying the model's metadata and check whether a custom model testing should be executed.

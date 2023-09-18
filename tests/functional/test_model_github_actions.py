@@ -89,6 +89,7 @@ class TestModelGitHubActions:
             self._rename_model,
             self._add_file_check,
             self._remove_file_check,
+            self._add_registered_model,
         ]
         self._run_checks(
             checks,
@@ -332,6 +333,22 @@ class TestModelGitHubActions:
         cm_version_files = [item["filePath"] for item in cm_version["items"]]
         for filepath in files_to_add_and_remove:
             assert (filepath.name in cm_version_files) == is_add
+
+    @classmethod
+    @contextlib.contextmanager
+    def _add_registered_model(cls, git_repo, dr_client, model_metadata, model_metadata_yaml_file):
+        printout("Create new registered model ...")
+        model_metadata.update(
+            {ModelSchema.MODEL_REGISTRY_KEY: {ModelSchema.MODEL_NAME: "registered_model"}}
+        )
+
+        save_new_metadata_and_commit(
+            model_metadata, model_metadata_yaml_file, git_repo, "Add registered model"
+        )
+
+        yield cls.ExpectedChange(settings_updated=False, version_created=False)
+
+        assert dr_client.get_registered_model_by_name("registered_model") is not None
 
     @staticmethod
     def _merge_changes_into_the_main_branch(git_repo, merge_branch):

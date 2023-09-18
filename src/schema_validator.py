@@ -282,6 +282,9 @@ class ModelSchema(SharedSchema):
     MINIMUM_PAYLOAD_SIZE_KEY = "minimum_payload_size"
     MAXIMUM_PAYLOAD_SIZE_KEY = "maximum_payload_size"
 
+    MODEL_REGISTRY_KEY = "model_registry"
+    MODEL_NAME = "model_name"
+
     MODEL_SCHEMA = Schema(
         {
             SharedSchema.MODEL_ID_KEY: And(str, len, Use(Namespace.namespaced)),
@@ -375,6 +378,9 @@ class ModelSchema(SharedSchema):
                         Optional(MAXIMUM_PAYLOAD_SIZE_KEY): And(int, lambda v: v >= 1),
                     },
                 },
+            },
+            Optional(MODEL_REGISTRY_KEY): {
+                Optional(MODEL_NAME): And(str, len),
             },
         }
     )
