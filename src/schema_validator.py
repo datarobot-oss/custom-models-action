@@ -282,6 +282,8 @@ class ModelSchema(SharedSchema):
     MINIMUM_PAYLOAD_SIZE_KEY = "minimum_payload_size"
     MAXIMUM_PAYLOAD_SIZE_KEY = "maximum_payload_size"
 
+    REGISTERED_MODEL_NAME = "registered_model_name"
+
     MODEL_SCHEMA = Schema(
         {
             SharedSchema.MODEL_ID_KEY: And(str, len, Use(Namespace.namespaced)),
@@ -308,6 +310,7 @@ class ModelSchema(SharedSchema):
                 Optional(PARTITIONING_COLUMN_KEY): And(str, len),
                 Optional(TRAINING_DATASET_ID_KEY): And(str, ObjectId.is_valid),
                 Optional(HOLDOUT_DATASET_ID_KEY): And(str, ObjectId.is_valid),
+                Optional(REGISTERED_MODEL_NAME): And(str, len),
             },
             VERSION_KEY: {
                 MODEL_ENV_ID_KEY: And(str, ObjectId.is_valid),

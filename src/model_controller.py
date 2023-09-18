@@ -599,6 +599,10 @@ class ModelController(ControllerBase):
                     self._cache_new_custom_model_version(user_provided_id, latest_version)
                     self._dr_client.build_dependency_environment_if_required(latest_version)
 
+                    if model_info.should_register_model:
+                        self._dr_client.create_or_update_registered_model(latest_version["id"],
+                                                                          model_info.registered_model_name)
+
                 if model_info.is_there_a_change_in_training_or_holdout_data_at_version_level(
                     latest_version
                 ):
@@ -608,6 +612,10 @@ class ModelController(ControllerBase):
                         )
                     )
                     self._cache_new_custom_model_version(user_provided_id, latest_version)
+
+                    if model_info.should_register_model:
+                        self._dr_client.create_or_update_registered_model(latest_version["id"],
+                                                                          model_info.registered_model_name)
 
                 if model_info.flags.should_update_settings:
                     self._update_settings(custom_model, model_info)

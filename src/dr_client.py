@@ -67,6 +67,7 @@ class DrClient:
     DEPLOYMENT_MODEL_CHALLENGER_ROUTE = DEPLOYMENT_ROUTE + "challengers/"
     DEPLOYMENT_ACTUALS_UPDATE_ROUTE = DEPLOYMENT_ROUTE + "actuals/fromDataset/"
     ENVIRONMENT_DROP_IN_ROUTE = "executionEnvironments/"
+    REGISTERED_MODELS_LIST_ROUTE = "registeredModels/"
 
     DEFAULT_MAX_WAIT_SEC = 600
 
@@ -451,6 +452,22 @@ class DrClient:
         model_version = response.json()
         logger.info("Custom model version created successfully (id: %s)", model_version["id"])
         return model_version
+
+    def create_or_update_registered_model(self, custom_model_version_id, registered_model_name):
+        registered_model_id = self._find_registered_model_by_name(registered_model_name)
+        if registered_model_id:
+            registered_model_name = None
+
+        self.create_model_package_from_custom_model_version(custom_model_version_id, registered_model_name, registered_model_id)
+
+
+    def _find_registered_model_by_name(self, registered_model_name):
+        items = self._paginated_fetch(
+            self.REGISTERED_MODELS_LIST_ROUTE,
+            params={"search": registered_model_name},
+        )
+        return next((item["id"] for item in items if item["name"] == registered_model_name), None)
+
 
     @classmethod
     def _setup_payload_for_custom_model_version_creation(
@@ -1153,7 +1170,9 @@ class DrClient:
         deployment, _ = self.update_deployment_settings(deployment, deployment_info)
         return deployment
 
-    def create_model_package_from_custom_model_version(self, custom_model_version_id):
+    def create_model_package_from_custom_model_version(
+        self, custom_model_version_id, registered_model_name=None, registered_model_id=None
+    ):
         """
         Creates a model package in the model's registry from a custom model version.
 
@@ -1169,6 +1188,11 @@ class DrClient:
         """
 
         payload = {"customModelVersionId": custom_model_version_id}
+        if registered_model_name:
+            payload["registeredModelName"] = registered_model_name
+        if registered_model_id:
+            payload["registeredModelId"] = registered_model_id
+
         response = self._http_requester.post(self.MODEL_PACKAGES_CREATE_ROUTE, json=payload)
         if response.status_code != 201:
             raise DataRobotClientError(
