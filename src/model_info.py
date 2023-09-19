@@ -361,7 +361,7 @@ class ModelInfo(InfoBase):
 
     @property
     def registered_model_name(self):
-        return self.get_settings_value(ModelSchema.REGISTERED_MODEL_NAME)
+        return self.get_value(ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.MODEL_NAME)
 
 
     @property

@@ -68,6 +68,7 @@ class DrClient:
     DEPLOYMENT_ACTUALS_UPDATE_ROUTE = DEPLOYMENT_ROUTE + "actuals/fromDataset/"
     ENVIRONMENT_DROP_IN_ROUTE = "executionEnvironments/"
     REGISTERED_MODELS_LIST_ROUTE = "registeredModels/"
+    REGISTERED_MODELS_VERSIONS_ROUTE = "registeredModels/{registered_model_id}/versions/"
 
     DEFAULT_MAX_WAIT_SEC = 600
 
@@ -454,20 +455,32 @@ class DrClient:
         return model_version
 
     def create_or_update_registered_model(self, custom_model_version_id, registered_model_name):
-        registered_model_id = self._find_registered_model_by_name(registered_model_name)
+        registered_model_id = self._get_registered_model_by_name(registered_model_name)
         if registered_model_id:
+            existing_registered_versions = self._get_registered_model_versions(registered_model_id)
+            if any(v["modelId"] == custom_model_version_id for v in existing_registered_versions):
+                logger.info(
+                    "Custom model version is already registered. Registered model name: %s, "
+                    "custom model version id: %s", registered_model_name, custom_model_version_id
+                )
+                return
             registered_model_name = None
 
-        self.create_model_package_from_custom_model_version(custom_model_version_id, registered_model_name, registered_model_id)
+        self.create_model_package_from_custom_model_version(
+            custom_model_version_id, registered_model_name, registered_model_id
+        )
 
-
-    def _find_registered_model_by_name(self, registered_model_name):
+    def _get_registered_model_by_name(self, registered_model_name):
         items = self._paginated_fetch(
             self.REGISTERED_MODELS_LIST_ROUTE,
             params={"search": registered_model_name},
         )
         return next((item["id"] for item in items if item["name"] == registered_model_name), None)
 
+    def _get_registered_model_versions(self, registered_model_id):
+        return self._paginated_fetch(
+            self.REGISTERED_MODELS_VERSIONS_ROUTE.format(registered_model_id=registered_model_id),
+        )
 
     @classmethod
     def _setup_payload_for_custom_model_version_creation(
