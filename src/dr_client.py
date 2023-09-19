@@ -1193,6 +1193,14 @@ class DrClient:
         ----------
         custom_model_version_id : str
             A custom model version ID
+        registered_model_name : str
+            Registered model name. This will add the model package as a registered model version
+            of a new registered model by this name.
+            If None, will be left out of request.
+        registered_model_id : str
+            Registered model id. This will add the model package as a registered model version
+            of an existing registered model by this id.
+            IF None, will be left out of request.
 
         Returns
         -------
