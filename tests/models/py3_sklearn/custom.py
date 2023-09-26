@@ -26,9 +26,9 @@ def transform(data, model):
     pd.DataFrame
     """
     # Execute any steps you need to do before scoring
-    # Remove target columns if they're in the dataset
-    for target_col in ["Grade 2014", "Species"]:
-        if target_col in data:
-            data.pop(target_col)
+    # Remove target and id columns if they're in the dataset
+    for unused_column in ["Grade 2014", "Species", "id"]:
+        if unused_column in data:
+            data.pop(unused_column)
     data = data.fillna(0)
     return data

@@ -791,7 +791,7 @@ class TestDeploymentGitHubActions:
 
             printout(str(exec_info.value))
             assert any(record.levelname in ("WARNING", "ERROR") for record in caplog.records)
-            assert "WARNING" in str(exec_info.value) or "WARNING" in str(exec_info.value)
+            assert "WARNING" in str(exec_info.value) or "ERROR" in str(exec_info.value)
         printout("Done")
 
     @contextlib.contextmanager
