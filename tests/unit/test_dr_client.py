@@ -48,6 +48,8 @@ def fixture_webserver():
 
 @pytest.fixture(name="url_factory")
 def fixture_url_factory(webserver):
+    """A fixture to create request urls."""
+
     def _inner(route):
         return f"{webserver}/api/v2/{route}"
 
@@ -173,6 +175,8 @@ def mock_paginated_responses(
 
 
 def mock_single_page_response(url, entities, match=None):
+    """Mock single page paginated response."""
+
     def url_factory(_):
         return url
 
@@ -1503,8 +1507,11 @@ class TestCustomModelVersionDependencies:
 
 
 class TestRegisteredModels:
+    """Registered models tests."""
+
     @pytest.fixture
     def registered_model_response_mock(self, url_factory):
+        """Return existing registered model"""
         with responses.RequestsMock():
             registered_model = {
                 "id": "existing_registered_model_id",
@@ -1522,6 +1529,7 @@ class TestRegisteredModels:
 
     @responses.activate
     def test_create_new_registered_model(self, dr_client, url_factory):
+        """Test creating new registered model"""
         params = {"search": "non_existent_registered_model"}
         mock_single_page_response(
             url_factory(DrClient.REGISTERED_MODELS_LIST_ROUTE),
@@ -1545,6 +1553,7 @@ class TestRegisteredModels:
     def test_update_existing_registered_model(
         self, dr_client, url_factory, custom_model_version_id, registered_model_response_mock
     ):
+        """Update existing registered model by creating new version."""
 
         mock_single_page_response(
             url_factory(
@@ -1576,6 +1585,7 @@ class TestRegisteredModels:
     def test_version_already_registered(
         self, dr_client, url_factory, custom_model_version_id, registered_model_response_mock
     ):
+        """Existing registered model that already contains this version should do nothing."""
         registered_model_version_id = "registered_model_version_id"
         mock_single_page_response(
             url_factory(

@@ -357,10 +357,12 @@ class ModelInfo(InfoBase):
 
     @property
     def should_register_model(self):
+        """Wheter this model should be added as a registered model."""
         return self.registered_model_name is not None
 
     @property
     def registered_model_name(self):
+        """The registered model name to use or None if model should not be registered."""
         return self.get_value(ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.MODEL_NAME)
 
     @property
