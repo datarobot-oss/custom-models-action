@@ -629,6 +629,11 @@ class ModelController(ControllerBase):
                     custom_model["id"], latest_version["id"], model_info
                 )
 
+            if model_info.should_register_model:
+                self._dr_client.create_or_update_registered_model(
+                    latest_version["id"], model_info.registered_model_name
+                )
+
     @staticmethod
     def _was_new_version_created(previous_latest_version, latest_version):
         return not previous_latest_version or latest_version["id"] != previous_latest_version["id"]
