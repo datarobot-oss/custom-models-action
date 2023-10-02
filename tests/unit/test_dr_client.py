@@ -46,16 +46,6 @@ def fixture_webserver():
     return "http://www.datarobot.dummy-app"
 
 
-@pytest.fixture(name="url_factory")
-def fixture_url_factory(webserver):
-    """A fixture to create request urls."""
-
-    def _inner(route):
-        return f"{webserver}/api/v2/{route}"
-
-    return _inner
-
-
 @pytest.fixture(name="api_token")
 def fixture_api_token():
     """A fixture to return a fake API token."""
@@ -1510,7 +1500,7 @@ class TestRegisteredModels:
     """Registered models tests."""
 
     @pytest.fixture
-    def registered_model_response_mock(self, url_factory):
+    def registered_model_response_mock(self, paginated_url_factory):
         """Return existing registered model"""
         with responses.RequestsMock():
             registered_model = {
@@ -1520,7 +1510,7 @@ class TestRegisteredModels:
 
             params = {"search": registered_model["name"]}
             mock_single_page_response(
-                url_factory(DrClient.REGISTERED_MODELS_LIST_ROUTE),
+                paginated_url_factory(DrClient.REGISTERED_MODELS_LIST_ROUTE),
                 entities=[registered_model],
                 match=[matchers.query_param_matcher(params)],
             )
@@ -1528,17 +1518,17 @@ class TestRegisteredModels:
             yield registered_model
 
     @responses.activate
-    def test_create_new_registered_model(self, dr_client, url_factory):
+    def test_create_new_registered_model(self, dr_client, paginated_url_factory):
         """Test creating new registered model"""
         params = {"search": "non_existent_registered_model"}
         mock_single_page_response(
-            url_factory(DrClient.REGISTERED_MODELS_LIST_ROUTE),
+            paginated_url_factory(DrClient.REGISTERED_MODELS_LIST_ROUTE),
             entities=[],
             match=[matchers.query_param_matcher(params)],
         )
 
         responses.post(
-            url=url_factory(DrClient.MODEL_PACKAGES_CREATE_ROUTE),
+            url=paginated_url_factory(DrClient.MODEL_PACKAGES_CREATE_ROUTE),
             json={"id": "new_registered_model_id"},
             status=201,
         )
@@ -1551,12 +1541,16 @@ class TestRegisteredModels:
 
     @responses.activate
     def test_update_existing_registered_model(
-        self, dr_client, url_factory, custom_model_version_id, registered_model_response_mock
+        self,
+        dr_client,
+        paginated_url_factory,
+        custom_model_version_id,
+        registered_model_response_mock,
     ):
         """Update existing registered model by creating new version."""
 
         mock_single_page_response(
-            url_factory(
+            paginated_url_factory(
                 DrClient.REGISTERED_MODELS_VERSIONS_ROUTE.format(
                     registered_model_id=registered_model_response_mock["id"]
                 )
@@ -1570,7 +1564,7 @@ class TestRegisteredModels:
         }
         new_registered_model_id = "new_registered_model_id"
         responses.post(
-            url=url_factory(DrClient.MODEL_PACKAGES_CREATE_ROUTE),
+            url=paginated_url_factory(DrClient.MODEL_PACKAGES_CREATE_ROUTE),
             match=[matchers.json_params_matcher(create_model_package_payload)],
             json={"id": new_registered_model_id},
             status=201,
@@ -1583,12 +1577,16 @@ class TestRegisteredModels:
 
     @responses.activate
     def test_version_already_registered(
-        self, dr_client, url_factory, custom_model_version_id, registered_model_response_mock
+        self,
+        dr_client,
+        paginated_url_factory,
+        custom_model_version_id,
+        registered_model_response_mock,
     ):
         """Existing registered model that already contains this version should do nothing."""
         registered_model_version_id = "registered_model_version_id"
         mock_single_page_response(
-            url_factory(
+            paginated_url_factory(
                 DrClient.REGISTERED_MODELS_VERSIONS_ROUTE.format(
                     registered_model_id=registered_model_response_mock["id"]
                 )
