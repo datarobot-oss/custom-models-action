@@ -445,7 +445,7 @@ class TestCustomModelRoutes(SharedRouteTests):
         )
         expected_model = expected_model[0][0]
         delete_url = f"{custom_models_url}{expected_model['id']}/"
-        responses.add(responses.DELETE, delete_url, json={}, status=204)
+        responses.add(responses.DELETE, delete_url, status=204)
         dr_client.delete_custom_model_by_user_provided_id(expected_model["userProvidedId"])
 
     @responses.activate
