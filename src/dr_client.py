@@ -472,7 +472,8 @@ class DrClient:
         str,
             Registered model version id of existing or newly created version.
         """
-        registered_model_id = self.get_registered_model_by_name(registered_model_name)
+        registered_model = self.get_registered_model_by_name(registered_model_name)
+        registered_model_id = registered_model["id"] if registered_model else None
         if registered_model_id:
             existing_registered_versions = self._get_registered_model_versions(registered_model_id)
             existing_version_id = next(
@@ -508,14 +509,14 @@ class DrClient:
 
         Returns
         -------
-        str or None,
-            Registered model id if found, otherwise None.
+        dict or None,
+            Registered model if found, otherwise None.
         """
         items = self._paginated_fetch(
             self.REGISTERED_MODELS_LIST_ROUTE,
             params={"search": registered_model_name},
         )
-        return next((item["id"] for item in items if item["name"] == registered_model_name), None)
+        return next((item for item in items if item["name"] == registered_model_name), None)
 
     def _get_registered_model_versions(self, registered_model_id):
         return self._paginated_fetch(
