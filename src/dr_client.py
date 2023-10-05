@@ -502,6 +502,17 @@ class DrClient:
         return model_package["id"]
 
     def set_registered_model_public(self, registered_model_name, is_public):
+        """
+        Set the public property for a registered model.
+        This is also known as the global property
+
+        Parameters
+        ----------
+        registered_model_name : str
+            Name of registered model.
+        is_public : bool
+            True if model should be public, False if not.
+        """
         registered_model = self.get_registered_model_by_name(registered_model_name)
         if not registered_model:
             raise DataRobotClientError(

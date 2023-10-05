@@ -24,6 +24,7 @@ from schema_validator import SharedSchema
 logger = logging.getLogger()
 
 
+# pylint: disable=too-many-public-methods
 class InfoBase(ABC):
     """An abstract base class for models and deployments information classes."""
 
