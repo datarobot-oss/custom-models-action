@@ -339,7 +339,12 @@ class TestModelGitHubActions:
     def _add_registered_model(cls, git_repo, dr_client, model_metadata, model_metadata_yaml_file):
         printout("Create new registered model ...")
         model_metadata.update(
-            {ModelSchema.MODEL_REGISTRY_KEY: {ModelSchema.MODEL_NAME: "registered_model"}}
+            {
+                ModelSchema.MODEL_REGISTRY_KEY: {
+                    ModelSchema.MODEL_NAME: "registered_model",
+                    ModelSchema.GLOBAL: True,
+                }
+            }
         )
 
         save_new_metadata_and_commit(
@@ -348,7 +353,8 @@ class TestModelGitHubActions:
 
         yield cls.ExpectedChange(settings_updated=False, version_created=False)
 
-        assert dr_client.get_registered_model_by_name("registered_model") is not None
+        registered_model = dr_client.get_registered_model_by_name("registered_model")
+        assert registered_model["isPublic"]
 
     @staticmethod
     def _merge_changes_into_the_main_branch(git_repo, merge_branch):

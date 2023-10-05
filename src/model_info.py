@@ -366,6 +366,11 @@ class ModelInfo(InfoBase):
         return self.get_value(ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.MODEL_NAME)
 
     @property
+    def registered_model_global(self):
+        """Wheter the registered model should be global or not."""
+        return self.get_value(ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.GLOBAL)
+
+    @property
     def should_run_test(self):
         """
         Querying the model's metadata and check whether a custom model testing should be executed.
