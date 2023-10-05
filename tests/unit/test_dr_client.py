@@ -1605,6 +1605,63 @@ class TestRegisteredModels:
 
         assert registered_model_version == registered_model_version_id
 
+    @responses.activate
+    def test_set_public(self, dr_client, paginated_url_factory):
+        """Test setting registered model as public"""
+
+        registered_model = {"id": "registered_model_id", "name": "registered_model_name"}
+
+        params = {"search": registered_model["name"]}
+        mock_single_page_response(
+            paginated_url_factory(DrClient.REGISTERED_MODELS_LIST_ROUTE),
+            entities=[registered_model],
+            match=[matchers.query_param_matcher(params)],
+        )
+
+        responses.patch(
+            url=paginated_url_factory(
+                DrClient.REGISTERED_MODEL_ROUTE.format(registered_model_id=registered_model["id"])
+            ),
+            status=200,
+        )
+
+        dr_client.set_registered_model_public(registered_model["name"], True)
+
+    @responses.activate
+    def test_set_public_non_existent(self, dr_client, paginated_url_factory):
+        """Test that non existent registered model raises error"""
+
+        mock_single_page_response(
+            paginated_url_factory(DrClient.REGISTERED_MODELS_LIST_ROUTE),
+            entities=[],
+        )
+
+        with pytest.raises(DataRobotClientError):
+            dr_client.set_registered_model_public("non_existent_registered_model", True)
+
+    @responses.activate
+    def test_set_public_error(self, dr_client, paginated_url_factory):
+        """Test setting public fails"""
+
+        registered_model = {"id": "registered_model_id", "name": "registered_model_name"}
+
+        params = {"search": registered_model["name"]}
+        mock_single_page_response(
+            paginated_url_factory(DrClient.REGISTERED_MODELS_LIST_ROUTE),
+            entities=[registered_model],
+            match=[matchers.query_param_matcher(params)],
+        )
+
+        responses.patch(
+            url=paginated_url_factory(
+                DrClient.REGISTERED_MODEL_ROUTE.format(registered_model_id=registered_model["id"])
+            ),
+            status=500,
+        )
+
+        with pytest.raises(DataRobotClientError):
+            dr_client.set_registered_model_public(registered_model["name"], True)
+
 
 class TestDeploymentRoutes(SharedRouteTests):
     """Contains unit-tests to test the DataRobot deployment routes."""

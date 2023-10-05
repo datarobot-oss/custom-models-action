@@ -68,6 +68,7 @@ class DrClient:
     DEPLOYMENT_ACTUALS_UPDATE_ROUTE = DEPLOYMENT_ROUTE + "actuals/fromDataset/"
     ENVIRONMENT_DROP_IN_ROUTE = "executionEnvironments/"
     REGISTERED_MODELS_LIST_ROUTE = "registeredModels/"
+    REGISTERED_MODEL_ROUTE = "registeredModels/{registered_model_id}/"
     REGISTERED_MODELS_VERSIONS_ROUTE = "registeredModels/{registered_model_id}/versions/"
 
     DEFAULT_MAX_WAIT_SEC = 600
@@ -494,9 +495,31 @@ class DrClient:
                 return existing_version_id
             registered_model_name = None
 
-        return self.create_model_package_from_custom_model_version(
+        model_package = self.create_model_package_from_custom_model_version(
             custom_model_version_id, registered_model_name, registered_model_id
-        )["id"]
+        )
+
+        return model_package["id"]
+
+    def set_registered_model_public(self, registered_model_name, is_public):
+        registered_model = self.get_registered_model_by_name(registered_model_name)
+        if not registered_model:
+            raise DataRobotClientError(
+                f"Failed to find registered model by name: {registered_model_name}"
+            )
+
+        response = self._http_requester.patch(
+            self.REGISTERED_MODEL_ROUTE.format(registered_model_id=registered_model["id"]),
+            json={"isPublic": is_public},
+        )
+        if response.status_code != 200:
+            raise DataRobotClientError(
+                "Failed to set registered public property "
+                f"Registered model name: {registered_model_name}, "
+                f"Response status: {response.status_code}, "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
 
     def get_registered_model_by_name(self, registered_model_name):
         """
