@@ -501,17 +501,17 @@ class DrClient:
 
         return model_package["id"]
 
-    def set_registered_model_public(self, registered_model_name, is_public):
+    def set_registered_model_global(self, registered_model_name, is_global):
         """
-        Set the public property for a registered model.
+        Set the global property for a registered model.
         This is also known as the global property
 
         Parameters
         ----------
         registered_model_name : str
             Name of registered model.
-        is_public : bool
-            True if model should be public, False if not.
+        is_global : bool
+            True if model should be global, False if not.
         """
         registered_model = self.get_registered_model_by_name(registered_model_name)
         if not registered_model:
@@ -519,18 +519,30 @@ class DrClient:
                 f"Failed to find registered model by name: {registered_model_name}"
             )
 
+        if registered_model.get("isGlobal", None) == is_global:
+            logger.info(
+                "Registered model '%s' global flag is already: %s", registered_model_name, is_global
+            )
+            return
+
         response = self._http_requester.patch(
             self.REGISTERED_MODEL_ROUTE.format(registered_model_id=registered_model["id"]),
-            json={"isPublic": is_public},
+            json={"isGlobal": is_global},
         )
         if response.status_code != 200:
             raise DataRobotClientError(
-                "Failed to set registered public property "
+                "Failed to set registered global property "
                 f"Registered model name: {registered_model_name}, "
                 f"Response status: {response.status_code}, "
                 f"Response body: {response.text}",
                 code=response.status_code,
             )
+
+        logger.info(
+            "Registered model '%s' global flag has been set to: %s",
+            registered_model_name,
+            is_global,
+        )
 
     def get_registered_model_by_name(self, registered_model_name):
         """
