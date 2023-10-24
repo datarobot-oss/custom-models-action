@@ -1506,6 +1506,7 @@ class TestRegisteredModels:
             registered_model = {
                 "id": "existing_registered_model_id",
                 "name": "existing_registered_model",
+                "description": "model_description",
             }
 
             params = {"search": registered_model["name"]}
@@ -1527,14 +1528,21 @@ class TestRegisteredModels:
             match=[matchers.query_param_matcher(params)],
         )
 
+        create_model_package_payload = {
+            "customModelVersionId": "custom_model_version_id",
+            "registeredModelName": "non_existent_registered_model",
+            "registeredModelDescription": "model_description",
+        }
+
         responses.post(
             url=paginated_url_factory(DrClient.MODEL_PACKAGES_CREATE_ROUTE),
+            match=[matchers.json_params_matcher(create_model_package_payload)],
             json={"id": "new_registered_model_id"},
             status=201,
         )
 
         registered_model_version = dr_client.create_or_update_registered_model(
-            "custom_model_version_id", "non_existent_registered_model"
+            "custom_model_version_id", "non_existent_registered_model", "model_description"
         )
 
         assert registered_model_version == "new_registered_model_id"
@@ -1561,6 +1569,7 @@ class TestRegisteredModels:
         create_model_package_payload = {
             "customModelVersionId": custom_model_version_id,
             "registeredModelId": registered_model_response_mock["id"],
+            "registeredModelDescription": registered_model_response_mock["description"],
         }
         new_registered_model_id = "new_registered_model_id"
         responses.post(
@@ -1570,7 +1579,9 @@ class TestRegisteredModels:
             status=201,
         )
         registered_model_version = dr_client.create_or_update_registered_model(
-            custom_model_version_id, registered_model_response_mock["name"]
+            custom_model_version_id,
+            registered_model_response_mock["name"],
+            registered_model_response_mock["description"],
         )
 
         assert registered_model_version == new_registered_model_id
@@ -1600,7 +1611,9 @@ class TestRegisteredModels:
         )
 
         registered_model_version = dr_client.create_or_update_registered_model(
-            custom_model_version_id, registered_model_response_mock["name"]
+            custom_model_version_id,
+            registered_model_response_mock["name"],
+            registered_model_response_mock["description"],
         )
 
         assert registered_model_version == registered_model_version_id
@@ -1630,7 +1643,7 @@ class TestRegisteredModels:
             status=200,
         )
 
-        dr_client.set_registered_model_global(registered_model["name"], True)
+        dr_client.update_registered_model(registered_model["name"], True)
 
         assert patch_mock.call_count == 0 if is_already_global else 1
 
@@ -1644,7 +1657,7 @@ class TestRegisteredModels:
         )
 
         with pytest.raises(DataRobotClientError):
-            dr_client.set_registered_model_global("non_existent_registered_model", True)
+            dr_client.update_registered_model("non_existent_registered_model", True)
 
     @responses.activate
     def test_set_global_error(self, dr_client, paginated_url_factory):
@@ -1667,7 +1680,7 @@ class TestRegisteredModels:
         )
 
         with pytest.raises(DataRobotClientError):
-            dr_client.set_registered_model_global(registered_model["name"], True)
+            dr_client.update_registered_model(registered_model["name"], True)
 
 
 class TestDeploymentRoutes(SharedRouteTests):

@@ -455,7 +455,9 @@ class DrClient:
         logger.info("Custom model version created successfully (id: %s)", model_version["id"])
         return model_version
 
-    def create_or_update_registered_model(self, custom_model_version_id, registered_model_name):
+    def create_or_update_registered_model(
+        self, custom_model_version_id, registered_model_name, registered_model_description
+    ):
         """
         Creates or updates a registered model from custom model version.
         If a registered model named registered_model_name exists, it is updated with a new
@@ -496,15 +498,17 @@ class DrClient:
             registered_model_name = None
 
         model_package = self.create_model_package_from_custom_model_version(
-            custom_model_version_id, registered_model_name, registered_model_id
+            custom_model_version_id,
+            registered_model_name,
+            registered_model_id,
+            registered_model_description,
         )
 
         return model_package["id"]
 
-    def set_registered_model_global(self, registered_model_name, is_global):
+    def update_registered_model(self, registered_model_name, is_global):
         """
-        Set the global property for a registered model.
-        This is also known as the global property
+        Updates registered model properties.
 
         Parameters
         ----------
@@ -1271,7 +1275,11 @@ class DrClient:
         return deployment
 
     def create_model_package_from_custom_model_version(
-        self, custom_model_version_id, registered_model_name=None, registered_model_id=None
+        self,
+        custom_model_version_id,
+        registered_model_name=None,
+        registered_model_id=None,
+        registered_model_description=None,
     ):
         """
         Creates a model package in the model's registry from a custom model version.
@@ -1300,6 +1308,8 @@ class DrClient:
             payload["registeredModelName"] = registered_model_name
         if registered_model_id:
             payload["registeredModelId"] = registered_model_id
+        if registered_model_description:
+            payload["registeredModelDescription"] = registered_model_description
 
         response = self._http_requester.post(self.MODEL_PACKAGES_CREATE_ROUTE, json=payload)
         if response.status_code != 201:

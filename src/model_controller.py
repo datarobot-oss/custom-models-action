@@ -633,7 +633,7 @@ class ModelController(ControllerBase):
                 self._dr_client.create_or_update_registered_model(
                     latest_version["id"], model_info.registered_model_name
                 )
-                self._dr_client.set_registered_model_global(
+                self._dr_client.update_registered_model(
                     model_info.registered_model_name, model_info.registered_model_global
                 )
 
