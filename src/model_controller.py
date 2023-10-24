@@ -634,7 +634,9 @@ class ModelController(ControllerBase):
                     latest_version["id"], model_info.registered_model_name
                 )
                 self._dr_client.update_registered_model(
-                    model_info.registered_model_name, model_info.registered_model_global
+                    model_info.registered_model_name,
+                    model_info.registered_model_description,
+                    model_info.registered_model_global,
                 )
 
     @staticmethod

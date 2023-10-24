@@ -455,9 +455,7 @@ class DrClient:
         logger.info("Custom model version created successfully (id: %s)", model_version["id"])
         return model_version
 
-    def create_or_update_registered_model(
-        self, custom_model_version_id, registered_model_name, registered_model_description
-    ):
+    def create_or_update_registered_model(self, custom_model_version_id, registered_model_name):
         """
         Creates or updates a registered model from custom model version.
         If a registered model named registered_model_name exists, it is updated with a new
@@ -501,7 +499,6 @@ class DrClient:
             custom_model_version_id,
             registered_model_name,
             registered_model_id,
-            registered_model_description,
         )
 
         return model_package["id"]
@@ -1291,7 +1288,6 @@ class DrClient:
         custom_model_version_id,
         registered_model_name=None,
         registered_model_id=None,
-        registered_model_description=None,
     ):
         """
         Creates a model package in the model's registry from a custom model version.
@@ -1320,8 +1316,6 @@ class DrClient:
             payload["registeredModelName"] = registered_model_name
         if registered_model_id:
             payload["registeredModelId"] = registered_model_id
-        if registered_model_description:
-            payload["registeredModelDescription"] = registered_model_description
 
         response = self._http_requester.post(self.MODEL_PACKAGES_CREATE_ROUTE, json=payload)
         if response.status_code != 201:

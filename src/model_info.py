@@ -367,6 +367,11 @@ class ModelInfo(InfoBase):
         return self.get_value(ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.MODEL_NAME)
 
     @property
+    def registered_model_description(self):
+        """The registered model description to use or None if model should not be registered."""
+        return self.get_value(ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.MODEL_DESCRIPTION)
+
+    @property
     def registered_model_global(self):
         """Wheter the registered model should be global or not."""
         return self.get_value(ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.GLOBAL)

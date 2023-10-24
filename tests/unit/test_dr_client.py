@@ -1506,7 +1506,6 @@ class TestRegisteredModels:
             registered_model = {
                 "id": "existing_registered_model_id",
                 "name": "existing_registered_model",
-                "description": "model_description",
             }
 
             params = {"search": registered_model["name"]}
@@ -1531,7 +1530,6 @@ class TestRegisteredModels:
         create_model_package_payload = {
             "customModelVersionId": "custom_model_version_id",
             "registeredModelName": "non_existent_registered_model",
-            "registeredModelDescription": "model_description",
         }
 
         responses.post(
@@ -1542,7 +1540,7 @@ class TestRegisteredModels:
         )
 
         registered_model_version = dr_client.create_or_update_registered_model(
-            "custom_model_version_id", "non_existent_registered_model", "model_description"
+            "custom_model_version_id", "non_existent_registered_model"
         )
 
         assert registered_model_version == "new_registered_model_id"
@@ -1569,7 +1567,6 @@ class TestRegisteredModels:
         create_model_package_payload = {
             "customModelVersionId": custom_model_version_id,
             "registeredModelId": registered_model_response_mock["id"],
-            "registeredModelDescription": registered_model_response_mock["description"],
         }
         new_registered_model_id = "new_registered_model_id"
         responses.post(
@@ -1581,7 +1578,6 @@ class TestRegisteredModels:
         registered_model_version = dr_client.create_or_update_registered_model(
             custom_model_version_id,
             registered_model_response_mock["name"],
-            registered_model_response_mock["description"],
         )
 
         assert registered_model_version == new_registered_model_id
@@ -1613,7 +1609,6 @@ class TestRegisteredModels:
         registered_model_version = dr_client.create_or_update_registered_model(
             custom_model_version_id,
             registered_model_response_mock["name"],
-            registered_model_response_mock["description"],
         )
 
         assert registered_model_version == registered_model_version_id
