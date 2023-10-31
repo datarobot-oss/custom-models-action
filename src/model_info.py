@@ -24,6 +24,7 @@ from schema_validator import SharedSchema
 logger = logging.getLogger()
 
 
+# pylint: disable=too-many-public-methods
 class InfoBase(ABC):
     """An abstract base class for models and deployments information classes."""
 
@@ -364,6 +365,11 @@ class ModelInfo(InfoBase):
     def registered_model_name(self):
         """The registered model name to use or None if model should not be registered."""
         return self.get_value(ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.MODEL_NAME)
+
+    @property
+    def registered_model_global(self):
+        """Wheter the registered model should be global or not."""
+        return self.get_value(ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.GLOBAL)
 
     @property
     def should_run_test(self):

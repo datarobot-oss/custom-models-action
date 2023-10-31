@@ -445,7 +445,7 @@ class TestCustomModelRoutes(SharedRouteTests):
         )
         expected_model = expected_model[0][0]
         delete_url = f"{custom_models_url}{expected_model['id']}/"
-        responses.add(responses.DELETE, delete_url, json={}, status=204)
+        responses.add(responses.DELETE, delete_url, status=204)
         dr_client.delete_custom_model_by_user_provided_id(expected_model["userProvidedId"])
 
     @responses.activate
@@ -1604,6 +1604,70 @@ class TestRegisteredModels:
         )
 
         assert registered_model_version == registered_model_version_id
+
+    @pytest.mark.parametrize("is_already_global", [True, False])
+    @responses.activate
+    def test_set_global(self, dr_client, paginated_url_factory, is_already_global):
+        """Test setting registered model as global"""
+
+        registered_model = {
+            "id": "registered_model_id",
+            "name": "registered_model_name",
+            "isGlobal": is_already_global,
+        }
+
+        params = {"search": registered_model["name"]}
+        mock_single_page_response(
+            paginated_url_factory(DrClient.REGISTERED_MODELS_LIST_ROUTE),
+            entities=[registered_model],
+            match=[matchers.query_param_matcher(params)],
+        )
+
+        patch_mock = responses.patch(
+            url=paginated_url_factory(
+                DrClient.REGISTERED_MODEL_ROUTE.format(registered_model_id=registered_model["id"])
+            ),
+            status=200,
+        )
+
+        dr_client.set_registered_model_global(registered_model["name"], True)
+
+        assert patch_mock.call_count == 0 if is_already_global else 1
+
+    @responses.activate
+    def test_set_global_non_existent(self, dr_client, paginated_url_factory):
+        """Test that non existent registered model raises error"""
+
+        mock_single_page_response(
+            paginated_url_factory(DrClient.REGISTERED_MODELS_LIST_ROUTE),
+            entities=[],
+        )
+
+        with pytest.raises(DataRobotClientError):
+            dr_client.set_registered_model_global("non_existent_registered_model", True)
+
+    @responses.activate
+    def test_set_global_error(self, dr_client, paginated_url_factory):
+        """Test setting global fails"""
+
+        registered_model = {"id": "registered_model_id", "name": "registered_model_name"}
+
+        params = {"search": registered_model["name"]}
+        mock_single_page_response(
+            paginated_url_factory(DrClient.REGISTERED_MODELS_LIST_ROUTE),
+            entities=[registered_model],
+            match=[matchers.query_param_matcher(params)],
+        )
+
+        responses.patch(
+            url=paginated_url_factory(
+                DrClient.REGISTERED_MODEL_ROUTE.format(registered_model_id=registered_model["id"])
+            ),
+            status=500,
+        )
+
+        with pytest.raises(DataRobotClientError):
+            dr_client.set_registered_model_global(registered_model["name"], True)
 
 
 class TestDeploymentRoutes(SharedRouteTests):

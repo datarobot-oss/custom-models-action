@@ -68,6 +68,7 @@ class DrClient:
     DEPLOYMENT_ACTUALS_UPDATE_ROUTE = DEPLOYMENT_ROUTE + "actuals/fromDataset/"
     ENVIRONMENT_DROP_IN_ROUTE = "executionEnvironments/"
     REGISTERED_MODELS_LIST_ROUTE = "registeredModels/"
+    REGISTERED_MODEL_ROUTE = "registeredModels/{registered_model_id}/"
     REGISTERED_MODELS_VERSIONS_ROUTE = "registeredModels/{registered_model_id}/versions/"
 
     DEFAULT_MAX_WAIT_SEC = 600
@@ -472,7 +473,8 @@ class DrClient:
         str,
             Registered model version id of existing or newly created version.
         """
-        registered_model_id = self.get_registered_model_by_name(registered_model_name)
+        registered_model = self.get_registered_model_by_name(registered_model_name)
+        registered_model_id = registered_model["id"] if registered_model else None
         if registered_model_id:
             existing_registered_versions = self._get_registered_model_versions(registered_model_id)
             existing_version_id = next(
@@ -493,9 +495,54 @@ class DrClient:
                 return existing_version_id
             registered_model_name = None
 
-        return self.create_model_package_from_custom_model_version(
+        model_package = self.create_model_package_from_custom_model_version(
             custom_model_version_id, registered_model_name, registered_model_id
-        )["id"]
+        )
+
+        return model_package["id"]
+
+    def set_registered_model_global(self, registered_model_name, is_global):
+        """
+        Set the global property for a registered model.
+        This is also known as the global property
+
+        Parameters
+        ----------
+        registered_model_name : str
+            Name of registered model.
+        is_global : bool
+            True if model should be global, False if not.
+        """
+        registered_model = self.get_registered_model_by_name(registered_model_name)
+        if not registered_model:
+            raise DataRobotClientError(
+                f"Failed to find registered model by name: {registered_model_name}"
+            )
+
+        if registered_model.get("isGlobal", None) == is_global:
+            logger.info(
+                "Registered model '%s' global flag is already: %s", registered_model_name, is_global
+            )
+            return
+
+        response = self._http_requester.patch(
+            self.REGISTERED_MODEL_ROUTE.format(registered_model_id=registered_model["id"]),
+            json={"isGlobal": is_global},
+        )
+        if response.status_code != 200:
+            raise DataRobotClientError(
+                "Failed to set registered global property "
+                f"Registered model name: {registered_model_name}, "
+                f"Response status: {response.status_code}, "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+
+        logger.info(
+            "Registered model '%s' global flag has been set to: %s",
+            registered_model_name,
+            is_global,
+        )
 
     def get_registered_model_by_name(self, registered_model_name):
         """
@@ -508,14 +555,14 @@ class DrClient:
 
         Returns
         -------
-        str or None,
-            Registered model id if found, otherwise None.
+        dict or None,
+            Registered model if found, otherwise None.
         """
         items = self._paginated_fetch(
             self.REGISTERED_MODELS_LIST_ROUTE,
             params={"search": registered_model_name},
         )
-        return next((item["id"] for item in items if item["name"] == registered_model_name), None)
+        return next((item for item in items if item["name"] == registered_model_name), None)
 
     def _get_registered_model_versions(self, registered_model_id):
         return self._paginated_fetch(
