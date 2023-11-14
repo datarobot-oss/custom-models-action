@@ -284,6 +284,7 @@ class ModelSchema(SharedSchema):
 
     MODEL_REGISTRY_KEY = "model_registry"
     MODEL_NAME = "model_name"
+    MODEL_DESCRIPTION = "model_description"
     GLOBAL = "global"
 
     MODEL_SCHEMA = Schema(
@@ -382,6 +383,7 @@ class ModelSchema(SharedSchema):
             },
             Optional(MODEL_REGISTRY_KEY): {
                 Optional(MODEL_NAME): And(str, len),
+                Optional(MODEL_DESCRIPTION): And(str, len),
                 Optional(GLOBAL, default=False): bool,
             },
         }

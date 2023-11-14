@@ -496,20 +496,23 @@ class DrClient:
             registered_model_name = None
 
         model_package = self.create_model_package_from_custom_model_version(
-            custom_model_version_id, registered_model_name, registered_model_id
+            custom_model_version_id,
+            registered_model_name,
+            registered_model_id,
         )
 
         return model_package["id"]
 
-    def set_registered_model_global(self, registered_model_name, is_global):
+    def update_registered_model(self, registered_model_name, description, is_global):
         """
-        Set the global property for a registered model.
-        This is also known as the global property
+        Updates registered model properties.
 
         Parameters
         ----------
         registered_model_name : str
             Name of registered model.
+        description : str
+            Description of registered model.
         is_global : bool
             True if model should be global, False if not.
         """
@@ -519,15 +522,25 @@ class DrClient:
                 f"Failed to find registered model by name: {registered_model_name}"
             )
 
-        if registered_model.get("isGlobal", None) == is_global:
+        payload = {}
+
+        if description is not None and description != registered_model["description"]:
+            payload["description"] = description
+
+        if is_global is not None and is_global != registered_model.get("isGlobal", None):
+            payload["isGlobal"] = is_global
+
+        if not payload:
             logger.info(
-                "Registered model '%s' global flag is already: %s", registered_model_name, is_global
+                "Registered model '%s' settings are already up to date: %s",
+                registered_model_name,
+                is_global,
             )
             return
 
         response = self._http_requester.patch(
             self.REGISTERED_MODEL_ROUTE.format(registered_model_id=registered_model["id"]),
-            json={"isGlobal": is_global},
+            json=payload,
         )
         if response.status_code != 200:
             raise DataRobotClientError(
@@ -1271,7 +1284,10 @@ class DrClient:
         return deployment
 
     def create_model_package_from_custom_model_version(
-        self, custom_model_version_id, registered_model_name=None, registered_model_id=None
+        self,
+        custom_model_version_id,
+        registered_model_name=None,
+        registered_model_id=None,
     ):
         """
         Creates a model package in the model's registry from a custom model version.
