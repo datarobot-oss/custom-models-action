@@ -293,6 +293,11 @@ class ModelInfo(InfoBase):
     def should_create_new_version(self, datarobot_latest_model_version):
         """Whether a new custom inference model version should be created"""
 
+        print(datarobot_latest_model_version)
+        print(self.flags.should_upload_all_files)
+        print(self.file_changes.changed_or_new_files)
+        print(self.file_changes.deleted_file_ids)
+
         if (
             not datarobot_latest_model_version
             or self.flags.should_upload_all_files
@@ -308,6 +313,9 @@ class ModelInfo(InfoBase):
         ):
             configured_resource = self.get_value(ModelSchema.VERSION_KEY, resource_key)
             if configured_resource != datarobot_latest_model_version.get(dr_attribute_key):
+                print(resource_key)
+                print(configured_resource)
+                print(datarobot_latest_model_version.get(dr_attribute_key))
                 return True
 
         return False
