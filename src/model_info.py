@@ -284,9 +284,11 @@ class ModelInfo(InfoBase):
 
         print(self.flags.should_update_settings)
         print(self.should_create_new_version(datarobot_latest_model_version))
-        print(self.is_there_a_change_in_training_or_holdout_data_at_version_level(
+        print(
+            self.is_there_a_change_in_training_or_holdout_data_at_version_level(
                 datarobot_latest_model_version
-            ))
+            )
+        )
         return (
             self.flags.should_update_settings
             or self.should_create_new_version(datarobot_latest_model_version)
@@ -317,7 +319,9 @@ class ModelInfo(InfoBase):
             (ModelSchema.EGRESS_NETWORK_POLICY_KEY, "networkEgressPolicy"),
         ):
             configured_resource = self.get_value(ModelSchema.VERSION_KEY, resource_key)
-            if configured_resource != datarobot_latest_model_version.get(dr_attribute_key):
+            if configured_resource and configured_resource != datarobot_latest_model_version.get(
+                dr_attribute_key
+            ):
                 print(resource_key)
                 print(configured_resource)
                 print(datarobot_latest_model_version.get(dr_attribute_key))
