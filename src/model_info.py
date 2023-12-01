@@ -282,6 +282,11 @@ class ModelInfo(InfoBase):
     def is_affected_by_commit(self, datarobot_latest_model_version):
         """Whether the given model is affected by the last commit"""
 
+        print(self.flags.should_update_settings)
+        print(self.should_create_new_version(datarobot_latest_model_version))
+        print(self.is_there_a_change_in_training_or_holdout_data_at_version_level(
+                datarobot_latest_model_version
+            ))
         return (
             self.flags.should_update_settings
             or self.should_create_new_version(datarobot_latest_model_version)
