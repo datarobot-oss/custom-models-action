@@ -282,13 +282,6 @@ class ModelInfo(InfoBase):
     def is_affected_by_commit(self, datarobot_latest_model_version):
         """Whether the given model is affected by the last commit"""
 
-        print(self.flags.should_update_settings)
-        print(self.should_create_new_version(datarobot_latest_model_version))
-        print(
-            self.is_there_a_change_in_training_or_holdout_data_at_version_level(
-                datarobot_latest_model_version
-            )
-        )
         return (
             self.flags.should_update_settings
             or self.should_create_new_version(datarobot_latest_model_version)
@@ -300,17 +293,20 @@ class ModelInfo(InfoBase):
     def should_create_new_version(self, datarobot_latest_model_version):
         """Whether a new custom inference model version should be created"""
 
-        print(datarobot_latest_model_version)
-        print(self.flags.should_upload_all_files)
-        print(self.file_changes.changed_or_new_files)
-        print(self.file_changes.deleted_file_ids)
-
         if (
             not datarobot_latest_model_version
             or self.flags.should_upload_all_files
             or bool(self.file_changes.changed_or_new_files)
             or bool(self.file_changes.deleted_file_ids)
         ):
+            logger.debug(
+                "Need to create new version. datarobot_latest_model_version:%s "
+                "should_upload_all_files:%s changed_or_new_files:%s deleted_file_ids:%s",
+                datarobot_latest_model_version,
+                self.flags.should_upload_all_files,
+                self.file_changes.changed_or_new_files,
+                self.file_changes.deleted_file_ids,
+            )
             return True
 
         for resource_key, dr_attribute_key in (
@@ -322,9 +318,13 @@ class ModelInfo(InfoBase):
             if configured_resource and configured_resource != datarobot_latest_model_version.get(
                 dr_attribute_key
             ):
-                print(resource_key)
-                print(configured_resource)
-                print(datarobot_latest_model_version.get(dr_attribute_key))
+                logger.debug(
+                    "Need to create new version. Resource '%s' changed. "
+                    "Configured value: '%s' Value on server: '%s'",
+                    resource_key,
+                    configured_resource,
+                    datarobot_latest_model_version.get(dr_attribute_key),
+                )
                 return True
 
         return False
@@ -348,6 +348,7 @@ class ModelInfo(InfoBase):
             "dataset_id"
         )
         if configured_training_dataset != latest_training_dataset:
+            logger.debug("Configured training dataset != latest training dataset")
             return True
 
         # Check holdout
@@ -359,6 +360,7 @@ class ModelInfo(InfoBase):
                 "dataset_id"
             )
             if configured_holdout_dataset != latest_holdout_dataset:
+                logger.debug("Configured holdout dataset != latest holdout dataset")
                 return True
 
         else:
@@ -369,6 +371,7 @@ class ModelInfo(InfoBase):
                 "partition_column"
             )
             if configured_holdout_partition != latest_partition:
+                logger.debug("Configured holdout partition != latest holdout partition")
                 return True
 
         return False
