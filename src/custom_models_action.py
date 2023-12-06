@@ -83,16 +83,6 @@ class CustomModelsAction:
     def _prerequisites(self):
         """Check prerequisites before execution."""
 
-        supported_events = ["push", "pull_request"]
-        if GitHubEnv.event_name() not in supported_events:
-            logger.warning(
-                "Skip custom models action. It is expected to be executed only "
-                "on %s events. Current event: %s.",
-                supported_events,
-                GitHubEnv.event_name(),
-            )
-            return False
-
         base_ref = GitHubEnv.base_ref()
         logger.info("GITHUB_BASE_REF: %s.", base_ref)
         if GitHubEnv.is_pull_request() and base_ref != self._options.branch:
