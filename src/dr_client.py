@@ -532,9 +532,8 @@ class DrClient:
 
         if not payload:
             logger.info(
-                "Registered model '%s' settings are already up to date: %s",
+                "Registered model '%s' properties are already up to date.",
                 registered_model_name,
-                is_global,
             )
             return
 
@@ -544,7 +543,7 @@ class DrClient:
         )
         if response.status_code != 200:
             raise DataRobotClientError(
-                "Failed to set registered global property "
+                "Failed to update registered model properties "
                 f"Registered model name: {registered_model_name}, "
                 f"Response status: {response.status_code}, "
                 f"Response body: {response.text}",
@@ -552,9 +551,9 @@ class DrClient:
             )
 
         logger.info(
-            "Registered model '%s' global flag has been set to: %s",
+            "Registered model '%s' properties have been updated with payload: %s",
             registered_model_name,
-            is_global,
+            payload,
         )
 
     def get_registered_model_by_name(self, registered_model_name):
