@@ -310,6 +310,7 @@ class ModelInfo(InfoBase):
             return True
 
         for resource_key, dr_attribute_key in (
+            (ModelSchema.MODEL_ENV_ID_KEY, "baseEnvironmentId"),
             (ModelSchema.MEMORY_KEY, "maximumMemory"),
             (ModelSchema.REPLICAS_KEY, "replicas"),
             (ModelSchema.EGRESS_NETWORK_POLICY_KEY, "networkEgressPolicy"),
