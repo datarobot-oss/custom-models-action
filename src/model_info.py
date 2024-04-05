@@ -314,6 +314,7 @@ class ModelInfo(InfoBase):
             (ModelSchema.MEMORY_KEY, "maximumMemory"),
             (ModelSchema.REPLICAS_KEY, "replicas"),
             (ModelSchema.EGRESS_NETWORK_POLICY_KEY, "networkEgressPolicy"),
+            (ModelSchema.RESOURCE_BUNDLE_ID, "resourceBundleId"),
         ):
             configured_resource = self.get_value(ModelSchema.VERSION_KEY, resource_key)
             if configured_resource and configured_resource != datarobot_latest_model_version.get(

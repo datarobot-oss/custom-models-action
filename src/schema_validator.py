@@ -248,6 +248,8 @@ class ModelSchema(SharedSchema):
     EGRESS_NETWORK_POLICY_NONE = "NONE"
     EGRESS_NETWORK_POLICY_PUBLIC = "PUBLIC"
 
+    RESOURCE_BUNDLE_ID = "resource_bundle_id"
+
     MODEL_REPLACEMENT_REASON_KEY = "model_replacement_reason"
     MODEL_REPLACEMENT_REASON_ACCURACY = "ACCURACY"
     MODEL_REPLACEMENT_REASON_DATA_DRIFT = "DATA_DRIFT"
@@ -327,6 +329,7 @@ class ModelSchema(SharedSchema):
                 Optional(EGRESS_NETWORK_POLICY_KEY): Or(
                     EGRESS_NETWORK_POLICY_NONE, EGRESS_NETWORK_POLICY_PUBLIC
                 ),
+                Optional(RESOURCE_BUNDLE_ID): And(str, len),
                 Optional(PARTITIONING_COLUMN_KEY): And(str, len),
                 Optional(TRAINING_DATASET_ID_KEY): And(str, ObjectId.is_valid),
                 Optional(HOLDOUT_DATASET_ID_KEY): And(str, ObjectId.is_valid),
