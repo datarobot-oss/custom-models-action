@@ -385,6 +385,31 @@ class TestModelSchemaValidator:
             in str(ex)
         )
 
+    def test_runtime_parameters(self, regression_model_schema):
+        regression_model_schema[ModelSchema.VERSION_KEY][ModelSchema.RUNTIME_PARAMETER_VALUES] = [
+            {"string_param": "string_value"},
+            {"bool_param": True},
+            {"numeric_param": 42},
+            {"float_param": 42.2},
+        ]
+
+        self._validate_schema(True, regression_model_schema)
+
+    @pytest.mark.parametrize(
+        "parameters",
+        [
+            [{0: "non_string_key_should_fail"}],
+            [],
+        ],
+    )
+    def test_runtime_parameters_fail(self, regression_model_schema, parameters):
+        regression_model_schema[ModelSchema.VERSION_KEY][
+            ModelSchema.RUNTIME_PARAMETER_VALUES
+        ] = parameters
+
+        with pytest.raises(InvalidSchema):
+            self._validate_schema(True, regression_model_schema)
+
 
 class TestModelSchemaGetValue:
     """Contains cases to test the get value method from a model schema."""

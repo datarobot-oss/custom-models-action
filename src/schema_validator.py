@@ -250,6 +250,8 @@ class ModelSchema(SharedSchema):
 
     RESOURCE_BUNDLE_ID = "resource_bundle_id"
 
+    RUNTIME_PARAMETER_VALUES = "runtime_parameter_values"
+
     MODEL_REPLACEMENT_REASON_KEY = "model_replacement_reason"
     MODEL_REPLACEMENT_REASON_ACCURACY = "ACCURACY"
     MODEL_REPLACEMENT_REASON_DATA_DRIFT = "DATA_DRIFT"
@@ -288,6 +290,18 @@ class ModelSchema(SharedSchema):
     MODEL_NAME = "model_name"
     MODEL_DESCRIPTION = "model_description"
     GLOBAL = "global"
+
+    # TODO: Put inline if it stays this simple
+    RUNTIME_PARAMETER_VALUE = Schema(
+        {
+            str: Or(
+                str,
+                bool,
+                int,
+                float,
+            )
+        }
+    )
 
     MODEL_SCHEMA = Schema(
         {
@@ -342,6 +356,7 @@ class ModelSchema(SharedSchema):
                     MODEL_REPLACEMENT_REASON_DEPRECATION,
                     MODEL_REPLACEMENT_REASON_OTHER,
                 ),
+                Optional(RUNTIME_PARAMETER_VALUES): And([RUNTIME_PARAMETER_VALUE], len),
             },
             Optional(TEST_KEY): {
                 # The skip attribute allows users to have the test section in their yaml file
