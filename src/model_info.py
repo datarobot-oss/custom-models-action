@@ -329,6 +329,34 @@ class ModelInfo(InfoBase):
                 )
                 return True
 
+        model_parameters = self.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
+        )
+        if model_parameters:
+            for param in model_parameters:
+                latest_version_param = next(
+                    (
+                        p
+                        for p in datarobot_latest_model_version["runtimeParameters"]
+                        if p["fieldName"] == param["name"]
+                    ),
+                    None,
+                )
+                if latest_version_param is None:
+                    raise ValueError(
+                        f"Model version on server does not have runtime param {param['name']}"
+                    )
+
+                if param["value"] != latest_version_param["currentValue"]:
+                    logger.debug(
+                        "Need to create new version. Runtime param '%s' changed. "
+                        "Configured value: '%s'. Value on server: '%s'",
+                        param["name"],
+                        param["value"],
+                        latest_version_param["currentValue"],
+                    )
+                    return True
+
         return False
 
     def is_there_a_change_in_training_or_holdout_data_at_version_level(
