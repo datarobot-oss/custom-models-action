@@ -70,6 +70,7 @@ class DrClient:
     REGISTERED_MODELS_LIST_ROUTE = "registeredModels/"
     REGISTERED_MODEL_ROUTE = "registeredModels/{registered_model_id}/"
     REGISTERED_MODELS_VERSIONS_ROUTE = "registeredModels/{registered_model_id}/versions/"
+    CREDENTIALS_ROUTE = "credentials/"
 
     DEFAULT_MAX_WAIT_SEC = 600
 
@@ -630,6 +631,16 @@ class DrClient:
         )
         if resource_bundle_id:
             payload.append(("resourceBundleId", resource_bundle_id))
+
+        runtime_parameters = model_info.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
+        )
+        if runtime_parameters:
+            payload_params = [
+                {"fieldName": param["name"], "type": param["type"], "value": param["value"]}
+                for param in runtime_parameters
+            ]
+            payload.append(("runtimeParameterValues", json.dumps(payload_params)))
 
         return payload, file_objs
 
@@ -2185,3 +2196,6 @@ class DrClient:
 
         payload = {"searchFor": search_for} if search_for else None
         return self._paginated_fetch(self.ENVIRONMENT_DROP_IN_ROUTE, json=payload)
+
+    def fetch_credentials(self):
+        return self._paginated_fetch(self.CREDENTIALS_ROUTE)
