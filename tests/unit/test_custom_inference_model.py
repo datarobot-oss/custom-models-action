@@ -31,6 +31,7 @@ from dr_client import DrClient
 from model_controller import ModelController
 from model_file_path import ModelFilePath
 from model_info import ModelInfo
+from schema_validator import ModelSchema
 from tests.unit.conftest import make_a_change_and_commit
 from tests.unit.conftest import set_namespace
 from tests.unit.conftest import validate_metrics
@@ -183,7 +184,14 @@ class TestCustomInferenceModel:
                     [
                         m_info
                         for m_info in models_info
-                        if m_info.is_affected_by_commit(datarobot_latest_model_version={"id": "12"})
+                        if m_info.is_affected_by_commit(
+                            datarobot_latest_model_version={
+                                "id": "12",
+                                "baseEnvironmentId": m_info.get_value(
+                                    ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_ID_KEY
+                                ),
+                            }
+                        )
                     ]
                 )
                 == num_models
@@ -205,7 +213,14 @@ class TestCustomInferenceModel:
                 [
                     m_info
                     for m_info in models_info
-                    if m_info.is_affected_by_commit(datarobot_latest_model_version={"id": "12"})
+                    if m_info.is_affected_by_commit(
+                        datarobot_latest_model_version={
+                            "id": "12",
+                            "baseEnvironmentId": m_info.get_value(
+                                ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_ID_KEY
+                            ),
+                        }
+                    )
                 ]
             )
             assert num_affected_models == reference
