@@ -8,7 +8,7 @@ This module controls and coordinate between local model definitions and DataRobo
 In highlights, it scans and loads model definitions from the local source tree, perform
 validations and then applies actions in DataRobot.
 """
-
+import hashlib
 import logging
 import os
 import re
@@ -335,6 +335,28 @@ class ModelController(ControllerBase):
 
         return model_info
 
+
+    def _replace_dataset_file_with_id(self, model_info):
+        dataset_file = model_info.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_FILE_KEY
+        )
+        if not dataset_file:
+            return model_info
+
+        BUF_SIZE = 65536 # TODO: Put somewhere else
+        sha1 = hashlib.sha1()
+        with open(dataset_file) as f:
+            while True:
+                data = f.read(BUF_SIZE)
+                if not data:
+                    break
+                sha1.update(data)
+
+        checksum = sha1.hexdigest()
+
+        self._dr_client.
+
+
     def _set_datarobot_custom_model(self, user_provided_id, custom_model, latest_version=None):
         datarobot_model = DataRobotModel(model=custom_model, latest_version=latest_version)
         self.datarobot_models[user_provided_id] = datarobot_model
@@ -615,6 +637,7 @@ class ModelController(ControllerBase):
             )
 
             model_info = self._replace_runtime_param_credentials(model_info, credentials)
+            model_info = self._replace_dataset_file_with_id(model_info)
 
             if model_info.is_affected_by_commit(latest_version):
                 logger.info("Model '%s' is affected by commit.", model_info.model_path)

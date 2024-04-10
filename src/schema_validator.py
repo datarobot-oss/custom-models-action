@@ -235,6 +235,7 @@ class ModelSchema(SharedSchema):
     # The 'PARTITIONING_COLUMN_KEY' is relevant for structured models only and is optional.
     PARTITIONING_COLUMN_KEY = "partitioning_column"
     TRAINING_DATASET_ID_KEY = "training_dataset_id"
+    TRAINING_DATASET_FILE_KEY = "training_dataset_file"
     # The 'HOLDOUT_DATASET_ID_KEY' is relevant for unstructured models only and is optional.
     HOLDOUT_DATASET_ID_KEY = "holdout_dataset_id"
 
@@ -334,6 +335,7 @@ class ModelSchema(SharedSchema):
                 Optional(RESOURCE_BUNDLE_ID): And(str, len),
                 Optional(PARTITIONING_COLUMN_KEY): And(str, len),
                 Optional(TRAINING_DATASET_ID_KEY): And(str, ObjectId.is_valid),
+                Optional(TRAINING_DATASET_FILE_KEY): And(str, len),
                 Optional(HOLDOUT_DATASET_ID_KEY): And(str, ObjectId.is_valid),
                 Optional(MODEL_REPLACEMENT_REASON_KEY, default=MODEL_REPLACEMENT_REASON_OTHER): Or(
                     MODEL_REPLACEMENT_REASON_ACCURACY,
