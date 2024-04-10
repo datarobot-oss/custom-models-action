@@ -344,7 +344,7 @@ class ModelInfo(InfoBase):
                 )
                 if latest_version_param is None:
                     raise ValueError(
-                        f"Model version on server does not have runtime param {param['name']}"
+                        f"Model version on server does not have runtime param: '{param['name']}'"
                     )
 
                 if param["value"] != latest_version_param["currentValue"]:
