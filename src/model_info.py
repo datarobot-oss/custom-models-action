@@ -374,8 +374,8 @@ class ModelInfo(InfoBase):
             # without a training data
             return configured_training_dataset is not None
 
-        latest_training_dataset = datarobot_latest_model_version.get("training_data", {}).get(
-            "dataset_id"
+        latest_training_dataset = datarobot_latest_model_version.get("trainingData", {}).get(
+            "datasetId"
         )
         if configured_training_dataset != latest_training_dataset:
             logger.debug("Configured training dataset != latest training dataset")
@@ -386,8 +386,8 @@ class ModelInfo(InfoBase):
             configured_holdout_dataset = self.get_value(
                 ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_ID_KEY
             )
-            latest_holdout_dataset = datarobot_latest_model_version.get("holdout_data", {}).get(
-                "dataset_id"
+            latest_holdout_dataset = datarobot_latest_model_version.get("holdoutData", {}).get(
+                "datasetId"
             )
             if configured_holdout_dataset != latest_holdout_dataset:
                 logger.debug("Configured holdout dataset != latest holdout dataset")

@@ -71,6 +71,9 @@ class DrClient:
     REGISTERED_MODEL_ROUTE = "registeredModels/{registered_model_id}/"
     REGISTERED_MODELS_VERSIONS_ROUTE = "registeredModels/{registered_model_id}/versions/"
     CREDENTIALS_ROUTE = "credentials/"
+    CATALOG_ITEMS_ROUTE = "catalogItems/"
+    DATASET_ROUTE = "datasets/{dataset_id}/"
+    DATASET_FROM_FILE_ROUTE = "datasets/fromFile/"
 
     DEFAULT_MAX_WAIT_SEC = 600
 
@@ -2199,3 +2202,46 @@ class DrClient:
 
     def fetch_credentials(self):
         return self._paginated_fetch(self.CREDENTIALS_ROUTE)
+
+    def fetch_catalog_items(self, search_for=None):
+        params = {"searchFor": search_for} if search_for else None
+        return self._paginated_fetch(self.CATALOG_ITEMS_ROUTE, params=params)
+
+    def create_dataset_from_file(self, file):
+        with open(file, "rb") as fd:
+            payload = {"file": (str(file), fd)}
+
+            mp_encoder = MultipartEncoder(fields=payload)
+            headers = {"Content-Type": mp_encoder.content_type}
+
+            response = self._http_requester.post(
+                self.DATASET_FROM_FILE_ROUTE, data=mp_encoder, headers=headers
+            )
+
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                "Failed to create dataset. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        location = self._wait_for_async_resolution(response.headers["Location"])
+        response = self._http_requester.get(location, raw=True)
+        return response.json()
+
+    def update_dataset(self, dataset_id, name):
+        payload = {"name": name}
+
+        response = self._http_requester.patch(
+            self.DATASET_ROUTE.format(dataset_id=dataset_id),
+            json=payload,
+        )
+        if response.status_code != 200:
+            raise DataRobotClientError(
+                "Failed to update dataset properties "
+                f"Dataset id: {dataset_id}, "
+                f"Response status: {response.status_code}, "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        return response.json()

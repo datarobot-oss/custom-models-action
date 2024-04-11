@@ -335,17 +335,20 @@ class ModelController(ControllerBase):
 
         return model_info
 
-
-    def _replace_dataset_file_with_id(self, model_info):
+    def _populate_dataset_id_from_file(self, model_info):
         dataset_file = model_info.get_value(
             ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_FILE_KEY
         )
         if not dataset_file:
             return model_info
 
-        BUF_SIZE = 65536 # TODO: Put somewhere else
+        dataset_file_path = model_info.model_path / dataset_file
+        if not dataset_file_path.exists():
+            raise ValueError(f"Dataset file: '{dataset_file_path}' does not exist.")
+
+        BUF_SIZE = 65536  # TODO: Put somewhere else
         sha1 = hashlib.sha1()
-        with open(dataset_file) as f:
+        with open(dataset_file_path, "rb") as f:
             while True:
                 data = f.read(BUF_SIZE)
                 if not data:
@@ -354,8 +357,25 @@ class ModelController(ControllerBase):
 
         checksum = sha1.hexdigest()
 
-        self._dr_client.
+        catalog_item_name = f"{model_info.user_provided_id}_{dataset_file}_{checksum}"
 
+        items = self._dr_client.fetch_catalog_items(search_for=catalog_item_name)
+        matching_items = [item for item in items if item["catalogName"] == catalog_item_name]
+        if len(matching_items) > 1:
+            raise Exception(f"Found multiple items in catalog with name: '{catalog_item_name}'")
+
+        if not matching_items:
+            dataset = self._dr_client.create_dataset_from_file(dataset_file_path)
+            dataset_id = dataset["datasetId"]
+            self._dr_client.update_dataset(dataset_id, catalog_item_name)
+        else:
+            dataset_id = matching_items[0]["id"]
+
+        model_info.set_value(
+            ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_ID_KEY, value=dataset_id
+        )
+
+        return model_info
 
     def _set_datarobot_custom_model(self, user_provided_id, custom_model, latest_version=None):
         datarobot_model = DataRobotModel(model=custom_model, latest_version=latest_version)
@@ -637,7 +657,7 @@ class ModelController(ControllerBase):
             )
 
             model_info = self._replace_runtime_param_credentials(model_info, credentials)
-            model_info = self._replace_dataset_file_with_id(model_info)
+            model_info = self._populate_dataset_id_from_file(model_info)
 
             if model_info.is_affected_by_commit(latest_version):
                 logger.info("Model '%s' is affected by commit.", model_info.model_path)
