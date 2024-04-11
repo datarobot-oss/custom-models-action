@@ -74,6 +74,10 @@ class DrClient:
     CATALOG_ITEMS_ROUTE = "catalogItems/"
     DATASET_ROUTE = "datasets/{dataset_id}/"
     DATASET_FROM_FILE_ROUTE = "datasets/fromFile/"
+    COMPLIANCE_DOCS_INITIALIZATION_ROUTE = (
+        "modelComplianceDocsInitializations/{registered_model_version_id}"
+    )
+    AUTOMATED_DOCUMENTS_ROUTE = "automatedDocuments/"
 
     DEFAULT_MAX_WAIT_SEC = 600
 
@@ -481,22 +485,22 @@ class DrClient:
         registered_model_id = registered_model["id"] if registered_model else None
         if registered_model_id:
             existing_registered_versions = self._get_registered_model_versions(registered_model_id)
-            existing_version_id = next(
+            existing_version = next(
                 (
-                    v["id"]
+                    v
                     for v in existing_registered_versions
                     if v["modelId"] == custom_model_version_id
                 ),
                 None,
             )
-            if existing_version_id:
+            if existing_version:
                 logger.info(
                     "Custom model version is already registered. Registered model name: %s, "
                     "custom model version id: %s",
                     registered_model_name,
                     custom_model_version_id,
                 )
-                return existing_version_id
+                return existing_version
             registered_model_name = None
 
         model_package = self.create_model_package_from_custom_model_version(
@@ -505,7 +509,7 @@ class DrClient:
             registered_model_id,
         )
 
-        return model_package["id"]
+        return model_package
 
     def update_registered_model(self, registered_model_name, description, is_global):
         """
@@ -2245,3 +2249,47 @@ class DrClient:
                 code=response.status_code,
             )
         return response.json()
+
+    def fetch_compliance_docs_initialization(self, registered_model_version_id):
+        response = self._http_requester.get(
+            self.COMPLIANCE_DOCS_INITIALIZATION_ROUTE.format(
+                registered_model_version_id=registered_model_version_id
+            )
+        )
+        return response.json()
+
+    def perform_compliance_docs_initialization(self, registered_model_version_id):
+        response = self._http_requester.post(
+            self.COMPLIANCE_DOCS_INITIALIZATION_ROUTE.format(
+                registered_model_version_id=registered_model_version_id
+            )
+        )
+
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                "Failed to initialize compliance docs. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        location = self._wait_for_async_resolution(response.headers["Location"])
+        response = self._http_requester.get(location, raw=True)
+        return response.json()
+
+    def create_compliance_docs(self, registered_model_version_id):
+        payload = {
+            "documentType": "MODEL_COMPLIANCE",
+            "entityId": registered_model_version_id,
+            "outputFormat": "docx",
+        }
+
+        response = self._http_requester.post(self.AUTOMATED_DOCUMENTS_ROUTE, json=payload)
+
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                "Failed to create compliance docs. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        self._wait_for_async_resolution(response.headers["Location"])

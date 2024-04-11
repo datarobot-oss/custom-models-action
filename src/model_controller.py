@@ -706,7 +706,7 @@ class ModelController(ControllerBase):
                 )
 
             if model_info.should_register_model:
-                self._dr_client.create_or_update_registered_model(
+                registered_model_version = self._dr_client.create_or_update_registered_model(
                     latest_version["id"], model_info.registered_model_name
                 )
                 self._dr_client.update_registered_model(
@@ -714,6 +714,25 @@ class ModelController(ControllerBase):
                     model_info.registered_model_description,
                     model_info.registered_model_global,
                 )
+
+                # TODO: Separate method?
+                if model_info.get_value(
+                    ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.COMPLIANCE_DOCS_KEY
+                ):
+
+                    if registered_model_version["complianceDocsCount"] > 0:
+                        return
+
+                    compliance_docs_initialization = (
+                        self._dr_client.fetch_compliance_docs_initialization(
+                            registered_model_version["id"]
+                        )
+                    )
+                    if not compliance_docs_initialization["initialized"]:
+                        self._dr_client.perform_compliance_docs_initialization(
+                            registered_model_version["id"]
+                        )
+                    self._dr_client.create_compliance_docs(registered_model_version["id"])
 
     @staticmethod
     def _was_new_version_created(previous_latest_version, latest_version):

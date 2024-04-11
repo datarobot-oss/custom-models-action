@@ -291,6 +291,7 @@ class ModelSchema(SharedSchema):
     MODEL_NAME = "model_name"
     MODEL_DESCRIPTION = "model_description"
     GLOBAL = "global"
+    COMPLIANCE_DOCS_KEY = "compliance_docs"
 
     MODEL_SCHEMA = Schema(
         {
@@ -404,6 +405,7 @@ class ModelSchema(SharedSchema):
                 Optional(MODEL_NAME): And(str, len),
                 Optional(MODEL_DESCRIPTION): And(str, len),
                 Optional(GLOBAL, default=False): bool,
+                Optional(COMPLIANCE_DOCS_KEY, default=False): bool,
             },
         }
     )
