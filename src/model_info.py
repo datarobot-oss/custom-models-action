@@ -388,9 +388,12 @@ class ModelInfo(InfoBase):
             configured_holdout_dataset = self.get_value(
                 ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_ID_KEY
             )
-            latest_holdout_dataset = datarobot_latest_model_version.get("holdoutData", {}).get(
-                "datasetId"
+
+            latest_holdout_data = datarobot_latest_model_version.get("holdoutData", None)
+            latest_holdout_dataset = (
+                latest_holdout_data["datasetId"] if latest_holdout_data else None
             )
+
             if configured_holdout_dataset != latest_holdout_dataset:
                 logger.debug("Configured holdout dataset != latest holdout dataset")
                 return True
