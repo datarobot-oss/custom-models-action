@@ -2272,7 +2272,7 @@ class DrClient:
                 f"Response body: {response.text}",
                 code=response.status_code,
             )
-        location = self._wait_for_async_resolution(response.headers["Location"])
+        location = self._wait_for_async_resolution(response.headers["Location"], max_wait=30 * 60)
         response = self._http_requester.get(location, raw=True)
         return response.json()
 
