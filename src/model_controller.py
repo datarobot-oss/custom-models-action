@@ -720,7 +720,8 @@ class ModelController(ControllerBase):
                     ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.COMPLIANCE_DOCS_KEY
                 ):
 
-                    if registered_model_version["complianceDocsCount"] > 0:
+                    docs_count = registered_model_version["complianceDocsCount"]
+                    if docs_count is not None and docs_count > 0:
                         return
 
                     compliance_docs_initialization = (

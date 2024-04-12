@@ -375,7 +375,9 @@ class ModelInfo(InfoBase):
             return configured_training_dataset is not None
 
         latest_training_data = datarobot_latest_model_version.get("trainingData", None)
-        latest_training_dataset = latest_training_data["datasetId"] if latest_training_data else None
+        latest_training_dataset = (
+            latest_training_data["datasetId"] if latest_training_data else None
+        )
 
         if configured_training_dataset != latest_training_dataset:
             logger.debug("Configured training dataset != latest training dataset")
