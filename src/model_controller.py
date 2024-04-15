@@ -705,35 +705,42 @@ class ModelController(ControllerBase):
                     custom_model["id"], latest_version["id"], model_info
                 )
 
-            if model_info.should_register_model:
-                registered_model_version = self._dr_client.create_or_update_registered_model(
-                    latest_version["id"], model_info.registered_model_name
+            self._handle_model_registry(model_info, latest_version)
+
+    def _handle_model_registry(self, model_info, latest_version):
+        if not model_info.should_register_model:
+            return
+
+        registered_model_version = self._dr_client.create_or_update_registered_model(
+            latest_version["id"], model_info.registered_model_name
+        )
+        self._dr_client.update_registered_model(
+            model_info.registered_model_name,
+            model_info.registered_model_description,
+            model_info.registered_model_global,
+        )
+
+        if model_info.get_value(
+                ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.COMPLIANCE_DOCS_KEY
+        ):
+
+            docs_count = registered_model_version["complianceDocsCount"]
+            if docs_count is not None and docs_count > 0:
+                logger.debug("Compliance docs already present. Model: %s", model_info.user_provided_id)
+                return
+
+            logger.info("Generating compliance docs. Model: %s", model_info.user_provided_id)
+            compliance_docs_initialization = (
+                self._dr_client.fetch_compliance_docs_initialization(
+                    registered_model_version["id"]
                 )
-                self._dr_client.update_registered_model(
-                    model_info.registered_model_name,
-                    model_info.registered_model_description,
-                    model_info.registered_model_global,
+            )
+            if not compliance_docs_initialization["initialized"]:
+                self._dr_client.perform_compliance_docs_initialization(
+                    registered_model_version["id"]
                 )
 
-                # TODO: Separate method?
-                if model_info.get_value(
-                    ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.COMPLIANCE_DOCS_KEY
-                ):
-
-                    docs_count = registered_model_version["complianceDocsCount"]
-                    if docs_count is not None and docs_count > 0:
-                        return
-
-                    compliance_docs_initialization = (
-                        self._dr_client.fetch_compliance_docs_initialization(
-                            registered_model_version["id"]
-                        )
-                    )
-                    if not compliance_docs_initialization["initialized"]:
-                        self._dr_client.perform_compliance_docs_initialization(
-                            registered_model_version["id"]
-                        )
-                    self._dr_client.create_compliance_docs(registered_model_version["id"])
+            self._dr_client.create_compliance_docs(registered_model_version["id"])
 
     @staticmethod
     def _was_new_version_created(previous_latest_version, latest_version):
