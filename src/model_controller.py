@@ -758,7 +758,10 @@ class ModelController(ControllerBase):
             )
 
             if match:
-                if str(local_key_value["value"]) == match["value"]:
+                if (
+                    str(local_key_value["value"]) == match["value"]
+                    and local_key_value["category"] == match["category"]
+                ):
                     continue
                 else:
                     self._dr_client.update_key_value(
