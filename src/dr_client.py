@@ -78,6 +78,8 @@ class DrClient:
         "modelComplianceDocsInitializations/{registered_model_version_id}"
     )
     AUTOMATED_DOCUMENTS_ROUTE = "automatedDocuments/"
+    KEY_VALUES_ROUTE = "keyValues/"
+    KEY_VALUE_ROUTE = "keyValues/{key_value_id}/"
 
     DEFAULT_MAX_WAIT_SEC = 600
 
@@ -2258,6 +2260,63 @@ class DrClient:
         )
         return response.json()
 
+    def fetch_key_values(self, registered_model_version_id):
+        return self._paginated_fetch(
+            self.KEY_VALUES_ROUTE,
+            params={"entityId": registered_model_version_id, "entityType": "modelPackage"},
+        )
+
+    def create_key_value(self, registered_model_version_id, name, category, value, value_type):
+        payload = self._create_key_value_payload(
+            category, name, registered_model_version_id, value, value_type
+        )
+
+        response = self._http_requester.post(self.KEY_VALUES_ROUTE, json=payload)
+        if response.status_code != 201:
+            raise DataRobotClientError(
+                "Failed to create key-value. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        return response.json()
+
+    def update_key_value(
+        self,
+        key_value_id,
+        registered_model_version_id,
+        name,
+        category,
+        value,
+        value_type,
+    ):
+        payload = self._create_key_value_payload(
+            category, name, registered_model_version_id, value, value_type
+        )
+        response = self._http_requester.patch(
+            self.KEY_VALUE_ROUTE.format(key_value_id=key_value_id), json=payload
+        )
+        if response.status_code != 200:
+            raise DataRobotClientError(
+                "Failed to create/update key-value. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        return response.json()
+
+    def delete_key_value(self, key_value_id):
+        response = self._http_requester.delete(
+            self.KEY_VALUE_ROUTE.format(key_value_id=key_value_id)
+        )
+        if response.status_code != 204:
+            raise DataRobotClientError(
+                "Failed to delete key-value. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+
     def perform_compliance_docs_initialization(self, registered_model_version_id):
         response = self._http_requester.post(
             self.COMPLIANCE_DOCS_INITIALIZATION_ROUTE.format(
@@ -2293,3 +2352,21 @@ class DrClient:
                 code=response.status_code,
             )
         self._wait_for_async_resolution(response.headers["Location"])
+
+    def _create_key_value_payload(
+        self, category, name, registered_model_version_id, value, value_type
+    ):
+        payload = {
+            "entityId": registered_model_version_id,
+            "entityType": "modelPackage",
+            "name": name,
+            "category": category,
+            "valueType": value_type,
+        }
+        if value_type == "boolean":
+            payload["booleanValue"] = value
+        elif value_type == "numeric":
+            payload["numericValue"] = value
+        else:
+            payload["value"] = value
+        return payload

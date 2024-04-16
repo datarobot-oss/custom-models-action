@@ -292,6 +292,7 @@ class ModelSchema(SharedSchema):
     MODEL_DESCRIPTION = "model_description"
     GLOBAL = "global"
     COMPLIANCE_DOCS_KEY = "compliance_docs"
+    KEY_VALUES_KEY = "key_values"
 
     MODEL_SCHEMA = Schema(
         {
@@ -406,6 +407,16 @@ class ModelSchema(SharedSchema):
                 Optional(MODEL_DESCRIPTION): And(str, len),
                 Optional(GLOBAL, default=False): bool,
                 Optional(COMPLIANCE_DOCS_KEY, default=False): bool,
+                Optional(VERSION_KEY): {
+                    Optional(KEY_VALUES_KEY): [
+                        {
+                            "name": str,
+                            "category": str,
+                            "value_type": str,
+                            "value": Or(str, int, float, bool),
+                        }
+                    ],
+                },
             },
         }
     )

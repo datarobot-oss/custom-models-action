@@ -720,27 +720,73 @@ class ModelController(ControllerBase):
             model_info.registered_model_global,
         )
 
-        if model_info.get_value(
-                ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.COMPLIANCE_DOCS_KEY
+        self._handle_compliance_docs(model_info, registered_model_version)
+        self._handle_key_values(model_info, registered_model_version)
+
+    def _handle_compliance_docs(self, model_info, registered_model_version):
+        if not model_info.get_value(
+            ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.COMPLIANCE_DOCS_KEY
         ):
+            return
 
-            docs_count = registered_model_version["complianceDocsCount"]
-            if docs_count is not None and docs_count > 0:
-                logger.debug("Compliance docs already present. Model: %s", model_info.user_provided_id)
-                return
+        docs_count = registered_model_version["complianceDocsCount"]
+        if docs_count is not None and docs_count > 0:
+            logger.debug("Compliance docs already present. Model: %s", model_info.user_provided_id)
+            return
 
-            logger.info("Generating compliance docs. Model: %s", model_info.user_provided_id)
-            compliance_docs_initialization = (
-                self._dr_client.fetch_compliance_docs_initialization(
-                    registered_model_version["id"]
-                )
+        logger.info("Generating compliance docs. Model: %s", model_info.user_provided_id)
+        compliance_docs_initialization = self._dr_client.fetch_compliance_docs_initialization(
+            registered_model_version["id"]
+        )
+        if not compliance_docs_initialization["initialized"]:
+            self._dr_client.perform_compliance_docs_initialization(registered_model_version["id"])
+
+        self._dr_client.create_compliance_docs(registered_model_version["id"])
+
+    def _handle_key_values(self, model_info, registered_model_version):
+        local_key_values = model_info.get_value(
+            ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.VERSION_KEY, ModelSchema.KEY_VALUES_KEY
+        )
+        if not local_key_values:
+            return
+
+        server_key_values = self._dr_client.fetch_key_values(registered_model_version["id"])
+
+        for local_key_value in local_key_values:
+            match = next(
+                (kv for kv in server_key_values if kv["name"] == local_key_value["name"]), None
             )
-            if not compliance_docs_initialization["initialized"]:
-                self._dr_client.perform_compliance_docs_initialization(
-                    registered_model_version["id"]
+
+            if match:
+                if str(local_key_value["value"]) == match["value"]:
+                    continue
+                else:
+                    self._dr_client.update_key_value(
+                        match["id"],
+                        registered_model_version["id"],
+                        local_key_value["name"],
+                        local_key_value["category"],
+                        local_key_value["value"],
+                        local_key_value["value_type"],
+                    )
+            else:
+                self._dr_client.create_key_value(
+                    registered_model_version["id"],
+                    local_key_value["name"],
+                    local_key_value["category"],
+                    local_key_value["value"],
+                    local_key_value["value_type"],
                 )
 
-            self._dr_client.create_compliance_docs(registered_model_version["id"])
+        for server_key_value in server_key_values:
+            if server_key_value["creatorName"] == "system":
+                continue
+
+            match = next(
+                (kv for kv in local_key_values if kv["name"] == server_key_value["name"]), None
+            )
+            if not match:
+                self._dr_client.delete_key_value(server_key_value["id"])
 
     @staticmethod
     def _was_new_version_created(previous_latest_version, latest_version):
