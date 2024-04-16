@@ -625,6 +625,12 @@ class DrClient:
         if egress_network_policy:
             payload.append(("networkEgressPolicy", str(egress_network_policy)))
 
+        resource_bundle_id = model_info.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.RESOURCE_BUNDLE_ID
+        )
+        if resource_bundle_id:
+            payload.append(("resourceBundleId", resource_bundle_id))
+
         return payload, file_objs
 
     @staticmethod
