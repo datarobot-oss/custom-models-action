@@ -22,6 +22,8 @@ import schema
 from bson import ObjectId
 from mock import Mock
 from mock import patch
+from mock.mock import MagicMock
+from requests_toolbelt import MultipartEncoder
 from responses import matchers
 
 from common.exceptions import DataRobotClientError
@@ -117,6 +119,13 @@ def fixture_regression_model_info():
             ModelSchema.MEMORY_KEY: 256 * 1024 * 1024,
             ModelSchema.REPLICAS_KEY: 3,
             ModelSchema.EGRESS_NETWORK_POLICY_KEY: ModelSchema.EGRESS_NETWORK_POLICY_PUBLIC,
+            ModelSchema.RUNTIME_PARAMETER_VALUES_KEY: [
+                {
+                    ModelSchema.RUNTIME_PARAMETER_VALUE_NAME_KEY: "api_key",
+                    ModelSchema.RUNTIME_PARAMETER_VALUE_TYPE_KEY: "credential",
+                    ModelSchema.RUNTIME_PARAMETER_VALUE_VALUE_KEY: "datarobot_credential_name",
+                }
+            ],
         },
     }
     return ModelInfo(
@@ -948,8 +957,37 @@ class TestCustomModelVersionRoutes:
     ):
         """A case to test a successful custom model version creation."""
 
+        expected_fields = {
+            "isMajorUpdate": str(is_major_update),
+            "gitModelVersion": '{"refName": "feature-branch", "commitUrl": "https://github.com/user/project/4e784ec8fa76beebaaf4391f23e0a3f7f666d329", "mainBranchCommitSha": "4e784ec8fa76beebaaf4391f23e0a3f7f666d328", "pullRequestCommitSha": "4e784ec8fa76beebaaf4391f23e0a3f7f666d329"}',
+            "baseEnvironmentId": "627790db5621558eedc4c7fa",
+            "maximumMemory": "268435456",
+            "replicas": "3",
+            "networkEgressPolicy": "PUBLIC",
+            "runtimeParameterValues": '[{"fieldName": "api_key", "type": "credential", "value": "datarobot_credential_name"}]',
+        }
+
+        def matcher(request):
+            if not isinstance(request.body, MultipartEncoder):
+                return False, "Expected MultipartEncoder request body"
+
+            request_fields = dict(request.body.fields)
+            if request_fields == expected_fields:
+                return True, ""
+            else:
+                return (
+                    False,
+                    f"\nRequest fields:\n {request_fields}\n did not match expected fields:\n {expected_fields}",
+                )
+
         url = custom_models_version_url_factory()
-        responses.add(responses.POST, url, json=regression_model_version_response, status=201)
+        responses.add(
+            responses.POST,
+            url,
+            json=regression_model_version_response,
+            status=201,
+            match=[matcher],
+        )
         version_id = dr_client.create_custom_model_version(
             custom_model_id, is_major_update, regression_model_info, git_model_version
         )

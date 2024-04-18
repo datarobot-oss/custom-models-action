@@ -392,15 +392,33 @@ class TestModelSchemaValidator:
     def test_runtime_parameters(self, regression_model_schema, value):
         regression_model_schema[ModelSchema.VERSION_KEY][
             ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
-        ] = [{"name": "name", "type": "type", "value": value}]
+        ] = [
+            {
+                ModelSchema.RUNTIME_PARAMETER_VALUE_NAME_KEY: "name",
+                ModelSchema.RUNTIME_PARAMETER_VALUE_TYPE_KEY: "type",
+                ModelSchema.RUNTIME_PARAMETER_VALUE_VALUE_KEY: value,
+            }
+        ]
 
         self._validate_schema(True, regression_model_schema)
 
     @pytest.mark.parametrize(
         "parameters",
         [
-            [{"name": "name", "type": "type", "value": ["list_value_not_allowed"]}],
-            [{"name": "name", "type": "type"}],  # Missing value
+            [
+                {
+                    ModelSchema.RUNTIME_PARAMETER_VALUE_NAME_KEY: "name",
+                    ModelSchema.RUNTIME_PARAMETER_VALUE_TYPE_KEY: "type",
+                    ModelSchema.RUNTIME_PARAMETER_VALUE_VALUE_KEY: ["list_value_not_allowed"],
+                }
+            ],
+            [
+                {
+                    ModelSchema.RUNTIME_PARAMETER_VALUE_NAME_KEY: "name",
+                    ModelSchema.RUNTIME_PARAMETER_VALUE_TYPE_KEY: "type",
+                }
+            ],  # Missing value
+            [{}],
         ],
     )
     def test_runtime_parameters_fail(self, regression_model_schema, parameters):

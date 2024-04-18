@@ -406,6 +406,40 @@ class ModelInfo(InfoBase):
 
         return False
 
+    def replace_runtime_param_credentials(self, credentials):
+        """Replace credential runtime parameter name with id so that it can be compared with the id
+        present in the serverside runtime parameter value."""
+        model_parameters = self.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
+        )
+        if not model_parameters:
+            return self
+
+        for param in model_parameters:
+            if param[ModelSchema.RUNTIME_PARAMETER_VALUE_TYPE_KEY] != "credential":
+                continue
+
+            try:
+                param["value"] = next(
+                    (
+                        c["credentialId"]
+                        for c in credentials
+                        if c["name"] == param[ModelSchema.RUNTIME_PARAMETER_VALUE_VALUE_KEY]
+                    )
+                )
+            except StopIteration:
+                raise ValueError(
+                    f"Failed to find credential with name {param[ModelSchema.RUNTIME_PARAMETER_VALUE_VALUE_KEY]}."
+                )
+
+        self.set_value(
+            ModelSchema.VERSION_KEY,
+            ModelSchema.RUNTIME_PARAMETER_VALUES_KEY,
+            value=model_parameters,
+        )
+
+        return self
+
     @property
     def should_register_model(self):
         """Wheter this model should be added as a registered model."""

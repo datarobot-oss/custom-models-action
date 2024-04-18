@@ -251,6 +251,9 @@ class ModelSchema(SharedSchema):
     RESOURCE_BUNDLE_ID = "resource_bundle_id"
 
     RUNTIME_PARAMETER_VALUES_KEY = "runtime_parameter_values"
+    RUNTIME_PARAMETER_VALUE_NAME_KEY = "name"
+    RUNTIME_PARAMETER_VALUE_TYPE_KEY = "type"
+    RUNTIME_PARAMETER_VALUE_VALUE_KEY = "value"
 
     MODEL_REPLACEMENT_REASON_KEY = "model_replacement_reason"
     MODEL_REPLACEMENT_REASON_ACCURACY = "ACCURACY"
@@ -346,9 +349,9 @@ class ModelSchema(SharedSchema):
                 ),
                 Optional(RUNTIME_PARAMETER_VALUES_KEY): [
                     {
-                        "name": str,
-                        "type": str,
-                        "value": Or(
+                        RUNTIME_PARAMETER_VALUE_NAME_KEY: str,
+                        RUNTIME_PARAMETER_VALUE_TYPE_KEY: str,
+                        RUNTIME_PARAMETER_VALUE_VALUE_KEY: Or(
                             str,
                             bool,
                             int,

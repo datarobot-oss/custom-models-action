@@ -306,35 +306,6 @@ class ModelController(ControllerBase):
                     )
                 self._set_datarobot_custom_model(user_provided_id, custom_model, latest_version)
 
-    @staticmethod
-    def _replace_runtime_param_credentials(model_info, credentials):
-        """Replace credential runtime parameter name with id so that it can be compared with the id
-        present in the serverside runtime parameter value."""
-        model_parameters = model_info.get_value(
-            ModelSchema.VERSION_KEY, ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
-        )
-        if not model_parameters:
-            return model_info
-
-        for param in model_parameters:
-            if param["type"] != "credential":
-                continue
-
-            try:
-                param["value"] = next(
-                    (c["credentialId"] for c in credentials if c["name"] == param["value"])
-                )
-            except StopIteration:
-                raise ValueError(f"Failed to find credential with name {param['value']}.")
-
-        model_info.set_value(
-            ModelSchema.VERSION_KEY,
-            ModelSchema.RUNTIME_PARAMETER_VALUES_KEY,
-            value=model_parameters,
-        )
-
-        return model_info
-
     def _set_datarobot_custom_model(self, user_provided_id, custom_model, latest_version=None):
         datarobot_model = DataRobotModel(model=custom_model, latest_version=latest_version)
         self.datarobot_models[user_provided_id] = datarobot_model
@@ -614,7 +585,7 @@ class ModelController(ControllerBase):
                 self.datarobot_models[user_provided_id].latest_version if already_exists else None
             )
 
-            model_info = self._replace_runtime_param_credentials(model_info, credentials)
+            model_info = model_info.replace_runtime_param_credentials(credentials)
 
             if model_info.is_affected_by_commit(latest_version):
                 logger.info("Model '%s' is affected by commit.", model_info.model_path)
