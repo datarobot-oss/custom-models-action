@@ -22,7 +22,6 @@ import schema
 from bson import ObjectId
 from mock import Mock
 from mock import patch
-from mock.mock import MagicMock
 from requests_toolbelt import MultipartEncoder
 from responses import matchers
 
@@ -959,12 +958,17 @@ class TestCustomModelVersionRoutes:
 
         expected_fields = {
             "isMajorUpdate": str(is_major_update),
-            "gitModelVersion": '{"refName": "feature-branch", "commitUrl": "https://github.com/user/project/4e784ec8fa76beebaaf4391f23e0a3f7f666d329", "mainBranchCommitSha": "4e784ec8fa76beebaaf4391f23e0a3f7f666d328", "pullRequestCommitSha": "4e784ec8fa76beebaaf4391f23e0a3f7f666d329"}',
+            "gitModelVersion": '{"refName": "feature-branch", "commitUrl": '
+            '"https://github.com/user/project/'
+            '4e784ec8fa76beebaaf4391f23e0a3f7f666d329", '
+            '"mainBranchCommitSha": "4e784ec8fa76beebaaf4391f23e0a3f7f666d328", '
+            '"pullRequestCommitSha": "4e784ec8fa76beebaaf4391f23e0a3f7f666d329"}',
             "baseEnvironmentId": "627790db5621558eedc4c7fa",
             "maximumMemory": "268435456",
             "replicas": "3",
             "networkEgressPolicy": "PUBLIC",
-            "runtimeParameterValues": '[{"fieldName": "api_key", "type": "credential", "value": "datarobot_credential_name"}]',
+            "runtimeParameterValues": '[{"fieldName": "api_key", "type": "credential", '
+            '"value": "datarobot_credential_name"}]',
         }
 
         def matcher(request):
@@ -974,11 +978,12 @@ class TestCustomModelVersionRoutes:
             request_fields = dict(request.body.fields)
             if request_fields == expected_fields:
                 return True, ""
-            else:
-                return (
-                    False,
-                    f"\nRequest fields:\n {request_fields}\n did not match expected fields:\n {expected_fields}",
-                )
+
+            return (
+                False,
+                f"\nRequest fields:\n {request_fields}\n"
+                f"did not match expected fields:\n {expected_fields}",
+            )
 
         url = custom_models_version_url_factory()
         responses.add(

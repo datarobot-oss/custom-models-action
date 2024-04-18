@@ -390,6 +390,7 @@ class TestModelSchemaValidator:
         ["string_value", True, 42, 42.2],
     )
     def test_runtime_parameters(self, regression_model_schema, value):
+        """Test runtime parameters schema."""
         regression_model_schema[ModelSchema.VERSION_KEY][
             ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
         ] = [
@@ -422,6 +423,7 @@ class TestModelSchemaValidator:
         ],
     )
     def test_runtime_parameters_fail(self, regression_model_schema, parameters):
+        """Test runtime parameters bad schema."""
         regression_model_schema[ModelSchema.VERSION_KEY][
             ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
         ] = parameters

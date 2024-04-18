@@ -429,8 +429,9 @@ class ModelInfo(InfoBase):
                 )
             except StopIteration:
                 raise ValueError(
-                    f"Failed to find credential with name {param[ModelSchema.RUNTIME_PARAMETER_VALUE_VALUE_KEY]}."
-                )
+                    f"Failed to find credential with name "
+                    f"{param[ModelSchema.RUNTIME_PARAMETER_VALUE_VALUE_KEY]}."
+                ) from None
 
         self.set_value(
             ModelSchema.VERSION_KEY,

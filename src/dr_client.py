@@ -2198,4 +2198,12 @@ class DrClient:
         return self._paginated_fetch(self.ENVIRONMENT_DROP_IN_ROUTE, json=payload)
 
     def fetch_credentials(self):
+        """
+        Fetch credentials from DataRobot.
+
+        Returns
+        -------
+        list:
+            List of credentials.
+        """
         return self._paginated_fetch(self.CREDENTIALS_ROUTE)
