@@ -83,7 +83,12 @@ class ControllerBase(ABC):
         yaml_files.extend(glob(f"{self._workspace_path}/**/*.yml", recursive=True))
         for yaml_path in yaml_files:
             with open(yaml_path, encoding="utf-8") as fd:
-                yaml_content = yaml.safe_load(fd)
+                try:
+                    yaml_content = yaml.safe_load(fd)
+                except yaml.YAMLError:
+                    logger.warning("Failed to parse yaml file: %s", yaml_path, exc_info=True)
+                    continue
+                    
                 if not yaml_content:
                     logger.warning("Detected an invalid or empty yaml file: %s", yaml_path)
                 else:
