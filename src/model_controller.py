@@ -1008,10 +1008,11 @@ class ModelController(ControllerBase):
         if missing_locally_id_to_git_id:
             if not self.options.allow_model_deletion:
                 missing_user_provided_ids = list(missing_locally_id_to_git_id.values())
-                raise IllegalModelDeletion(
+                logger.info(
                     "Model deletion was configured as not being allowed. "
                     f"The missing models in the local source tree are: {missing_user_provided_ids}"
                 )
+                return
 
             model_ids_to_fetch = list(missing_locally_id_to_git_id.keys())
             deployments = self._dr_client.fetch_custom_model_deployments(model_ids_to_fetch)
