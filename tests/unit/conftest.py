@@ -523,20 +523,20 @@ def validate_metrics(github_output, entity_label, controller):
     with open(github_output, "r", encoding="utf-8") as file:
         github_output_content = file.read()
 
-    for metric_label in Metrics.metric_labels(entity_label):
+    for metric_label in Metrics(entity_label).metric_labels():
         assert re.search(f"^{metric_label}=0$", github_output_content, re.M)
 
     desired_value = 5
-    for metric in Metrics._get_metrics(entity_label):
-        current_metric_value = getattr(controller._metrics, metric.name)
+    for metric in Metrics(entity_label)._get_metrics():
+        current_metric_value = getattr(controller._metrics, metric.snake_case())
         desired_metric_value = Metric(current_metric_value.label, desired_value)
-        setattr(controller._metrics, metric.name, desired_metric_value)
+        setattr(controller._metrics, metric.snake_case(), desired_metric_value)
 
     controller._metrics.save()
     with open(github_output, "r", encoding="utf-8") as file:
         github_output_content = file.read()
 
-    for metric_label in Metrics.metric_labels(entity_label):
+    for metric_label in Metrics(entity_label).metric_labels():
         assert re.search(f"^{metric_label}={desired_value}$", github_output_content, re.M)
 
     assert not re.search(f"^.*{constants.Label.DEPLOYMENTS}.*$", github_output_content, flags=re.M)

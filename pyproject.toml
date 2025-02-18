@@ -5,5 +5,8 @@ line-length = 100
 profile = "black"
 force_single_line = "True"
 
-[tool.pylint.BASIC]
+[tool.pylint.'BASIC']
 good-names = ["ex", "fd"]
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = ["too-many-arguments", "too-many-positional-arguments"]

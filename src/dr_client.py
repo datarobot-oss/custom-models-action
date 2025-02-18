@@ -1369,19 +1369,19 @@ class DrClient:
                 f"Model package id: {model_package['id']}, "
                 f"Exception: {str(ex)}."
             ) from ex
-        else:
-            logging_level, msg = self._report_runtime_deployment_logs_if_any(deployment_id)
-            if logging_level in (logging.WARNING, logging.ERROR):
-                raise DataRobotClientError(
-                    "A deployment reported a warning or an error. Stopping. "
-                    f"DataRobot deployment id: {deployment_id}, "
-                    f"User provided deployment id: {deployment_info.user_provided_id}, "
-                    f"Model package id: {model_package['id']}, "
-                    f"Message: {msg}"
-                )
-            response = self._http_requester.get(location, raw=True)
-            deployment = response.json()
-            return deployment
+
+        logging_level, msg = self._report_runtime_deployment_logs_if_any(deployment_id)
+        if logging_level in (logging.WARNING, logging.ERROR):
+            raise DataRobotClientError(
+                "A deployment reported a warning or an error. Stopping. "
+                f"DataRobot deployment id: {deployment_id}, "
+                f"User provided deployment id: {deployment_info.user_provided_id}, "
+                f"Model package id: {model_package['id']}, "
+                f"Message: {msg}"
+            )
+        response = self._http_requester.get(location, raw=True)
+        deployment = response.json()
+        return deployment
 
     def _report_persistent_deployment_logs_if_any(self, deployment_id):
         deployment_log_url = self.CUSTOM_MODEL_DEPLOYMENT_LOG_ROUTE.format(

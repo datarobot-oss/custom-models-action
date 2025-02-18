@@ -8,49 +8,65 @@ This module holds model and deployment's metrics, which are collected during the
 execution.
 """
 
-import dataclasses
-from dataclasses import dataclass
-
 from common.constants import Label
 from common.github_env import GitHubEnv
 
 
-@dataclass
 class Metric:
-    """A data class that holds a single metric related attributes."""
+    """Holds a single metric related attributes."""
 
-    label: str
-    value: int
+    def __init__(self, label, value=0):
+        self.label = label
+        self.value = value
 
-
-@dataclass
-class Metrics:
-    """Contains metric attributes that will be exposed by the GitHub actions."""
-
-    # Both models & deployment
-    total_affected: Metric = Metric("total-affected", 0)
-    total_created: Metric = Metric("total-created", 0)
-    total_deleted: Metric = Metric("total-deleted", 0)
-    total_updated_settings: Metric = Metric("total-updated-settings", 0)
-
-    # Model only
-    total_created_versions: Metric = Metric("total-created-versions", 0)
-
-    def __init__(self, entity_label):
-        self._entity_label = entity_label
-        for metric in self._get_metrics(entity_label):
-            metric_attr = getattr(self, metric.name)
-            metric_attr.value = 0
-
-    @classmethod
-    def metric_labels(cls, entity_label):
+    def user_facing_name(self, entity_label):
         """
-        Returns the all the supported metric names for models or deployments.
+        Returns a user-facing name for the metric.
 
         Parameters
         ----------
         entity_label : common.constants.Label
-            The entity label for which to return the metric names.
+            The entity label for which to return the metric name.
+
+        Returns
+        -------
+        str:
+            A user-facing name for the metric.
+        """
+
+        return f"{entity_label}--{self.label}"
+
+    def snake_case(self):
+        """
+        Returns a snake case name for the metric.
+
+        Returns
+        -------
+        str:
+            A snake case name for the metric.
+        """
+
+        return self.label.replace("-", "_")
+
+
+class Metrics:
+    """Contains metric attributes that will be exposed by the GitHub actions."""
+
+    def __init__(self, entity_label):
+        self._entity_label = entity_label
+
+        # Both models & deployment
+        self.total_affected = Metric("total-affected")
+        self.total_created = Metric("total-created")
+        self.total_deleted = Metric("total-deleted")
+        self.total_updated_settings = Metric("total-updated-settings")
+
+        if entity_label == Label.MODELS:
+            self.total_created_versions = Metric("total-created-versions")
+
+    def metric_labels(self):
+        """
+        Returns the all the supported metric user-facing names
 
         Returns
         -------
@@ -58,45 +74,23 @@ class Metrics:
             A set of metric labels
         """
 
-        return {
-            cls.metric_label(entity_label, metric.default.label)
-            for metric in cls._get_metrics(entity_label)
-        }
+        return {metric.user_facing_name(self._entity_label.value) for metric in self._get_metrics()}
 
-    @classmethod
-    def metric_label(cls, entity_label, raw_metric_label):
-        """
-        Returns a formatted metric label.
-
-        Parameters
-        ----------
-        entity_label : common.constants.Label
-            An entity label (e.g. Label.MODELS, Label.DEPLOYMENTS).
-        raw_metric_label : str
-            The base metric name.
-
-        Returns
-        -------
-        str:
-            A formatted metric label.
-        """
-
-        return f"{entity_label.value}--{raw_metric_label}"
-
-    @classmethod
-    def _get_metrics(cls, entity_label):
-        metrics = set()
-        for metric in dataclasses.fields(cls):
-            if entity_label == Label.DEPLOYMENTS and metric.name == "total_created_versions":
-                continue
-            metrics.add(metric)
+    def _get_metrics(self):
+        metrics = [
+            self.total_affected,
+            self.total_created,
+            self.total_deleted,
+            self.total_updated_settings,
+        ]
+        if self._entity_label == Label.MODELS:
+            metrics.append(self.total_created_versions)
         return metrics
 
     def save(self):
         """Save the metrics to the GitHub environment."""
 
-        for metric in self._get_metrics(self._entity_label):
-            metric_attr = getattr(self, metric.name)
+        for metric in self._get_metrics():
             GitHubEnv.set_output_param(
-                self.metric_label(self._entity_label, metric.default.label), metric_attr.value
+                metric.user_facing_name(self._entity_label.value), metric.value
             )

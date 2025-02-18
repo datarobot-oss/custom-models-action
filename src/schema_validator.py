@@ -317,10 +317,10 @@ class ModelSchema(SharedSchema):
             VERSION_KEY: {
                 MODEL_ENV_ID_KEY: And(str, ObjectId.is_valid),
                 Optional(INCLUDE_GLOB_KEY, default=[]): And(
-                    list, lambda l: all(isinstance(e, str) and len(e) > 0 for e in l)
+                    list, lambda lst: all(isinstance(e, str) and len(e) > 0 for e in lst)
                 ),
                 Optional(EXCLUDE_GLOB_KEY, default=[]): And(
-                    list, lambda l: all(isinstance(x, str) and len(x) > 0 for x in l)
+                    list, lambda lst: all(isinstance(x, str) and len(x) > 0 for x in lst)
                 ),
                 Optional(MEMORY_KEY): Use(MemoryConvertor.to_bytes),
                 Optional(REPLICAS_KEY): And(int, lambda r: r > 0),
@@ -737,7 +737,7 @@ class DeploymentSchema(SharedSchema):
                 Optional(SEGMENT_ANALYSIS_KEY): {
                     ENABLE_SEGMENT_ANALYSIS_KEY: bool,
                     Optional(SEGMENT_ANALYSIS_ATTRIBUTES_KEY): And(
-                        list, lambda l: all(len(a) > 0 for a in l)
+                        list, lambda lst: all(len(a) > 0 for a in lst)
                     ),
                 },
             },
@@ -834,5 +834,4 @@ class DeploymentSchema(SharedSchema):
 
     @classmethod
     def _next_single_transformed(cls, multi_transformed):
-        for deployment_entry in multi_transformed:
-            yield deployment_entry
+        yield from multi_transformed
