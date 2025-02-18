@@ -366,7 +366,7 @@ class TestCustomModelRoutes(SharedRouteTests):
         pull_request_commit_sha = "1" * 40
         return Mock(
             ref_name="feature-branch",
-            commit_url=f"https://github.com/user/project/{pull_request_commit_sha}",
+            commit_url="https://github.com/user/project/" + pull_request_commit_sha,
             main_branch_commit_sha="2" * 40,
             pull_request_commit_sha=pull_request_commit_sha,
         )
@@ -632,9 +632,9 @@ class TestCustomModelTrainingHoldoutPayload:
             }
             metadata = {ModelSchema.SETTINGS_SECTION_KEY: settings_section}
             if is_unstructured:
-                metadata[
-                    ModelSchema.TARGET_TYPE_KEY
-                ] = ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION
+                metadata[ModelSchema.TARGET_TYPE_KEY] = (
+                    ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION
+                )
                 settings_section[ModelSchema.HOLDOUT_DATASET_ID_KEY] = holdout_dataset_id
             else:
                 metadata[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_REGRESSION
@@ -801,7 +801,7 @@ class TestCustomModelVersionRoutes:
     def commit_url(self, pull_request_commit_sha):
         """A fixture to return a dummy GitHub commit web URL."""
 
-        return f"https://github.com/user/project/{pull_request_commit_sha}"
+        return "https://github.com/user/project/" + pull_request_commit_sha
 
     @pytest.fixture
     def regression_model_version_response_factory(self, custom_model_id, git_model_version):
