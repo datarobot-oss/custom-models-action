@@ -34,7 +34,7 @@ from tests.functional.conftest import webserver_accessible
 class TestModelTrainingHoldoutData:
     """A test class that contains training and holdout data related test cases."""
 
-    def test_e2e_set_training_and_holdout_datasets_for_structured_model(
+    def test_e2e_set_training_and_holdout_datasets_for_structured_model_version(
         self,
         dr_client,
         workspace_path,
@@ -44,8 +44,8 @@ class TestModelTrainingHoldoutData:
         main_branch_name,
     ):
         """
-        And end-to-end case to test a training dataset assignment for structured model, by the
-        custom inference model GitHub action. The training dataset contains a holdout column.
+        Test a training dataset assignment for structured model version, by the custom inference
+        model GitHub action. The training dataset contains a holdout column.
         """
 
         # 1. Create a model just as a preliminary requirement (use GitHub action)
@@ -55,41 +55,32 @@ class TestModelTrainingHoldoutData:
         )
         run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
 
-        user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
         with temporarily_upload_training_dataset_for_structured_model(
-            dr_client, model_metadata_yaml_file, is_model_level=True, event_name="push"
+            dr_client, model_metadata_yaml_file, event_name="push"
         ) as (training_dataset_id_1, partition_column_1):
             try:
-                self._commit_run_and_validata_training_holdout_data_for_model(
-                    git_repo,
-                    dr_client,
-                    model_metadata_yaml_file,
-                    workspace_path,
-                    main_branch_name,
-                    user_provided_id,
-                    training_dataset_id_1,
-                    partition_column=partition_column_1,
+                self._commit_training_holdout_data_changes_for_model_version(
+                    git_repo, model_metadata_yaml_file, workspace_path, main_branch_name
                 )
             except Exception:
                 cleanup_models(dr_client, workspace_path)
                 raise
 
             with temporarily_upload_training_dataset_for_structured_model(
-                dr_client, model_metadata_yaml_file, is_model_level=True, event_name="push"
+                dr_client, model_metadata_yaml_file, event_name="push"
             ) as (training_dataset_id_2, partition_column_2):
                 try:
-                    self._commit_run_and_validata_training_holdout_data_for_model(
-                        git_repo,
-                        dr_client,
-                        model_metadata_yaml_file,
-                        workspace_path,
-                        main_branch_name,
-                        user_provided_id,
-                        training_dataset_id_2,
-                        partition_column=partition_column_2,
+                    self._commit_training_holdout_data_changes_for_model_version(
+                        git_repo, model_metadata_yaml_file, workspace_path, main_branch_name
                     )
-                    assert training_dataset_id_1 != training_dataset_id_2
-                    assert partition_column_1 == partition_column_2
+                    self._validate_training_holdout_data_in_model_versions(
+                        dr_client,
+                        model_metadata,
+                        training_dataset_id_1,
+                        training_dataset_id_2,
+                        partition_column_1=partition_column_1,
+                        partition_column_2=partition_column_2,
+                    )
                 finally:
                     cleanup_models(dr_client, workspace_path)
         printout("Done")
@@ -128,57 +119,6 @@ class TestModelTrainingHoldoutData:
             )
         versions = dr_client.fetch_custom_model_versions(custom_model["id"])
         assert len(versions) == 1
-
-    def test_e2e_set_training_and_holdout_datasets_for_structured_model_version(
-        self,
-        dr_client,
-        workspace_path,
-        git_repo,
-        model_metadata,
-        model_metadata_yaml_file,
-        main_branch_name,
-    ):
-        """
-        Test a training dataset assignment for structured model version, by the custom inference
-        model GitHub action. The training dataset contains a holdout column.
-        """
-
-        # 1. Create a model just as a preliminary requirement (use GitHub action)
-        printout(
-            "Create a custom model as a preliminary requirement. "
-            "Run custom model GitHub action (push event) ..."
-        )
-        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
-
-        with temporarily_upload_training_dataset_for_structured_model(
-            dr_client, model_metadata_yaml_file, is_model_level=False, event_name="push"
-        ) as (training_dataset_id_1, partition_column_1):
-            try:
-                self._commit_training_holdout_data_changes_for_model_version(
-                    git_repo, model_metadata_yaml_file, workspace_path, main_branch_name
-                )
-            except Exception:
-                cleanup_models(dr_client, workspace_path)
-                raise
-
-            with temporarily_upload_training_dataset_for_structured_model(
-                dr_client, model_metadata_yaml_file, is_model_level=False, event_name="push"
-            ) as (training_dataset_id_2, partition_column_2):
-                try:
-                    self._commit_training_holdout_data_changes_for_model_version(
-                        git_repo, model_metadata_yaml_file, workspace_path, main_branch_name
-                    )
-                    self._validate_training_holdout_data_in_model_versions(
-                        dr_client,
-                        model_metadata,
-                        training_dataset_id_1,
-                        training_dataset_id_2,
-                        partition_column_1=partition_column_1,
-                        partition_column_2=partition_column_2,
-                    )
-                finally:
-                    cleanup_models(dr_client, workspace_path)
-        printout("Done")
 
     @staticmethod
     def _commit_training_holdout_data_changes_for_model_version(
@@ -242,7 +182,7 @@ class TestModelTrainingHoldoutData:
         """
 
         with temporarily_upload_training_dataset_for_structured_model(
-            dr_client, model_metadata_yaml_file, is_model_level=True, event_name="push"
+            dr_client, model_metadata_yaml_file, event_name="push"
         ) as (training_dataset_id, partition_column):
             try:
                 git_repo.git.add(model_metadata_yaml_file)
@@ -283,112 +223,19 @@ class TestModelTrainingHoldoutData:
                 # Validate
                 user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
                 custom_model = dr_client.fetch_custom_model_by_git_id(user_provided_id)
-                assert custom_model["trainingDatasetId"] == training_dataset_id
-                assert custom_model["trainingDataPartitionColumn"] == partition_column
+                if custom_model.get("isTrainingDataForVersionsPermanentlyEnabled", True):
+                    versioned_training_data = custom_model["latestVersion"]["trainingData"]
+                    assert versioned_training_data["datasetId"] == training_dataset_id
+
+                    versioned_holdout_data = custom_model["latestVersion"]["holdoutData"]
+                    assert versioned_holdout_data["partitionColumn"] == partition_column
+                else:
+                    assert custom_model["trainingDatasetId"] == training_dataset_id
+                    assert custom_model["trainingDataPartitionColumn"] == partition_column
             finally:
                 cleanup_models(dr_client, workspace_path)
 
         printout("Done")
-
-    def test_e2e_set_training_and_holdout_datasets_for_unstructured_model(
-        self,
-        dr_client,
-        workspace_path,
-        git_repo,
-        model_metadata,
-        model_metadata_yaml_file,
-        main_branch_name,
-    ):
-        """
-        An end-to-end case to test training and holdout dataset assignment for unstructured
-        model by the custom inference model GitHub action.
-        """
-
-        with temporarily_replace_schema_value(
-            model_metadata_yaml_file,
-            ModelSchema.TARGET_TYPE_KEY,
-            new_value=ModelSchema.TARGET_TYPE_UNSTRUCTURED_OTHER,
-        ):
-            # 1. Create a model just as a preliminary requirement (use GitHub action)
-            printout(
-                "Create a custom model as a preliminary requirement. "
-                "Run custom model GitHub action (push event) ..."
-            )
-            run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
-
-            user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
-
-            with self._set_and_upload_training_and_holdout_data(
-                1, dr_client, model_metadata_yaml_file, is_model_level=True
-            ) as (training_dataset_id_1, holdout_dataset_id_1):
-                try:
-                    self._commit_run_and_validata_training_holdout_data_for_model(
-                        git_repo,
-                        dr_client,
-                        model_metadata_yaml_file,
-                        workspace_path,
-                        main_branch_name,
-                        user_provided_id,
-                        training_dataset_id_1,
-                        holdout_dataset_id=holdout_dataset_id_1,
-                    )
-                except Exception:
-                    cleanup_models(dr_client, workspace_path)
-                    raise
-
-                with self._set_and_upload_training_and_holdout_data(
-                    2, dr_client, model_metadata_yaml_file, is_model_level=True
-                ) as (training_dataset_id_2, holdout_dataset_id_2):
-                    try:
-                        self._commit_run_and_validata_training_holdout_data_for_model(
-                            git_repo,
-                            dr_client,
-                            model_metadata_yaml_file,
-                            workspace_path,
-                            main_branch_name,
-                            user_provided_id,
-                            training_dataset_id_2,
-                            holdout_dataset_id=holdout_dataset_id_2,
-                        )
-                        assert training_dataset_id_1 != training_dataset_id_2
-                        assert holdout_dataset_id_1 != holdout_dataset_id_2
-                    finally:
-                        cleanup_models(dr_client, workspace_path)
-
-        printout("Done")
-
-    @contextlib.contextmanager
-    def _set_and_upload_training_and_holdout_data(
-        self, index, dr_client, model_metadata_yaml_file, is_model_level
-    ):
-        printout(
-            f"({index}) Upload training and holdout datasets for unstructured model. "
-            f"is_model_level: {is_model_level}"
-        )
-        datasets_root = Path(__file__).parent / ".." / "datasets"
-        training_dataset_filepath = (
-            datasets_root / "juniors_3_year_stats_regression_unstructured_training.csv"
-        )
-        holdout_dataset_filepath = (
-            datasets_root / "juniors_3_year_stats_regression_unstructured_holdout.csv"
-        )
-        section_key = (
-            ModelSchema.SETTINGS_SECTION_KEY if is_model_level else ModelSchema.VERSION_KEY
-        )
-        with upload_and_update_dataset(
-            dr_client,
-            training_dataset_filepath,
-            model_metadata_yaml_file,
-            section_key,
-            ModelSchema.TRAINING_DATASET_ID_KEY,
-        ) as training_dataset_id, upload_and_update_dataset(
-            dr_client,
-            holdout_dataset_filepath,
-            model_metadata_yaml_file,
-            section_key,
-            ModelSchema.HOLDOUT_DATASET_ID_KEY,
-        ) as holdout_dataset_id:
-            yield training_dataset_id, holdout_dataset_id
 
     def test_e2e_set_training_and_holdout_datasets_for_unstructured_model_version(
         self,
@@ -417,7 +264,7 @@ class TestModelTrainingHoldoutData:
             run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
 
             with self._set_and_upload_training_and_holdout_data(
-                1, dr_client, model_metadata_yaml_file, is_model_level=False
+                1, dr_client, model_metadata_yaml_file
             ) as (training_dataset_id_1, holdout_dataset_id_1):
                 try:
                     self._commit_training_holdout_data_changes_for_model_version(
@@ -428,7 +275,7 @@ class TestModelTrainingHoldoutData:
                     raise
 
                 with self._set_and_upload_training_and_holdout_data(
-                    2, dr_client, model_metadata_yaml_file, is_model_level=False
+                    2, dr_client, model_metadata_yaml_file
                 ) as (training_dataset_id_2, holdout_dataset_id_2):
                     try:
                         self._commit_training_holdout_data_changes_for_model_version(
@@ -446,3 +293,29 @@ class TestModelTrainingHoldoutData:
                         cleanup_models(dr_client, workspace_path)
 
         printout("Done")
+
+    @contextlib.contextmanager
+    def _set_and_upload_training_and_holdout_data(self, index, dr_client, model_metadata_yaml_file):
+        printout(f"({index}) Upload training and holdout datasets for unstructured model version.")
+        datasets_root = Path(__file__).parent / ".." / "datasets"
+        training_dataset_filepath = (
+            datasets_root / "juniors_3_year_stats_regression_unstructured_training.csv"
+        )
+        holdout_dataset_filepath = (
+            datasets_root / "juniors_3_year_stats_regression_unstructured_holdout.csv"
+        )
+        section_key = ModelSchema.VERSION_KEY
+        with upload_and_update_dataset(
+            dr_client,
+            training_dataset_filepath,
+            model_metadata_yaml_file,
+            section_key,
+            ModelSchema.TRAINING_DATASET_ID_KEY,
+        ) as training_dataset_id, upload_and_update_dataset(
+            dr_client,
+            holdout_dataset_filepath,
+            model_metadata_yaml_file,
+            section_key,
+            ModelSchema.HOLDOUT_DATASET_ID_KEY,
+        ) as holdout_dataset_id:
+            yield training_dataset_id, holdout_dataset_id
