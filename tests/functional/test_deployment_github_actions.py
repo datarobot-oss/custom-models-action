@@ -543,7 +543,7 @@ class TestDeploymentGitHubActions:
     def _validate_deployments_metric(metric, event_name, github_output_filepath):
         with open(github_output_filepath, "r", encoding="utf-8") as file:
             github_output_content = file.read()
-        metric_label = metric.user_facing_name(constants.Label.DEPLOYMENTS)
+        metric_label = metric.user_facing_name(constants.Label.DEPLOYMENTS.value)
         pattern = f"{metric_label}=(.*)"
         items = re.findall(pattern, github_output_content)
         assert len(items) == 1, (

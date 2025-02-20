@@ -1517,6 +1517,14 @@ class TestRegisteredModels:
 
             yield registered_model
 
+    @pytest.fixture
+    def patch_wait_for_async_resolution(self):
+        """Patch wait for async resolution method."""
+
+        with patch.object(DrClient, "_wait_for_async_resolution"):
+            yield
+
+    @pytest.mark.usefixtures("patch_wait_for_async_resolution")
     @responses.activate
     def test_create_new_registered_model(self, dr_client, paginated_url_factory):
         """Test creating new registered model"""
@@ -1535,6 +1543,7 @@ class TestRegisteredModels:
         responses.post(
             url=paginated_url_factory(DrClient.MODEL_PACKAGES_CREATE_ROUTE),
             match=[matchers.json_params_matcher(create_model_package_payload)],
+            headers={"Location": "https://dr/api/v2/status/67baedd52a54aeda01837ccb"},
             json={"id": "new_registered_model_id"},
             status=201,
         )
@@ -1545,6 +1554,7 @@ class TestRegisteredModels:
 
         assert registered_model_version == "new_registered_model_id"
 
+    @pytest.mark.usefixtures("patch_wait_for_async_resolution")
     @responses.activate
     def test_update_existing_registered_model(
         self,
@@ -1572,6 +1582,7 @@ class TestRegisteredModels:
         responses.post(
             url=paginated_url_factory(DrClient.MODEL_PACKAGES_CREATE_ROUTE),
             match=[matchers.json_params_matcher(create_model_package_payload)],
+            headers={"Location": "https://dr/api/v2/status/67baedd52a54aeda01837ccb"},
             json={"id": new_registered_model_id},
             status=201,
         )
