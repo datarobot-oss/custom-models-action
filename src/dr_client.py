@@ -1319,13 +1319,25 @@ class DrClient:
         response = self._http_requester.post(self.MODEL_PACKAGES_CREATE_ROUTE, json=payload)
         if response.status_code != 201:
             raise DataRobotClientError(
-                "Failed creating model package from custom model version. "
+                "Failed creating model's package from a custom model version. "
                 f"custom model version id: {custom_model_version_id}, "
                 f"Response status: {response.status_code}, "
                 f"Response body: {response.text}",
                 code=response.status_code,
             )
-        return response.json()
+        model_package = response.json()
+        try:
+            self._wait_for_async_resolution(
+                response.headers["Location"], max_wait=self.DEPLOYMENT_CREATE_MAX_WAIT_SEC
+            )
+        except HttpRequesterException as ex:
+            raise DataRobotClientError(
+                "Failed to build model's package. "
+                f"custom model version id: {custom_model_version_id}, "
+                f"Model package id: {model_package['id']}, "
+                f"Exception: {str(ex)}."
+            ) from ex
+        return model_package
 
     def _create_deployment_from_model_package(self, model_package, deployment_info):
         label = deployment_info.get_settings_value(DeploymentSchema.LABEL_KEY)
@@ -1348,7 +1360,7 @@ class DrClient:
         response = self._http_requester.post(self.DEPLOYMENTS_CREATE_ROUTE, json=payload)
         if response.status_code != 202:
             raise DataRobotClientError(
-                "Failed creating a deployment from a model package."
+                "Failed creating a deployment from a model package. "
                 f"User provided deployment id: {deployment_info.user_provided_id}, "
                 f"Model package id: {model_package['id']}, "
                 f"Response status: {response.status_code}, "
