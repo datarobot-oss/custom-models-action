@@ -489,6 +489,7 @@ def mock_full_binary_model_schema(mock_full_custom_model_checks):
         },
         ModelSchema.VERSION_KEY: {
             ModelSchema.MODEL_ENV_ID_KEY: "627790db5621558eedc4c7fa",
+            ModelSchema.MODEL_ENV_VERSION_ID_KEY: "67bb32e541aa2d6ec17cd6f3",
             ModelSchema.INCLUDE_GLOB_KEY: ["./"],
             ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
             ModelSchema.MEMORY_KEY: "100Mi",

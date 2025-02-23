@@ -240,6 +240,7 @@ class ModelSchema(SharedSchema):
 
     VERSION_KEY = "version"
     MODEL_ENV_ID_KEY = "model_environment_id"
+    MODEL_ENV_VERSION_ID_KEY = "model_environment_version_id"
     INCLUDE_GLOB_KEY = "include_glob_pattern"
     EXCLUDE_GLOB_KEY = "exclude_glob_pattern"
     MEMORY_KEY = "memory"
@@ -316,6 +317,7 @@ class ModelSchema(SharedSchema):
             },
             VERSION_KEY: {
                 MODEL_ENV_ID_KEY: And(str, ObjectId.is_valid),
+                Optional(MODEL_ENV_VERSION_ID_KEY): And(str, ObjectId.is_valid),
                 Optional(INCLUDE_GLOB_KEY, default=[]): And(
                     list, lambda lst: all(isinstance(e, str) and len(e) > 0 for e in lst)
                 ),
