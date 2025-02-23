@@ -586,11 +586,16 @@ class ModelController(ControllerBase):
             if model_info.is_affected_by_commit(latest_version):
                 logger.info("Model '%s' is affected by commit.", model_info.model_path)
 
-                if model_info.should_create_new_version(latest_version):
-                    if not custom_model:
-                        custom_model = self._create_custom_model(model_info)
-                        self.metrics.total_created.value += 1
+                # Apply model changes before creating a new version to ensure all fixes
+                # (e.g., target name adjustments) are in place. This prevents issues
+                # that could cause version creation to fail.
+                if not custom_model:
+                    custom_model = self._create_custom_model(model_info)
+                    self.metrics.total_created.value += 1
+                elif model_info.flags.should_update_settings:
+                    self._update_settings(custom_model, model_info)
 
+                if model_info.should_create_new_version(latest_version):
                     custom_model_id = custom_model["id"]
                     is_major_update = bool(latest_version and latest_version["isFrozen"])
                     latest_version = self._create_custom_model_version(
@@ -608,9 +613,6 @@ class ModelController(ControllerBase):
                         )
                     )
                     self._cache_new_custom_model_version(user_provided_id, latest_version)
-
-                if model_info.flags.should_update_settings:
-                    self._update_settings(custom_model, model_info)
 
                 self.metrics.total_affected.value += 1
             else:
