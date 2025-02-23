@@ -759,7 +759,7 @@ def upload_and_update_dataset(
 
 @contextlib.contextmanager
 def temporarily_upload_training_dataset_for_structured_model(
-    dr_client, model_metadata_yaml_file, is_model_level, event_name
+    dr_client, model_metadata_yaml_file, event_name
 ):
     """A method to temporarily upload a training dataset for a structured model."""
 
@@ -771,9 +771,7 @@ def temporarily_upload_training_dataset_for_structured_model(
         training_and_holdout_dataset_filepath = (
             datasets_root / "juniors_3_year_stats_regression_structured_training_with_holdout.csv"
         )
-        section_key = (
-            ModelSchema.SETTINGS_SECTION_KEY if is_model_level else ModelSchema.VERSION_KEY
-        )
+        section_key = ModelSchema.VERSION_KEY
         with upload_and_update_dataset(
             dr_client,
             training_and_holdout_dataset_filepath,

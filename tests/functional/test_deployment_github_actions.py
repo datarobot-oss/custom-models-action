@@ -492,7 +492,7 @@ class TestDeploymentGitHubActions:
         """An end-to-end case to test changes in deployment settings."""
 
         with temporarily_upload_training_dataset_for_structured_model(
-            dr_client, model_metadata_yaml_file, is_model_level=False, event_name=event_name
+            dr_client, model_metadata_yaml_file, event_name=event_name
         ):
             try:
                 # Run the GitHub action to create a model and deployment
@@ -731,7 +731,7 @@ class TestDeploymentGitHubActions:
             == new_deployment_settings["predictionsDataCollection"]["enabled"]
         )
         cls._validate_deployments_metric(
-            Metric("total_updated_settings"), event_name, github_output
+            Metric("total-updated-settings"), event_name, github_output
         )
 
     @contextlib.contextmanager
