@@ -422,6 +422,9 @@ class DrClient:
             base_env_id = model_info.get_value(
                 ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_ID_KEY
             )
+            base_env_version_id = model_info.get_value(
+                ModelSchema.VERSION_KEY, ModelSchema.MODEL_ENV_VERSION_ID_KEY,
+            )
             payload, file_objs = self._setup_payload_for_custom_model_version_creation(
                 is_major_update,
                 model_info,
@@ -429,6 +432,7 @@ class DrClient:
                 changed_file_paths,
                 file_ids_to_delete=file_ids_to_delete,
                 base_env_id=base_env_id,
+                base_env_version_id=base_env_version_id,
             )
             mp_encoder = MultipartEncoder(fields=payload)
             headers = {"Content-Type": mp_encoder.content_type}
@@ -590,6 +594,7 @@ class DrClient:
         changed_file_paths,
         file_ids_to_delete=None,
         base_env_id=None,
+        base_env_version_id=None,
     ):
         payload = [
             ("isMajorUpdate", str(is_major_update)),
@@ -610,6 +615,9 @@ class DrClient:
 
         if base_env_id:
             payload.append(("baseEnvironmentId", base_env_id))
+
+        if base_env_version_id:
+            payload.append(("baseEnvironmentVersionId", base_env_version_id))
 
         memory = model_info.get_value(ModelSchema.VERSION_KEY, ModelSchema.MEMORY_KEY)
         if memory:
