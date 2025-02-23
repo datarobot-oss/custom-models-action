@@ -14,6 +14,7 @@ import contextlib
 import logging
 import os
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -800,9 +801,19 @@ class TestDeploymentGitHubActions:
     def _simulate_model_error(self, model_metadata_yaml_file):
         model_dir_path = Path(model_metadata_yaml_file).parent
         try:
-            origin_pickle_file_path = next(model_dir_path.rglob("*.pkl"))
+            origin_custom_py_file_path = next(model_dir_path.rglob("custom.py"))
         except StopIteration:
-            assert False, "Missing model's pickle artifact"
-        tmp_pickle_file_path = origin_pickle_file_path.rename(f"{origin_pickle_file_path}.bak")
-        yield
-        tmp_pickle_file_path.rename(origin_pickle_file_path)
+            assert False, "Missing model's custom.py"
+
+        with self._backup_custom_py_file(origin_custom_py_file_path):
+            with open(origin_custom_py_file_path, "a", encoding="utf-8") as fd:
+                fd.write("raise Exception('Simulated error')")
+            yield
+
+    @contextlib.contextmanager
+    def _backup_custom_py_file(self, origin_custom_py_file_path):
+        try:
+            shutil.copy(origin_custom_py_file_path, f"{origin_custom_py_file_path}.bak")
+            yield
+        finally:
+            shutil.copy(f"{origin_custom_py_file_path}.bak", origin_custom_py_file_path)
