@@ -1,5 +1,12 @@
 # RELEASES
 
+## 1.6.1 [2025-02-23]
+* Set Python compatibility to <3.13 to ensure stability.
+* Update and refactor the Metrics class to ensure full compatibility with Python 3.12.
+* Pin dependencies to ensure compatibility reproducibility.
+* Internal improvements and bug fixes.
+* Linting and formatting improvements.
+
 ## 1.6.0 [2023-07-20]
 * Add support for training/holdout dataset assignment as model version level
 * Internal improvements
