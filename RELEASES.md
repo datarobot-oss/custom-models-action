@@ -1,5 +1,8 @@
 # RELEASES
 
+## 1.7.0 [2025-02-24]
+* Allow users to specify the execution environment version ID in the model metadata definition.
+
 ## 1.6.1 [2025-02-23]
 * Set Python compatibility to <3.13 to ensure stability.
 * Update and refactor the Metrics class to ensure full compatibility with Python 3.12.
