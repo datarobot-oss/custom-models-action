@@ -112,6 +112,7 @@ def fixture_regression_model_info():
         },
         ModelSchema.VERSION_KEY: {
             ModelSchema.MODEL_ENV_ID_KEY: "627790db5621558eedc4c7fa",
+            ModelSchema.MODEL_ENV_VERSION_ID_KEY: "67bb4397c2d6609d0075b104",
             ModelSchema.INCLUDE_GLOB_KEY: ["./"],
             ModelSchema.EXCLUDE_GLOB_KEY: ["README.md", "out/"],
             ModelSchema.MEMORY_KEY: 256 * 1024 * 1024,
