@@ -311,6 +311,7 @@ class ModelInfo(InfoBase):
 
         for resource_key, dr_attribute_key in (
             (ModelSchema.MODEL_ENV_ID_KEY, "baseEnvironmentId"),
+            (ModelSchema.MODEL_ENV_VERSION_ID_KEY, "baseEnvironmentVersionId"),
             (ModelSchema.MEMORY_KEY, "maximumMemory"),
             (ModelSchema.REPLICAS_KEY, "replicas"),
             (ModelSchema.EGRESS_NETWORK_POLICY_KEY, "networkEgressPolicy"),

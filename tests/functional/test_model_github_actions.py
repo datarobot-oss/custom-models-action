@@ -761,3 +761,42 @@ class TestModelGitHubActions:
 
         build_info = dr_client.get_custom_model_version_dependency_build_info(cm_version)
         assert build_info["buildStatus"] == "success"
+
+    @pytest.mark.usefixtures("cleanup", "skip_model_testing")
+    def test_e2e_model_version_with_provided_env_version_id(
+        self,
+        dr_client,
+        workspace_path,
+        git_repo,
+        model_metadata,
+        model_metadata_yaml_file,
+        main_branch_name,
+        sklearn_drop_in_environment,
+    ):
+        """
+        An end-to-end case to test model version with provided environment version ID.
+        """
+
+        shutil.rmtree(workspace_path / "models" / "model_2")
+        user_provided_id = ModelSchema.get_value(model_metadata, ModelSchema.MODEL_ID_KEY)
+
+        _, env_version_id = sklearn_drop_in_environment
+        model_metadata[ModelSchema.VERSION_KEY][ModelSchema.MODEL_ENV_VERSION_ID_KEY] = str(
+            env_version_id
+        )
+        save_new_metadata_and_commit(
+            model_metadata,
+            model_metadata_yaml_file,
+            git_repo,
+            "Update drop-in environment version ID.",
+        )
+
+        printout(
+            "Create a custom model with provided environment version ID. "
+            "Run custom model GitHub action (push event) ..."
+        )
+        run_github_action(workspace_path, git_repo, main_branch_name, "push", is_deploy=False)
+        cm_version = dr_client.fetch_custom_model_latest_version_by_user_provided_id(
+            user_provided_id
+        )
+        assert cm_version["baseEnvironmentVersionId"] == env_version_id

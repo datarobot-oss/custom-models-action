@@ -135,32 +135,42 @@ def cleanup_models(dr_client_tool, workspace_path):
                 pass
 
 
-@pytest.fixture(name="sklearn_environment_drop_in_id", scope="session")
-def fixture_sklearn_environment_drop_in_id(dr_client):
+@pytest.fixture(name="sklearn_drop_in_environment", scope="session")
+def fixture_sklearn_drop_in_environment(dr_client):
     """A fixture to fetch a sklearn environment drop-in to be used by the functional tests."""
 
     envs = dr_client.fetch_environment_drop_in()
     if len(envs) == 1:
-        return envs[0]["id"]  # Assuming local dev env
+        return envs[0]["id"], envs[0]["latestSuccessfulVersion"]["id"]  # Assuming local dev env
 
     try:
-        dr_sklearn_env_id = next(
-            e["id"]
+        dr_sklearn_env_id, dr_skleanr_env_ver_id = next(
+            (e["id"], e["latestSuccessfulVersion"]["id"])
             for e in envs
-            if re.search(r"[DataRobot] Python .* Scikit-Learn Drop-In", e["name"])
+            if re.search(r"[DataRobot].* Python .* Scikit-Learn Drop-In", e["name"])
         )
         if dr_sklearn_env_id:
-            return dr_sklearn_env_id
+            return dr_sklearn_env_id, dr_skleanr_env_ver_id
     except StopIteration:
         pass
 
-    any_sklearn_env_id = next(
-        e["id"] for e in envs if re.search(r"scikit-learn|sklearn|scikit", e["name"], re.I)
+    any_sklearn_env_id, any_sklearn_env_ver_id = next(
+        (e["id"], e["latestSuccessfulVersion"]["id"])
+        for e in envs
+        if re.search(r"scikit-learn|sklearn|scikit", e["name"], re.I)
     )
     if any_sklearn_env_id:
-        return any_sklearn_env_id
+        return any_sklearn_env_id, any_sklearn_env_ver_id
 
     assert False, "Scikit-Learn environment drop-in was not found in DR!"
+
+
+@pytest.fixture(name="sklearn_environment_drop_in_id", scope="session")
+def fixture_sklearn_environment_drop_in_id(sklearn_drop_in_environment):
+    """A fixture to fetch a sklearn environment drop-in ID to be used by the functional tests."""
+
+    env_id, _ = sklearn_drop_in_environment
+    return env_id
 
 
 def printout(msg):
