@@ -443,7 +443,7 @@ class ModelController(ControllerBase):
 
     def _get_latest_model_version_git_commit_ancestor(self, model_info):
         latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
-        logger.debug("Latest version queried: %s", json.dumps(latest_version.__dict__))
+        logger.debug("Latest version queried: %s", json.dumps(latest_version))
         git_model_version = latest_version.get("gitModelVersion")
         if not git_model_version:
             # Either the model has never provisioned or the user created a version with a non
