@@ -384,8 +384,8 @@ class ModelController(ControllerBase):
         return model_info
 
     def _set_datarobot_custom_model(self, user_provided_id, custom_model, latest_version=None):
-        logger.debug("Custom model: %s", json.dumps(custom_model.__dict__))
-        logger.debug("Latest version: %s", json.dumps(latest_version.__dict__))
+        logger.debug("Custom model: %s", json.dumps(custom_model))
+        logger.debug("Latest version: %s", json.dumps(latest_version))
         datarobot_model = DataRobotModel(model=custom_model, latest_version=latest_version)
         logger.debug("DataRobot model: %s", json.dumps(datarobot_model.__dict__))
         logger.debug("User-provided id: %s", user_provided_id)
