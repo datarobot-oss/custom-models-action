@@ -9,9 +9,9 @@ In highlights, it scans and loads model definitions from the local source tree, 
 validations and then applies actions in DataRobot.
 """
 
+import json
 import logging
 import os
-import json
 import re
 from abc import ABC
 from abc import abstractmethod
