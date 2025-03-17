@@ -448,6 +448,7 @@ class ModelController(ControllerBase):
         if not git_model_version:
             # Either the model has never provisioned or the user created a version with a non
             # GitHub action client.
+            logger.debug("No git model version found")
             return False
 
         return git_model_version[self.ancestor_attribute_ref(git_model_version)]
@@ -469,10 +470,12 @@ class ModelController(ControllerBase):
         str,
             The DataRobot public API attribute name.
         """
-
+        logger.debug("GIT model version: %s", json.dumps(git_model_version))
         latest_ref_name = git_model_version["refName"]
         if GitHubEnv.is_pull_request() and GitHubEnv.ref_name() == latest_ref_name:
+            logger.debug("Getting pull request commit sha")
             return "pullRequestCommitSha"
+        logger.debug("Getting main branch commit sha")
         return "mainBranchCommitSha"
 
     def _lookup_affected_models(self):
@@ -583,6 +586,7 @@ class ModelController(ControllerBase):
             return
 
         from_commit_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
+        logger.debug("Got commit SHA: %s", from_commit_sha)
         if not from_commit_sha:
             raise UnexpectedResult(
                 "Unexpected None ancestor commit sha, "
