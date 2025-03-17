@@ -9,6 +9,7 @@ In highlights, it scans and loads model definitions from the local source tree, 
 validations and then applies actions in DataRobot.
 """
 
+import json
 import logging
 import os
 import re
@@ -307,7 +308,11 @@ class ModelController(ControllerBase):
                 self._set_datarobot_custom_model(user_provided_id, custom_model, latest_version)
 
     def _set_datarobot_custom_model(self, user_provided_id, custom_model, latest_version=None):
+        logger.debug("Custom model: %s", json.dumps(custom_model.__dict__))
+        logger.debug("Latest version: %s", json.dumps(latest_version.__dict__))
         datarobot_model = DataRobotModel(model=custom_model, latest_version=latest_version)
+        logger.debug("DataRobot model: %s", json.dumps(datarobot_model.__dict__))
+        logger.debug("User-provided id: %s", user_provided_id)
         self.datarobot_models[user_provided_id] = datarobot_model
         self._datarobot_models_by_id[custom_model["id"]] = datarobot_model
         logger.debug(
@@ -362,6 +367,7 @@ class ModelController(ControllerBase):
 
     def _get_latest_model_version_git_commit_ancestor(self, model_info):
         latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
+        logger.debug("Latest version queried: %s", json.dumps(latest_version.__dict__))
         git_model_version = latest_version.get("gitModelVersion")
         if not git_model_version:
             # Either the model has never provisioned or the user created a version with a non
