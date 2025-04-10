@@ -499,7 +499,7 @@ class ModelController(ControllerBase):
             # The model has not yet been created or
             return
 
-        from_commit_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
+        from_commit_sha = self._get_git_commit_ancestor(model_info)
         if not from_commit_sha:
             raise UnexpectedResult(
                 "Unexpected None ancestor commit sha, "
