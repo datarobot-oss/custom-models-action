@@ -499,7 +499,11 @@ class ModelController(ControllerBase):
             # The model has not yet been created or
             return
 
-        from_commit_sha = self._get_git_commit_ancestor(model_info)
+        latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
+        if latest_version:
+            from_commit_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
+        else:
+            from_commit_sha = self._get_git_commit_ancestor(model_info)
         if not from_commit_sha:
             raise UnexpectedResult(
                 "Unexpected None ancestor commit sha, "
