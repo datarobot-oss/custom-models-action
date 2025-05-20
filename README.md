@@ -231,6 +231,7 @@ The action supports the following optional input arguments:
 | `--allow-model-deletion`      | Determines whether to detect local deleted model definitions and delete them in DataRobot <br> **Default**: `false`       |
 | `--models-only`               | Determines whether to manage custom inference models only or also deployments <br> **Default**: `false`                   |
 | `--skip-cert-verification`    | Determines whether a request to an HTTPS URL is made without a certificate verification. <br> **Default**: `false`        |
+| `--exclude`                   | Regex pattern to exclude YAML files from being processed. Can match any part of the file path.                            |
 
 ### A Namespace (Optional)
 

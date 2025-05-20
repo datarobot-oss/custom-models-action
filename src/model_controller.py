@@ -59,6 +59,7 @@ class ControllerBase(ABC):
             verify_cert=not self.options.skip_cert_verification,
         )
         self._metrics = Metrics(self._label())
+        self._exclude_pattern = re.compile(options.exclude) if hasattr(options, "exclude") else None
         logger.info(
             "GITHUB_EVENT_NAME: %s, GITHUB_SHA: %s, GITHUB_REPOSITORY: %s, GITHUB_REF_NAME: %s",
             GitHubEnv.event_name(),
@@ -82,7 +83,13 @@ class ControllerBase(ABC):
     def _next_yaml_content_in_repo(self):
         yaml_files = glob(f"{self._workspace_path}/**/*.yaml", recursive=True)
         yaml_files.extend(glob(f"{self._workspace_path}/**/*.yml", recursive=True))
+        
         for yaml_path in yaml_files:
+            # Skip files that match the exclude pattern
+            if self._exclude_pattern and self._exclude_pattern.search(yaml_path):
+                logger.debug("Excluding YAML file matching pattern: %s", yaml_path)
+                continue
+                
             with open(yaml_path, encoding="utf-8") as fd:
                 try:
                     yaml_content = yaml.safe_load(fd)
