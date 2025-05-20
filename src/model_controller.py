@@ -59,7 +59,7 @@ class ControllerBase(ABC):
             verify_cert=not self.options.skip_cert_verification,
         )
         self._metrics = Metrics(self._label())
-        self._exclude_pattern = re.compile(options.exclude) if hasattr(options, "exclude") else None
+        self._exclude_pattern = re.compile(options.exclude) if getattr(options, "exclude", None) else None
         logger.info(
             "GITHUB_EVENT_NAME: %s, GITHUB_SHA: %s, GITHUB_REPOSITORY: %s, GITHUB_REF_NAME: %s",
             GitHubEnv.event_name(),
