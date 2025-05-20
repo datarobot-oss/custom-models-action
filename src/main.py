@@ -50,6 +50,10 @@ def argparse_options(args=None):
         "--namespace", help="It is used to group and isolate models and deployments."
     )
     parser.add_argument(
+        "--exclude",
+        help="Regex pattern to exclude YAML files from being processed. Can match any part of the file path."
+    )
+    parser.add_argument(
         "--allow-model-deletion",
         action="store_true",
         help="Whether to detect local deleted model definitions and consequently delete them in "

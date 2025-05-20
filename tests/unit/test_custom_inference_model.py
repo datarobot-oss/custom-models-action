@@ -514,6 +514,7 @@ class TestGlobPatterns:
             api_token="abc",
             skip_cert_verification=True,
             branch="master",
+            exclude=None,
         )
         with patch.object(
             ModelController, "models_info", new_callable=PropertyMock
