@@ -369,6 +369,9 @@ class ModelInfo(InfoBase):
         configured_training_dataset = self.get_value(
             ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_ID_KEY
         )
+        if configured_training_dataset is None:
+            return False
+
         if datarobot_latest_model_version is None:
             # This can happen only when the custom model is first created and still does not have
             # any associated version. A hidden assumption is that a holdout data will never be set
