@@ -248,6 +248,7 @@ class DrClient:
 
     @classmethod
     def _setup_payload_for_custom_model_creation(cls, model_info, git_model_version):
+        logger.info(git_model_version)
         target_type = model_info.get_value(ModelSchema.TARGET_TYPE_KEY)
 
         payload = {

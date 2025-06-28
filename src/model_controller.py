@@ -134,6 +134,7 @@ class ModelController(ControllerBase):
         self._datarobot_models = {}
         self._datarobot_models_by_id = {}
         self._git_model_version = GitModelVersion(repo, options.branch)
+        logger.info(f"GitHub model version: {self._git_model_version}")
 
     def _label(self):
         return constants.Label.MODELS
