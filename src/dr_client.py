@@ -659,7 +659,7 @@ class DrClient:
             ]
             payload.append(("runtimeParameterValues", json.dumps(payload_params)))
 
-        print(payload)
+        logger.info(payload)
         return payload, file_objs
 
     @staticmethod
