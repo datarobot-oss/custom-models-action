@@ -301,6 +301,7 @@ class DrClient:
         ):
             payload["isTrainingDataForVersionsPermanentlyEnabled"] = True
 
+        logger.info(payload)
         return payload
 
     def fetch_custom_model_versions(self, custom_model_id, **kwargs):
