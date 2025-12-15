@@ -432,6 +432,43 @@ class TestCustomModelRoutes(SharedRouteTests):
         assert ex.value.code == status_code
 
     @responses.activate
+    def test_create_custom_model_idempotent(
+        self,
+        dr_client,
+        regression_model_info,
+        custom_models_url,
+        git_model_version,
+        custom_models_url_factory,
+        regression_model_response_factory,
+    ):
+        """A case to test idempotent custom model creation when model already exists."""
+
+        # Mock POST to fail with 422 and specific message.
+        status_code = 422
+        error_message = (
+            '{"message": "Cannot create a custom model with a user provided ID '
+            '(abc123) that equals to an already existing one."}'
+        )
+        responses.add(responses.POST, custom_models_url, body=error_message, status=status_code)
+
+        # Mock existing model
+        existing_model = mock_paginated_responses(
+            1, 1, custom_models_url_factory, regression_model_response_factory
+        )[0][0]
+
+        # Ensure the existing model has the correct userProvidedId
+        existing_model["userProvidedId"] = Namespace.namespaced(
+            regression_model_info.get_value(ModelSchema.MODEL_ID_KEY)
+        )
+
+        # Mock fetch_custom_models to return the existing model
+        with mock.patch.object(dr_client, "fetch_custom_models", return_value=[existing_model]):
+            custom_model = dr_client.create_custom_model(regression_model_info, git_model_version)
+            assert custom_model == existing_model
+            # Ensure POST was called and then fetch was called
+            assert len(responses.calls) == 1  # Only POST, fetch is mocked
+
+    @responses.activate
     def test_delete_custom_model_success(
         self,
         dr_client,
