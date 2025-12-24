@@ -242,33 +242,29 @@ class DrClient:
                     if existing_model:
                         logger.debug("Custom model already exists (id: %s)", existing_model["id"])
                         return existing_model
-                    # Unexpected, but raise the original error
-                    raise DataRobotClientError(
-                        f"Failed to create custom model. "
-                        f"Response status: {response.status_code} "
-                        f"Response body: {response.text}",
-                        code=response.status_code,
-                    )
             except json.JSONDecodeError as e:
                 logger.warning("Failed to parse error response as JSON: %s", e)
             # If not the specific error or parsing failed, raise the original error
-            raise DataRobotClientError(
-                f"Failed to create custom model. "
-                f"Response status: {response.status_code} "
-                f"Response body: {response.text}",
-                code=response.status_code,
-            )
+        raise DataRobotClientError(
+            f"Failed to create custom model. "
+            f"Response status: {response.status_code} "
+            f"Response body: {response.text}",
+            code=response.status_code,
+        )
 
     @classmethod
     def _setup_payload_for_custom_model_creation(cls, model_info, git_model_version):
         target_type = model_info.get_value(ModelSchema.TARGET_TYPE_KEY)
+
+        raw_id = model_info.get_value(ModelSchema.MODEL_ID_KEY)
+        namespaced_id = Namespace.namespaced(raw_id)
 
         payload = {
             "customModelType": constants.CUSTOM_MODEL_TYPE,
             "targetType": DrApiTargetType.to_dr_attr(target_type),
             "targetName": model_info.get_settings_value(ModelSchema.TARGET_NAME_KEY),
             "isUnstructuredModelKind": model_info.is_unstructured,
-            "userProvidedId": model_info.get_value(ModelSchema.MODEL_ID_KEY),
+            "userProvidedId": namespaced_id,
             "gitModelVersion": {
                 "refName": git_model_version.ref_name,
                 "commitUrl": git_model_version.commit_url,
