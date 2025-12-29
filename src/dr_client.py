@@ -167,8 +167,9 @@ class DrClient:
         """
 
         custom_models = self.fetch_custom_models()
+        namespaced_id = Namespace.namespaced(user_provided_id)
         try:
-            return next(cm for cm in custom_models if cm.get("userProvidedId") == user_provided_id)
+            return next(cm for cm in custom_models if cm.get("userProvidedId") == namespaced_id)
         except StopIteration:
             return None
 
@@ -205,6 +206,7 @@ class DrClient:
 
         return total_entities
 
+    # pylint: disable=inconsistent-return-statements
     def create_custom_model(self, model_info, git_model_version):
         """
         Create a custom model in DataRobot.
@@ -224,28 +226,53 @@ class DrClient:
 
         payload = self._setup_payload_for_custom_model_creation(model_info, git_model_version)
         response = self._http_requester.post(self.CUSTOM_MODELS_ROUTE, json=payload)
-        if response.status_code != 201:
-            raise DataRobotClientError(
-                f"Failed to create custom model. "
-                f"Response status: {response.status_code} "
-                f"Response body: {response.text}",
-                code=response.status_code,
-            )
+        if response.status_code == 201:
+            custom_model = response.json()
+            logger.debug("Custom model created successfully (id: %s)", custom_model["id"])
+            return custom_model
 
-        custom_model = response.json()
-        logger.debug("Custom model created successfully (id: %s)", custom_model["id"])
-        return custom_model
+        if response.status_code == 422:
+            try:
+                response_json = json.loads(response.text)
+                message = response_json.get("message", "")
+                if "Cannot create a custom model with a user provided ID" in message:
+                    # Model already exists, fetch it
+                    user_provided_id = model_info.get_value(ModelSchema.MODEL_ID_KEY)
+                    existing_model = self.fetch_custom_model_by_git_id(user_provided_id)
+                    if existing_model:
+                        logger.debug("Custom model already exists (id: %s)", existing_model["id"])
+                        return existing_model
+                    raise DataRobotClientError(
+                        f"Custom model creation failed due to existing "
+                        f"user provided ID : {user_provided_id}, "
+                        "but the model could not be found when fetching by that ID. "
+                        f"Response Status: {response.status_code}"
+                        f" Response body: {response.text}",
+                        code=response.status_code,
+                    )
+            except json.JSONDecodeError as e:
+                logger.warning("Failed to parse error response as JSON: %s", e)
+            # If not the specific error or parsing failed, raise the original error
+        raise DataRobotClientError(
+            f"Failed to create custom model. "
+            f"Response status: {response.status_code} "
+            f"Response body: {response.text}",
+            code=response.status_code,
+        )
 
     @classmethod
     def _setup_payload_for_custom_model_creation(cls, model_info, git_model_version):
         target_type = model_info.get_value(ModelSchema.TARGET_TYPE_KEY)
+
+        raw_id = model_info.get_value(ModelSchema.MODEL_ID_KEY)
+        namespaced_id = Namespace.namespaced(raw_id)
 
         payload = {
             "customModelType": constants.CUSTOM_MODEL_TYPE,
             "targetType": DrApiTargetType.to_dr_attr(target_type),
             "targetName": model_info.get_settings_value(ModelSchema.TARGET_NAME_KEY),
             "isUnstructuredModelKind": model_info.is_unstructured,
-            "userProvidedId": model_info.get_value(ModelSchema.MODEL_ID_KEY),
+            "userProvidedId": namespaced_id,
             "gitModelVersion": {
                 "refName": git_model_version.ref_name,
                 "commitUrl": git_model_version.commit_url,
