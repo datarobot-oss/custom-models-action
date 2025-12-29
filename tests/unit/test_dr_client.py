@@ -465,8 +465,8 @@ class TestCustomModelRoutes(SharedRouteTests):
         with mock.patch.object(dr_client, "fetch_custom_models", return_value=[existing_model]):
             custom_model = dr_client.create_custom_model(regression_model_info, git_model_version)
             assert custom_model == existing_model
-            # Ensure POST was called and then fetch was called
-            assert len(responses.calls) == 1  # Only POST, fetch is mocked
+            # Ensure POST was called via responses; fetch_custom_models is mocked separately
+            assert len(responses.calls) == 1
 
     @responses.activate
     def test_delete_custom_model_success(

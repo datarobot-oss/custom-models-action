@@ -242,6 +242,14 @@ class DrClient:
                     if existing_model:
                         logger.debug("Custom model already exists (id: %s)", existing_model["id"])
                         return existing_model
+                    raise DataRobotClientError(
+                        f"Custom model creation failed due to existing "
+                        f"user provided ID : {user_provided_id}, "
+                        "but the model could not be found when fetching by that ID. "
+                        f"Response Status: {response.status_code}"
+                        f" Response body: {response.text}",
+                        code=response.status_code,
+                    )
             except json.JSONDecodeError as e:
                 logger.warning("Failed to parse error response as JSON: %s", e)
             # If not the specific error or parsing failed, raise the original error
