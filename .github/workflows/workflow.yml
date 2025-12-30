@@ -6,7 +6,7 @@ name: Workflow CI/CD
 on:
   pull_request:
     branches: [ master ]
-    types: [ opened, synchronize, reopened, edited ]
+    types: [ opened, synchronize, reopened]
   push:
     branches: [ '**' ]
   issue_comment:
@@ -17,7 +17,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   LOGLEVEL: debug
