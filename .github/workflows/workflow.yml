@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -123,7 +123,7 @@ jobs:
         github.event.comment.body == null ||
         (github.event.issue.pull_request && contains(github.event.comment.body, '$FUNCTIONAL_TESTS='))
       ) &&
-      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true)
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
 
     needs: [run-unit-tests, validate-code-style]
 
