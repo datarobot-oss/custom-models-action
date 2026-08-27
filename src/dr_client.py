@@ -177,8 +177,9 @@ class DrClient:
         """
 
         custom_models = self.fetch_custom_models()
+        namespaced_id = Namespace.namespaced(user_provided_id)
         try:
-            return next(cm for cm in custom_models if cm.get("userProvidedId") == user_provided_id)
+            return next(cm for cm in custom_models if cm.get("userProvidedId") == namespaced_id)
         except StopIteration:
             return None
 
@@ -215,6 +216,7 @@ class DrClient:
 
         return total_entities
 
+    # pylint: disable=inconsistent-return-statements
     def create_custom_model(self, model_info, git_model_version):
         """
         Create a custom model in DataRobot.
@@ -234,28 +236,53 @@ class DrClient:
 
         payload = self._setup_payload_for_custom_model_creation(model_info, git_model_version)
         response = self._http_requester.post(self.CUSTOM_MODELS_ROUTE, json=payload)
-        if response.status_code != 201:
-            raise DataRobotClientError(
-                f"Failed to create custom model. "
-                f"Response status: {response.status_code} "
-                f"Response body: {response.text}",
-                code=response.status_code,
-            )
+        if response.status_code == 201:
+            custom_model = response.json()
+            logger.debug("Custom model created successfully (id: %s)", custom_model["id"])
+            return custom_model
 
-        custom_model = response.json()
-        logger.debug("Custom model created successfully (id: %s)", custom_model["id"])
-        return custom_model
+        if response.status_code == 422:
+            try:
+                response_json = json.loads(response.text)
+                message = response_json.get("message", "")
+                if "Cannot create a custom model with a user provided ID" in message:
+                    # Model already exists, fetch it
+                    user_provided_id = model_info.get_value(ModelSchema.MODEL_ID_KEY)
+                    existing_model = self.fetch_custom_model_by_git_id(user_provided_id)
+                    if existing_model:
+                        logger.debug("Custom model already exists (id: %s)", existing_model["id"])
+                        return existing_model
+                    raise DataRobotClientError(
+                        f"Custom model creation failed due to existing "
+                        f"user provided ID : {user_provided_id}, "
+                        "but the model could not be found when fetching by that ID. "
+                        f"Response Status: {response.status_code}"
+                        f" Response body: {response.text}",
+                        code=response.status_code,
+                    )
+            except json.JSONDecodeError as e:
+                logger.warning("Failed to parse error response as JSON: %s", e)
+            # If not the specific error or parsing failed, raise the original error
+        raise DataRobotClientError(
+            f"Failed to create custom model. "
+            f"Response status: {response.status_code} "
+            f"Response body: {response.text}",
+            code=response.status_code,
+        )
 
     @classmethod
     def _setup_payload_for_custom_model_creation(cls, model_info, git_model_version):
         target_type = model_info.get_value(ModelSchema.TARGET_TYPE_KEY)
+
+        raw_id = model_info.get_value(ModelSchema.MODEL_ID_KEY)
+        namespaced_id = Namespace.namespaced(raw_id)
 
         payload = {
             "customModelType": constants.CUSTOM_MODEL_TYPE,
             "targetType": DrApiTargetType.to_dr_attr(target_type),
             "targetName": model_info.get_settings_value(ModelSchema.TARGET_NAME_KEY),
             "isUnstructuredModelKind": model_info.is_unstructured,
-            "userProvidedId": model_info.get_value(ModelSchema.MODEL_ID_KEY),
+            "userProvidedId": namespaced_id,
             "gitModelVersion": {
                 "refName": git_model_version.ref_name,
                 "commitUrl": git_model_version.commit_url,
@@ -1353,13 +1380,25 @@ class DrClient:
         response = self._http_requester.post(self.MODEL_PACKAGES_CREATE_ROUTE, json=payload)
         if response.status_code != 201:
             raise DataRobotClientError(
-                "Failed creating model package from custom model version. "
+                "Failed creating model's package from a custom model version. "
                 f"custom model version id: {custom_model_version_id}, "
                 f"Response status: {response.status_code}, "
                 f"Response body: {response.text}",
                 code=response.status_code,
             )
-        return response.json()
+        model_package = response.json()
+        try:
+            self._wait_for_async_resolution(
+                response.headers["Location"], max_wait=self.DEPLOYMENT_CREATE_MAX_WAIT_SEC
+            )
+        except HttpRequesterException as ex:
+            raise DataRobotClientError(
+                "Failed to build model's package. "
+                f"custom model version id: {custom_model_version_id}, "
+                f"Model package id: {model_package['id']}, "
+                f"Exception: {str(ex)}."
+            ) from ex
+        return model_package
 
     def _create_deployment_from_model_package(self, model_package, deployment_info):
         label = deployment_info.get_settings_value(DeploymentSchema.LABEL_KEY)
@@ -1382,7 +1421,7 @@ class DrClient:
         response = self._http_requester.post(self.DEPLOYMENTS_CREATE_ROUTE, json=payload)
         if response.status_code != 202:
             raise DataRobotClientError(
-                "Failed creating a deployment from a model package."
+                "Failed creating a deployment from a model package. "
                 f"User provided deployment id: {deployment_info.user_provided_id}, "
                 f"Model package id: {model_package['id']}, "
                 f"Response status: {response.status_code}, "
@@ -1403,19 +1442,19 @@ class DrClient:
                 f"Model package id: {model_package['id']}, "
                 f"Exception: {str(ex)}."
             ) from ex
-        else:
-            logging_level, msg = self._report_runtime_deployment_logs_if_any(deployment_id)
-            if logging_level in (logging.WARNING, logging.ERROR):
-                raise DataRobotClientError(
-                    "A deployment reported a warning or an error. Stopping. "
-                    f"DataRobot deployment id: {deployment_id}, "
-                    f"User provided deployment id: {deployment_info.user_provided_id}, "
-                    f"Model package id: {model_package['id']}, "
-                    f"Message: {msg}"
-                )
-            response = self._http_requester.get(location, raw=True)
-            deployment = response.json()
-            return deployment
+
+        logging_level, msg = self._report_runtime_deployment_logs_if_any(deployment_id)
+        if logging_level in (logging.WARNING, logging.ERROR):
+            raise DataRobotClientError(
+                "A deployment reported a warning or an error. Stopping. "
+                f"DataRobot deployment id: {deployment_id}, "
+                f"User provided deployment id: {deployment_info.user_provided_id}, "
+                f"Model package id: {model_package['id']}, "
+                f"Message: {msg}"
+            )
+        response = self._http_requester.get(location, raw=True)
+        deployment = response.json()
+        return deployment
 
     def _report_persistent_deployment_logs_if_any(self, deployment_id):
         deployment_log_url = self.CUSTOM_MODEL_DEPLOYMENT_LOG_ROUTE.format(
