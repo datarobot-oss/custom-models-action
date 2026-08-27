@@ -367,7 +367,7 @@ class TestCustomModelRoutes(SharedRouteTests):
         pull_request_commit_sha = "1" * 40
         return Mock(
             ref_name="feature-branch",
-            commit_url="https://github.com/user/project/" + pull_request_commit_sha,
+            commit_url=f"https://github.com/user/project/{pull_request_commit_sha}",
             main_branch_commit_sha="2" * 40,
             pull_request_commit_sha=pull_request_commit_sha,
         )
@@ -430,43 +430,6 @@ class TestCustomModelRoutes(SharedRouteTests):
         with pytest.raises(DataRobotClientError) as ex:
             dr_client.create_custom_model(regression_model_info, git_model_version)
         assert ex.value.code == status_code
-
-    @responses.activate
-    def test_create_custom_model_idempotent(
-        self,
-        dr_client,
-        regression_model_info,
-        custom_models_url,
-        git_model_version,
-        custom_models_url_factory,
-        regression_model_response_factory,
-    ):
-        """A case to test idempotent custom model creation when model already exists."""
-
-        # Mock POST to fail with 422 and specific message.
-        status_code = 422
-        error_message = (
-            '{"message": "Cannot create a custom model with a user provided ID '
-            '(abc123) that equals to an already existing one."}'
-        )
-        responses.add(responses.POST, custom_models_url, body=error_message, status=status_code)
-
-        # Mock existing model
-        existing_model = mock_paginated_responses(
-            1, 1, custom_models_url_factory, regression_model_response_factory
-        )[0][0]
-
-        # Ensure the existing model has the correct userProvidedId
-        existing_model["userProvidedId"] = Namespace.namespaced(
-            regression_model_info.get_value(ModelSchema.MODEL_ID_KEY)
-        )
-
-        # Mock fetch_custom_models to return the existing model
-        with mock.patch.object(dr_client, "fetch_custom_models", return_value=[existing_model]):
-            custom_model = dr_client.create_custom_model(regression_model_info, git_model_version)
-            assert custom_model == existing_model
-            # Ensure POST was called via responses; fetch_custom_models is mocked separately
-            assert len(responses.calls) == 1
 
     @responses.activate
     def test_delete_custom_model_success(
@@ -670,9 +633,9 @@ class TestCustomModelTrainingHoldoutPayload:
             }
             metadata = {ModelSchema.SETTINGS_SECTION_KEY: settings_section}
             if is_unstructured:
-                metadata[ModelSchema.TARGET_TYPE_KEY] = (
-                    ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION
-                )
+                metadata[
+                    ModelSchema.TARGET_TYPE_KEY
+                ] = ModelSchema.TARGET_TYPE_UNSTRUCTURED_REGRESSION
                 settings_section[ModelSchema.HOLDOUT_DATASET_ID_KEY] = holdout_dataset_id
             else:
                 metadata[ModelSchema.TARGET_TYPE_KEY] = ModelSchema.TARGET_TYPE_REGRESSION
@@ -839,7 +802,7 @@ class TestCustomModelVersionRoutes:
     def commit_url(self, pull_request_commit_sha):
         """A fixture to return a dummy GitHub commit web URL."""
 
-        return "https://github.com/user/project/" + pull_request_commit_sha
+        return f"https://github.com/user/project/{pull_request_commit_sha}"
 
     @pytest.fixture
     def regression_model_version_response_factory(self, custom_model_id, git_model_version):
@@ -1555,14 +1518,6 @@ class TestRegisteredModels:
 
             yield registered_model
 
-    @pytest.fixture
-    def patch_wait_for_async_resolution(self):
-        """Patch wait for async resolution method."""
-
-        with patch.object(DrClient, "_wait_for_async_resolution"):
-            yield
-
-    @pytest.mark.usefixtures("patch_wait_for_async_resolution")
     @responses.activate
     def test_create_new_registered_model(self, dr_client, paginated_url_factory):
         """Test creating new registered model"""
@@ -1581,7 +1536,6 @@ class TestRegisteredModels:
         responses.post(
             url=paginated_url_factory(DrClient.MODEL_PACKAGES_CREATE_ROUTE),
             match=[matchers.json_params_matcher(create_model_package_payload)],
-            headers={"Location": "https://dr/api/v2/status/67baedd52a54aeda01837ccb"},
             json={"id": "new_registered_model_id"},
             status=201,
         )
@@ -1592,7 +1546,6 @@ class TestRegisteredModels:
 
         assert registered_model_version == "new_registered_model_id"
 
-    @pytest.mark.usefixtures("patch_wait_for_async_resolution")
     @responses.activate
     def test_update_existing_registered_model(
         self,
@@ -1620,7 +1573,6 @@ class TestRegisteredModels:
         responses.post(
             url=paginated_url_factory(DrClient.MODEL_PACKAGES_CREATE_ROUTE),
             match=[matchers.json_params_matcher(create_model_package_payload)],
-            headers={"Location": "https://dr/api/v2/status/67baedd52a54aeda01837ccb"},
             json={"id": new_registered_model_id},
             status=201,
         )

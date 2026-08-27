@@ -16,8 +16,6 @@ class HttpRequester:
     setup authorization credentials in the form of a token.
     """
 
-    MAX_QUERY_TIMEOUT = 30.0
-
     def __init__(self, base_url, api_token=None, verify_cert=True):
         self._base_url = base_url
         self._verify_cert = verify_cert
@@ -54,13 +52,7 @@ class HttpRequester:
         """
 
         url = endpoint_sub_url if raw else self._url(endpoint_sub_url)
-        return requests.get(
-            url,
-            headers=self._headers.copy(),
-            verify=self._verify_cert,
-            timeout=self.MAX_QUERY_TIMEOUT,
-            **kwargs,
-        )
+        return requests.get(url, headers=self._headers.copy(), verify=self._verify_cert, **kwargs)
 
     def post(self, endpoint_sub_url, data=None, json=None, headers=None):
         """
@@ -89,12 +81,7 @@ class HttpRequester:
 
         url = self._url(endpoint_sub_url)
         return requests.post(
-            url,
-            data=data,
-            json=json,
-            headers=request_headers,
-            verify=self._verify_cert,
-            timeout=self.MAX_QUERY_TIMEOUT,
+            url, data=data, json=json, headers=request_headers, verify=self._verify_cert
         )
 
     def patch(self, endpoint_sub_url, data=None, json=None, headers=None):
@@ -124,12 +111,7 @@ class HttpRequester:
 
         url = self._url(endpoint_sub_url)
         return requests.patch(
-            url,
-            data=data,
-            json=json,
-            headers=request_headers,
-            verify=self._verify_cert,
-            timeout=self.MAX_QUERY_TIMEOUT,
+            url, data=data, json=json, headers=request_headers, verify=self._verify_cert
         )
 
     def delete(self, endpoint_sub_url):
@@ -148,9 +130,4 @@ class HttpRequester:
         """
 
         url = self._url(endpoint_sub_url)
-        return requests.delete(
-            url,
-            headers=self._headers.copy(),
-            verify=self._verify_cert,
-            timeout=self.MAX_QUERY_TIMEOUT,
-        )
+        return requests.delete(url, headers=self._headers.copy(), verify=self._verify_cert)

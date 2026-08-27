@@ -14,7 +14,6 @@ import contextlib
 import logging
 import os
 import re
-import shutil
 from pathlib import Path
 
 import pytest
@@ -26,9 +25,9 @@ from common.exceptions import DataRobotClientError
 from common.exceptions import IllegalModelDeletion
 from common.namepsace import Namespace
 from deployment_info import DeploymentInfo
+from metrics import Metrics
 from schema_validator import DeploymentSchema
 from schema_validator import ModelSchema
-from src.metrics import Metric
 from tests.conftest import unique_str
 from tests.functional.conftest import cleanup_models
 from tests.functional.conftest import increase_model_memory_by_1mb
@@ -149,7 +148,7 @@ class TestDeploymentGitHubActions:
             git_repo.head.reset(index=True, working_tree=True)
             git_repo.git.merge(feature_branch, "--no-ff")
         else:
-            raise ValueError("Unsupported git event!")
+            raise Exception("Unsupported git event!")
 
     @pytest.mark.parametrize("event_name", ["push", "pull_request"])
     @pytest.mark.usefixtures("skip_model_testing")
@@ -492,7 +491,7 @@ class TestDeploymentGitHubActions:
         """An end-to-end case to test changes in deployment settings."""
 
         with temporarily_upload_training_dataset_for_structured_model(
-            dr_client, model_metadata_yaml_file, event_name=event_name
+            dr_client, model_metadata_yaml_file, is_model_level=False, event_name=event_name
         ):
             try:
                 # Run the GitHub action to create a model and deployment
@@ -526,7 +525,7 @@ class TestDeploymentGitHubActions:
                             workspace_path, git_repo, main_branch_name, event_name, is_deploy=True
                         )
                         self._validate_deployments_metric(
-                            Metric("total-affected"), event_name, github_output
+                            Metrics.total_affected, event_name, github_output
                         )
             finally:
                 cleanup_deployment(dr_client, deployment_metadata)
@@ -544,7 +543,7 @@ class TestDeploymentGitHubActions:
     def _validate_deployments_metric(metric, event_name, github_output_filepath):
         with open(github_output_filepath, "r", encoding="utf-8") as file:
             github_output_content = file.read()
-        metric_label = metric.user_facing_name(constants.Label.DEPLOYMENTS.value)
+        metric_label = Metrics.metric_label(constants.Label.DEPLOYMENTS, metric.label)
         pattern = f"{metric_label}=(.*)"
         items = re.findall(pattern, github_output_content)
         assert len(items) == 1, (
@@ -669,27 +668,27 @@ class TestDeploymentGitHubActions:
         )
         expected_values = {}
         if event_name == "push":
-            expected_values[DeploymentSchema.ENABLE_TARGET_DRIFT_KEY] = (
-                deployment_info.get_settings_value(DeploymentSchema.ENABLE_TARGET_DRIFT_KEY)
-            )
+            expected_values[
+                DeploymentSchema.ENABLE_TARGET_DRIFT_KEY
+            ] = deployment_info.get_settings_value(DeploymentSchema.ENABLE_TARGET_DRIFT_KEY)
 
-            expected_values[DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY] = (
-                deployment_info.get_settings_value(DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY)
-            )
+            expected_values[
+                DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY
+            ] = deployment_info.get_settings_value(DeploymentSchema.ENABLE_FEATURE_DRIFT_KEY)
 
-            expected_values[DeploymentSchema.SEGMENT_ANALYSIS_KEY] = (
-                deployment_info.get_settings_value(
-                    DeploymentSchema.SEGMENT_ANALYSIS_KEY,
-                    DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY,
-                )
+            expected_values[
+                DeploymentSchema.SEGMENT_ANALYSIS_KEY
+            ] = deployment_info.get_settings_value(
+                DeploymentSchema.SEGMENT_ANALYSIS_KEY,
+                DeploymentSchema.ENABLE_SEGMENT_ANALYSIS_KEY,
             )
-            expected_values[DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY] = (
-                deployment_info.get_settings_value(DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY)
-            )
-            expected_values[DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY] = (
-                deployment_info.get_settings_value(
-                    DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY
-                )
+            expected_values[
+                DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY
+            ] = deployment_info.get_settings_value(DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY)
+            expected_values[
+                DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY
+            ] = deployment_info.get_settings_value(
+                DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY
             )
         elif event_name == "pull_request":
             expected_values[DeploymentSchema.ENABLE_TARGET_DRIFT_KEY] = origin_deployment_settings[
@@ -701,12 +700,12 @@ class TestDeploymentGitHubActions:
             expected_values[DeploymentSchema.SEGMENT_ANALYSIS_KEY] = new_deployment_settings[
                 "segmentAnalysis"
             ]["enabled"]
-            expected_values[DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY] = (
-                origin_deployment_settings["challengerModels"]["enabled"]
-            )
-            expected_values[DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY] = (
-                origin_deployment_settings["predictionsDataCollection"]["enabled"]
-            )
+            expected_values[
+                DeploymentSchema.ENABLE_CHALLENGER_MODELS_KEY
+            ] = origin_deployment_settings["challengerModels"]["enabled"]
+            expected_values[
+                DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY
+            ] = origin_deployment_settings["predictionsDataCollection"]["enabled"]
         else:
             assert False, f"Unsupported GitHub event name: {event_name}"
 
@@ -730,9 +729,7 @@ class TestDeploymentGitHubActions:
             expected_values[DeploymentSchema.ENABLE_PREDICTIONS_COLLECTION_KEY]
             == new_deployment_settings["predictionsDataCollection"]["enabled"]
         )
-        cls._validate_deployments_metric(
-            Metric("total-updated-settings"), event_name, github_output
-        )
+        cls._validate_deployments_metric(Metrics.total_updated_settings, event_name, github_output)
 
     @contextlib.contextmanager
     def _set_namespace(self, namespace):
@@ -801,19 +798,9 @@ class TestDeploymentGitHubActions:
     def _simulate_model_error(self, model_metadata_yaml_file):
         model_dir_path = Path(model_metadata_yaml_file).parent
         try:
-            origin_custom_py_file_path = next(model_dir_path.rglob("custom.py"))
+            origin_pickle_file_path = next(model_dir_path.rglob("*.pkl"))
         except StopIteration:
-            assert False, "Missing model's custom.py"
-
-        with self._backup_custom_py_file(origin_custom_py_file_path):
-            with open(origin_custom_py_file_path, "a", encoding="utf-8") as fd:
-                fd.write("raise Exception('Simulated error')")
-            yield
-
-    @contextlib.contextmanager
-    def _backup_custom_py_file(self, origin_custom_py_file_path):
-        try:
-            shutil.copy(origin_custom_py_file_path, f"{origin_custom_py_file_path}.bak")
-            yield
-        finally:
-            shutil.copy(f"{origin_custom_py_file_path}.bak", origin_custom_py_file_path)
+            assert False, "Missing model's pickle artifact"
+        tmp_pickle_file_path = origin_pickle_file_path.rename(f"{origin_pickle_file_path}.bak")
+        yield
+        tmp_pickle_file_path.rename(origin_pickle_file_path)
