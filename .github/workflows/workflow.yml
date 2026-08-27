@@ -8,7 +8,7 @@ on:
     branches: [ master ]
     types: [ opened, synchronize, reopened, edited ]
   push:
-    branches: [ '**' ]
+    branches: [ master ]
   issue_comment:
     types: [ created, edited ]
 
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}
   cancel-in-progress: true
 
 env:
@@ -88,7 +88,7 @@ jobs:
           echo "${{ toJson(github) }}" >> $OUT_DIR/github_context.txt
           echo "" >> $OUT_DIR/github_context.txt
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         if: ${{ env.INSPECT_CONTEXT == 'true' }}
         with:
           name: Context info artifact
@@ -119,11 +119,8 @@ jobs:
 
   run-functional-test:
     if: |
-      (
-        github.event.comment.body == null ||
-        (github.event.issue.pull_request && contains(github.event.comment.body, '$FUNCTIONAL_TESTS='))
-      ) &&
-      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+      github.event.comment.body == null ||
+      (github.event.issue.pull_request && contains(github.event.comment.body, '$FUNCTIONAL_TESTS='))
 
     needs: [run-unit-tests, validate-code-style]
 
