@@ -315,6 +315,7 @@ class ModelInfo(InfoBase):
             (ModelSchema.MEMORY_KEY, "maximumMemory"),
             (ModelSchema.REPLICAS_KEY, "replicas"),
             (ModelSchema.EGRESS_NETWORK_POLICY_KEY, "networkEgressPolicy"),
+            (ModelSchema.RESOURCE_BUNDLE_ID, "resourceBundleId"),
         ):
             configured_resource = self.get_value(ModelSchema.VERSION_KEY, resource_key)
             if configured_resource and configured_resource != datarobot_latest_model_version.get(
@@ -329,6 +330,34 @@ class ModelInfo(InfoBase):
                 )
                 return True
 
+        model_parameters = self.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
+        )
+        if model_parameters:
+            for param in model_parameters:
+                latest_version_param = next(
+                    (
+                        p
+                        for p in datarobot_latest_model_version["runtimeParameters"]
+                        if p["fieldName"] == param["name"]
+                    ),
+                    None,
+                )
+                if latest_version_param is None:
+                    raise ValueError(
+                        f"Model version on server does not have runtime param: '{param['name']}'"
+                    )
+
+                if param["value"] != latest_version_param["currentValue"]:
+                    logger.debug(
+                        "Need to create new version. Runtime param '%s' changed. "
+                        "Configured value: '%s'. Value on server: '%s'",
+                        param["name"],
+                        param["value"],
+                        latest_version_param["currentValue"],
+                    )
+                    return True
+
         return False
 
     def is_there_a_change_in_training_or_holdout_data_at_version_level(
@@ -340,15 +369,20 @@ class ModelInfo(InfoBase):
         configured_training_dataset = self.get_value(
             ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_ID_KEY
         )
+        if configured_training_dataset is None:
+            return False
+
         if datarobot_latest_model_version is None:
             # This can happen only when the custom model is first created and still does not have
             # any associated version. A hidden assumption is that a holdout data will never be set
             # without a training data
             return configured_training_dataset is not None
 
-        latest_training_dataset = datarobot_latest_model_version.get("training_data", {}).get(
-            "dataset_id"
+        latest_training_data = datarobot_latest_model_version.get("trainingData", None)
+        latest_training_dataset = (
+            latest_training_data["datasetId"] if latest_training_data else None
         )
+
         if configured_training_dataset != latest_training_dataset:
             logger.debug("Configured training dataset != latest training dataset")
             return True
@@ -358,9 +392,12 @@ class ModelInfo(InfoBase):
             configured_holdout_dataset = self.get_value(
                 ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_ID_KEY
             )
-            latest_holdout_dataset = datarobot_latest_model_version.get("holdout_data", {}).get(
-                "dataset_id"
+
+            latest_holdout_data = datarobot_latest_model_version.get("holdoutData", None)
+            latest_holdout_dataset = (
+                latest_holdout_data["datasetId"] if latest_holdout_data else None
             )
+
             if configured_holdout_dataset != latest_holdout_dataset:
                 logger.debug("Configured holdout dataset != latest holdout dataset")
                 return True

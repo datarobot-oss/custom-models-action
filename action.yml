@@ -41,6 +41,10 @@ inputs:
       Whether a request to an HTTPS URL will be made without a certificate verification.
     required: false
     default: 'false'
+  exclude:
+    description: |
+      Regex pattern to exclude YAML files from being processed. Can match any part of the file path.
+    required: false
 outputs:
   models--total-affected: # id of output
     description: 'The total number of models that were affected.'
@@ -84,6 +88,7 @@ runs:
         ${{ inputs.allow-deployment-deletion == 'true' }} && allow_deployment_deletion_arg='--allow-deployment-deletion'
         ${{ inputs.models_only == 'true' }} && models_only_arg='--models-only'
         ${{ inputs.skip-cert-verification == 'true' }} && verify_cert_arg='--skip-cert-verification'
+        ${{ inputs.exclude != '' }} && exclude_arg='--exclude ${{ inputs.exclude }}'
 
         python ${GITHUB_ACTION_PATH}/src/main.py \
           --api-token ${{ inputs.api-token }} \
@@ -93,5 +98,6 @@ runs:
           ${allow_model_deletion_arg} \
           ${allow_deployment_deletion_arg} \
           ${models_only_arg} \
-          ${verify_cert_arg}
+          ${verify_cert_arg} \
+          ${exclude_arg}
       shell: bash

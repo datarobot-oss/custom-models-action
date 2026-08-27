@@ -331,6 +331,7 @@ def options(workspace_path):
             allow_deployment_deletion=True,
             skip_cert_verification=True,
             models_only=False,
+            exclude=None,
         )
 
 

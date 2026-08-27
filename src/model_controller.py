@@ -8,7 +8,8 @@ This module controls and coordinate between local model definitions and DataRobo
 In highlights, it scans and loads model definitions from the local source tree, perform
 validations and then applies actions in DataRobot.
 """
-
+import hashlib
+import json
 import logging
 import os
 import re
@@ -58,6 +59,7 @@ class ControllerBase(ABC):
             verify_cert=not self.options.skip_cert_verification,
         )
         self._metrics = Metrics(self._label())
+        self._exclude_pattern = re.compile(options.exclude) if getattr(options, "exclude", None) else None
         logger.info(
             "GITHUB_EVENT_NAME: %s, GITHUB_SHA: %s, GITHUB_REPOSITORY: %s, GITHUB_REF_NAME: %s",
             GitHubEnv.event_name(),
@@ -81,9 +83,20 @@ class ControllerBase(ABC):
     def _next_yaml_content_in_repo(self):
         yaml_files = glob(f"{self._workspace_path}/**/*.yaml", recursive=True)
         yaml_files.extend(glob(f"{self._workspace_path}/**/*.yml", recursive=True))
+        
         for yaml_path in yaml_files:
+            # Skip files that match the exclude pattern
+            if self._exclude_pattern and self._exclude_pattern.search(yaml_path):
+                logger.debug("Excluding YAML file matching pattern: %s", yaml_path)
+                continue
+                
             with open(yaml_path, encoding="utf-8") as fd:
-                yaml_content = yaml.safe_load(fd)
+                try:
+                    yaml_content = yaml.safe_load(fd)
+                except yaml.YAMLError:
+                    logger.warning("Failed to parse yaml file: %s", yaml_path, exc_info=True)
+                    continue
+                    
                 if not yaml_content:
                     logger.warning("Detected an invalid or empty yaml file: %s", yaml_path)
                 else:
@@ -306,8 +319,83 @@ class ModelController(ControllerBase):
                     )
                 self._set_datarobot_custom_model(user_provided_id, custom_model, latest_version)
 
+    @staticmethod
+    def _replace_runtime_param_credentials(model_info, credentials):
+        """Replace credential runtime parameter name with id so that it can be compared with the id
+        present in the serverside runtime parameter value."""
+        model_parameters = model_info.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
+        )
+        if not model_parameters:
+            return model_info
+
+        for param in model_parameters:
+            if param["type"] != "credential":
+                continue
+
+            try:
+                param["value"] = next(
+                    (c["credentialId"] for c in credentials if c["name"] == param["value"])
+                )
+            except StopIteration:
+                raise ValueError(f"Failed to find credential with name {param['value']}.")
+
+        model_info.set_value(
+            ModelSchema.VERSION_KEY,
+            ModelSchema.RUNTIME_PARAMETER_VALUES_KEY,
+            value=model_parameters,
+        )
+
+        return model_info
+
+    def _populate_dataset_id_from_file(self, model_info):
+        dataset_file = model_info.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_FILE_KEY
+        )
+        if not dataset_file:
+            return model_info
+
+        dataset_file_path = model_info.model_path / dataset_file
+        if not dataset_file_path.exists():
+            raise ValueError(f"Dataset file: '{dataset_file_path}' does not exist.")
+
+        BUF_SIZE = 65536  # TODO: Put somewhere else
+        sha1 = hashlib.sha1()
+        with open(dataset_file_path, "rb") as f:
+            while True:
+                data = f.read(BUF_SIZE)
+                if not data:
+                    break
+                sha1.update(data)
+
+        checksum = sha1.hexdigest()
+
+        catalog_item_name = f"{model_info.user_provided_id}_{dataset_file}_{checksum}"
+
+        items = self._dr_client.fetch_catalog_items(search_for=catalog_item_name)
+        matching_items = [item for item in items if item["catalogName"] == catalog_item_name]
+        if len(matching_items) > 1:
+            raise Exception(f"Found multiple items in catalog with name: '{catalog_item_name}'")
+
+        if not matching_items:
+            dataset = self._dr_client.create_dataset_from_file(dataset_file_path)
+            dataset_id = dataset["datasetId"]
+            self._dr_client.update_dataset(dataset_id, catalog_item_name)
+        else:
+            dataset_id = matching_items[0]["id"]
+
+        model_info.set_value(
+            ModelSchema.VERSION_KEY, ModelSchema.TRAINING_DATASET_ID_KEY, value=dataset_id
+        )
+
+        return model_info
+
     def _set_datarobot_custom_model(self, user_provided_id, custom_model, latest_version=None):
+        logger.debug("Custom model: %s", json.dumps(custom_model))
+        logger.debug("Latest version: %s", json.dumps(latest_version))
         datarobot_model = DataRobotModel(model=custom_model, latest_version=latest_version)
+        logger.debug("DataRobot model: %s", json.dumps(datarobot_model.__dict__))
+        logger.debug("User-provided id: %s", user_provided_id)
         self.datarobot_models[user_provided_id] = datarobot_model
         self._datarobot_models_by_id[custom_model["id"]] = datarobot_model
         logger.debug(
@@ -362,10 +450,12 @@ class ModelController(ControllerBase):
 
     def _get_latest_model_version_git_commit_ancestor(self, model_info):
         latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
+        logger.debug("Latest version queried: %s", json.dumps(latest_version))
         git_model_version = latest_version.get("gitModelVersion")
         if not git_model_version:
             # Either the model has never provisioned or the user created a version with a non
             # GitHub action client.
+            logger.debug("No git model version found")
             return False
 
         return git_model_version[self.ancestor_attribute_ref(git_model_version)]
@@ -387,10 +477,12 @@ class ModelController(ControllerBase):
         str,
             The DataRobot public API attribute name.
         """
-
+        logger.debug("GIT model version: %s", json.dumps(git_model_version))
         latest_ref_name = git_model_version["refName"]
         if GitHubEnv.is_pull_request() and GitHubEnv.ref_name() == latest_ref_name:
+            logger.debug("Getting pull request commit sha")
             return "pullRequestCommitSha"
+        logger.debug("Getting main branch commit sha")
         return "mainBranchCommitSha"
 
     def _lookup_affected_models(self):
@@ -414,7 +506,11 @@ class ModelController(ControllerBase):
             # The model has not yet been created or
             return
 
-        from_commit_sha = self._get_git_commit_ancestor(model_info)
+        latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
+        if latest_version:
+            from_commit_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
+        else:
+            from_commit_sha = self._get_git_commit_ancestor(model_info)
         if not from_commit_sha:
             raise UnexpectedResult(
                 "Unexpected None ancestor commit sha, "
@@ -501,6 +597,7 @@ class ModelController(ControllerBase):
             return
 
         from_commit_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
+        logger.debug("Got commit SHA: %s", from_commit_sha)
         if not from_commit_sha:
             raise UnexpectedResult(
                 "Unexpected None ancestor commit sha, "
@@ -576,12 +673,17 @@ class ModelController(ControllerBase):
     def handle_model_changes(self):
         """Apply changes in DataRobot for models that were affected by the current commit."""
 
+        credentials = self._dr_client.fetch_credentials()
+
         for user_provided_id, model_info in self.models_info.items():
             already_exists = user_provided_id in self.datarobot_models
             custom_model = self.datarobot_models[user_provided_id].model if already_exists else None
             previous_latest_version = latest_version = (
                 self.datarobot_models[user_provided_id].latest_version if already_exists else None
             )
+
+            model_info = self._replace_runtime_param_credentials(model_info, credentials)
+            model_info = self._populate_dataset_id_from_file(model_info)
 
             if model_info.is_affected_by_commit(latest_version):
                 logger.info("Model '%s' is affected by commit.", model_info.model_path)
@@ -631,15 +733,91 @@ class ModelController(ControllerBase):
                     custom_model["id"], latest_version["id"], model_info
                 )
 
-            if model_info.should_register_model:
-                self._dr_client.create_or_update_registered_model(
-                    latest_version["id"], model_info.registered_model_name
+            self._handle_model_registry(model_info, latest_version)
+
+    def _handle_model_registry(self, model_info, latest_version):
+        if not model_info.should_register_model:
+            return
+
+        registered_model_version = self._dr_client.create_or_update_registered_model(
+            latest_version["id"], model_info.registered_model_name
+        )
+        self._dr_client.update_registered_model(
+            model_info.registered_model_name,
+            model_info.registered_model_description,
+            model_info.registered_model_global,
+        )
+
+        self._handle_compliance_docs(model_info, registered_model_version)
+        self._handle_key_values(model_info, registered_model_version)
+
+    def _handle_compliance_docs(self, model_info, registered_model_version):
+        if not model_info.get_value(
+            ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.COMPLIANCE_DOCS_KEY
+        ):
+            return
+
+        docs_count = registered_model_version["complianceDocsCount"]
+        if docs_count is not None and docs_count > 0:
+            logger.debug("Compliance docs already present. Model: %s", model_info.user_provided_id)
+            return
+
+        logger.info("Generating compliance docs. Model: %s", model_info.user_provided_id)
+        compliance_docs_initialization = self._dr_client.fetch_compliance_docs_initialization(
+            registered_model_version["id"]
+        )
+        if not compliance_docs_initialization["initialized"]:
+            self._dr_client.perform_compliance_docs_initialization(registered_model_version["id"])
+
+        self._dr_client.create_compliance_docs(registered_model_version["id"])
+
+    def _handle_key_values(self, model_info, registered_model_version):
+        local_key_values = model_info.get_value(
+            ModelSchema.MODEL_REGISTRY_KEY, ModelSchema.VERSION_KEY, ModelSchema.KEY_VALUES_KEY
+        )
+        if not local_key_values:
+            return
+
+        server_key_values = self._dr_client.fetch_key_values(registered_model_version["id"])
+
+        for local_key_value in local_key_values:
+            match = next(
+                (kv for kv in server_key_values if kv["name"] == local_key_value["name"]), None
+            )
+
+            if match:
+                if (
+                    str(local_key_value["value"]) == match["value"]
+                    and local_key_value["category"] == match["category"]
+                ):
+                    continue
+                else:
+                    self._dr_client.update_key_value(
+                        match["id"],
+                        registered_model_version["id"],
+                        local_key_value["name"],
+                        local_key_value["category"],
+                        local_key_value["value"],
+                        local_key_value["value_type"],
+                    )
+            else:
+                self._dr_client.create_key_value(
+                    registered_model_version["id"],
+                    local_key_value["name"],
+                    local_key_value["category"],
+                    local_key_value["value"],
+                    local_key_value["value_type"],
                 )
-                self._dr_client.update_registered_model(
-                    model_info.registered_model_name,
-                    model_info.registered_model_description,
-                    model_info.registered_model_global,
-                )
+
+        for server_key_value in server_key_values:
+            if server_key_value["creatorName"] == "system":
+                continue
+
+            match = next(
+                (kv for kv in local_key_values if kv["name"] == server_key_value["name"]), None
+            )
+            if not match:
+                self._dr_client.delete_key_value(server_key_value["id"])
 
     @staticmethod
     def _was_new_version_created(previous_latest_version, latest_version):
@@ -853,10 +1031,11 @@ class ModelController(ControllerBase):
         if missing_locally_id_to_git_id:
             if not self.options.allow_model_deletion:
                 missing_user_provided_ids = list(missing_locally_id_to_git_id.values())
-                raise IllegalModelDeletion(
+                logger.info(
                     "Model deletion was configured as not being allowed. "
                     f"The missing models in the local source tree are: {missing_user_provided_ids}"
                 )
+                return
 
             model_ids_to_fetch = list(missing_locally_id_to_git_id.keys())
             deployments = self._dr_client.fetch_custom_model_deployments(model_ids_to_fetch)
