@@ -84,10 +84,10 @@ class TestCustomInferenceDeployment:
                     yield
                 else:
                     for deployment_metadata in single_or_multi_deployment_metadata:
-                        deployment_metadata[
-                            DeploymentSchema.DEPLOYMENT_ID_KEY
-                        ] = Namespace.un_namespaced(
-                            deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                        deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY] = (
+                            Namespace.un_namespaced(
+                                deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                            )
                         )
                         deployment_metadata[SharedSchema.MODEL_ID_KEY] = Namespace.un_namespaced(
                             deployment_metadata[SharedSchema.MODEL_ID_KEY]
@@ -96,37 +96,37 @@ class TestCustomInferenceDeployment:
                         yield
                     finally:
                         for deployment_metadata in single_or_multi_deployment_metadata:
-                            deployment_metadata[
-                                DeploymentSchema.DEPLOYMENT_ID_KEY
-                            ] = Namespace.namespaced(
-                                deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                            deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY] = (
+                                Namespace.namespaced(
+                                    deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                                )
                             )
                             deployment_metadata[SharedSchema.MODEL_ID_KEY] = Namespace.namespaced(
                                 deployment_metadata[SharedSchema.MODEL_ID_KEY]
                             )
             else:
-                single_or_multi_deployment_metadata[
-                    DeploymentSchema.DEPLOYMENT_ID_KEY
-                ] = Namespace.un_namespaced(
-                    single_or_multi_deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                single_or_multi_deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY] = (
+                    Namespace.un_namespaced(
+                        single_or_multi_deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                    )
                 )
-                single_or_multi_deployment_metadata[
-                    SharedSchema.MODEL_ID_KEY
-                ] = Namespace.un_namespaced(
-                    single_or_multi_deployment_metadata[SharedSchema.MODEL_ID_KEY]
+                single_or_multi_deployment_metadata[SharedSchema.MODEL_ID_KEY] = (
+                    Namespace.un_namespaced(
+                        single_or_multi_deployment_metadata[SharedSchema.MODEL_ID_KEY]
+                    )
                 )
                 try:
                     yield
                 finally:
-                    single_or_multi_deployment_metadata[
-                        DeploymentSchema.DEPLOYMENT_ID_KEY
-                    ] = Namespace.namespaced(
-                        single_or_multi_deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                    single_or_multi_deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY] = (
+                        Namespace.namespaced(
+                            single_or_multi_deployment_metadata[DeploymentSchema.DEPLOYMENT_ID_KEY]
+                        )
                     )
-                    single_or_multi_deployment_metadata[
-                        SharedSchema.MODEL_ID_KEY
-                    ] = Namespace.namespaced(
-                        single_or_multi_deployment_metadata[SharedSchema.MODEL_ID_KEY]
+                    single_or_multi_deployment_metadata[SharedSchema.MODEL_ID_KEY] = (
+                        Namespace.namespaced(
+                            single_or_multi_deployment_metadata[SharedSchema.MODEL_ID_KEY]
+                        )
                     )
 
     # pylint: disable=unused-argument
