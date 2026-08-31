@@ -40,6 +40,9 @@ from schema_validator import ModelSchema
 
 logger = logging.getLogger()
 
+# Chunk size used when hashing a training dataset file to compute its checksum.
+DATASET_FILE_HASH_BUF_SIZE = 65536
+
 
 class ControllerBase(ABC):
     """
@@ -393,11 +396,10 @@ class ModelController(ControllerBase):
         if not dataset_file_path.exists():
             raise ValueError(f"Dataset file: '{dataset_file_path}' does not exist.")
 
-        buf_size = 65536  # TODO: Put somewhere else
         sha1 = hashlib.sha1()
         with open(dataset_file_path, "rb") as f:
             while True:
-                data = f.read(buf_size)
+                data = f.read(DATASET_FILE_HASH_BUF_SIZE)
                 if not data:
                     break
                 sha1.update(data)
