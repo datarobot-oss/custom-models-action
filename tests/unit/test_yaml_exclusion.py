@@ -19,7 +19,7 @@ from model_controller import ModelController
     [
         (None, ["model1.yaml", "model2.yaml"]),  # No exclude pattern
         ("test/", ["model1.yaml"]),  # Simple exclude
-        (".*test.*\.yaml$", ["model1.yaml"]),  # Complex regex
+        (r".*test.*\.yaml$", ["model1.yaml"]),  # Complex regex
         ("", ["model1.yaml", "model2.yaml"]),  # Empty pattern
         ("model[12]\\.yaml", []),  # All models
     ],

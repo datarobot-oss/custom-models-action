@@ -51,7 +51,8 @@ def argparse_options(args=None):
     )
     parser.add_argument(
         "--exclude",
-        help="Regex pattern to exclude YAML files from being processed. Can match any part of the file path.",
+        help="Regex pattern to exclude YAML files from being processed. "
+        "Can match any part of the file path.",
     )
     parser.add_argument(
         "--allow-model-deletion",

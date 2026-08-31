@@ -371,8 +371,8 @@ class ModelController(ControllerBase):
                 param["value"] = next(
                     (c["credentialId"] for c in credentials if c["name"] == param["value"])
                 )
-            except StopIteration:
-                raise ValueError(f"Failed to find credential with name {param['value']}.")
+            except StopIteration as exc:
+                raise ValueError(f"Failed to find credential with name {param['value']}.") from exc
 
         model_info.set_value(
             ModelSchema.VERSION_KEY,
@@ -393,11 +393,11 @@ class ModelController(ControllerBase):
         if not dataset_file_path.exists():
             raise ValueError(f"Dataset file: '{dataset_file_path}' does not exist.")
 
-        BUF_SIZE = 65536  # TODO: Put somewhere else
+        buf_size = 65536  # TODO: Put somewhere else
         sha1 = hashlib.sha1()
         with open(dataset_file_path, "rb") as f:
             while True:
-                data = f.read(BUF_SIZE)
+                data = f.read(buf_size)
                 if not data:
                     break
                 sha1.update(data)
@@ -409,7 +409,9 @@ class ModelController(ControllerBase):
         items = self._dr_client.fetch_catalog_items(search_for=catalog_item_name)
         matching_items = [item for item in items if item["catalogName"] == catalog_item_name]
         if len(matching_items) > 1:
-            raise Exception(f"Found multiple items in catalog with name: '{catalog_item_name}'")
+            raise UnexpectedResult(
+                f"Found multiple items in catalog with name: '{catalog_item_name}'"
+            )
 
         if not matching_items:
             dataset = self._dr_client.create_dataset_from_file(dataset_file_path)
@@ -837,15 +839,14 @@ class ModelController(ControllerBase):
                     and local_key_value["value_type"] == match["valueType"]
                 ):
                     continue
-                else:
-                    self._dr_client.update_key_value(
-                        match["id"],
-                        registered_model_version["id"],
-                        local_key_value["name"],
-                        local_key_value["category"],
-                        local_key_value["value"],
-                        local_key_value["value_type"],
-                    )
+                self._dr_client.update_key_value(
+                    match["id"],
+                    registered_model_version["id"],
+                    local_key_value["name"],
+                    local_key_value["category"],
+                    local_key_value["value"],
+                    local_key_value["value_type"],
+                )
             else:
                 self._dr_client.create_key_value(
                     registered_model_version["id"],
