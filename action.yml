@@ -83,21 +83,17 @@ runs:
       shell: bash
     - id: custom-models-action
       run: |
-        ${{ inputs.namespace != '' }} && namespace_arg='--namespace ${{ inputs.namespace }}'
-        ${{ inputs.allow-model-deletion == 'true' }} && allow_model_deletion_arg='--allow-model-deletion'
-        ${{ inputs.allow-deployment-deletion == 'true' }} && allow_deployment_deletion_arg='--allow-deployment-deletion'
-        ${{ inputs.models_only == 'true' }} && models_only_arg='--models-only'
-        ${{ inputs.skip-cert-verification == 'true' }} && verify_cert_arg='--skip-cert-verification'
-        ${{ inputs.exclude != '' }} && exclude_arg='--exclude ${{ inputs.exclude }}'
+        args=(
+          --api-token "${{ inputs.api-token }}"
+          --webserver "${{ inputs.webserver }}"
+          --branch "${{ inputs.branch }}"
+        )
+        [[ -n "${{ inputs.namespace }}" ]] && args+=(--namespace "${{ inputs.namespace }}")
+        [[ "${{ inputs.allow-model-deletion }}" == 'true' ]] && args+=(--allow-model-deletion)
+        [[ "${{ inputs.allow-deployment-deletion }}" == 'true' ]] && args+=(--allow-deployment-deletion)
+        [[ "${{ inputs.models-only }}" == 'true' ]] && args+=(--models-only)
+        [[ "${{ inputs.skip-cert-verification }}" == 'true' ]] && args+=(--skip-cert-verification)
+        [[ -n "${{ inputs.exclude }}" ]] && args+=(--exclude "${{ inputs.exclude }}")
 
-        python ${GITHUB_ACTION_PATH}/src/main.py \
-          --api-token ${{ inputs.api-token }} \
-          --webserver ${{ inputs.webserver }} \
-          --branch ${{ inputs.branch }} \
-          ${namespace_arg} \
-          ${allow_model_deletion_arg} \
-          ${allow_deployment_deletion_arg} \
-          ${models_only_arg} \
-          ${verify_cert_arg} \
-          ${exclude_arg}
+        python ${GITHUB_ACTION_PATH}/src/main.py "${args[@]}"
       shell: bash

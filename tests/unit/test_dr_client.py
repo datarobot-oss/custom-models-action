@@ -1590,7 +1590,7 @@ class TestRegisteredModels:
             "custom_model_version_id", "non_existent_registered_model"
         )
 
-        assert registered_model_version == "new_registered_model_id"
+        assert registered_model_version["id"] == "new_registered_model_id"
 
     @pytest.mark.usefixtures("patch_wait_for_async_resolution")
     @responses.activate
@@ -1629,7 +1629,7 @@ class TestRegisteredModels:
             registered_model_response_mock["name"],
         )
 
-        assert registered_model_version == new_registered_model_id
+        assert registered_model_version["id"] == new_registered_model_id
 
     @responses.activate
     def test_version_already_registered(
@@ -1660,7 +1660,7 @@ class TestRegisteredModels:
             registered_model_response_mock["name"],
         )
 
-        assert registered_model_version == registered_model_version_id
+        assert registered_model_version["id"] == registered_model_version_id
 
     @pytest.mark.parametrize("is_already_global", [True, False])
     @responses.activate

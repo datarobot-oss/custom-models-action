@@ -59,7 +59,10 @@ class ControllerBase(ABC):
             verify_cert=not self.options.skip_cert_verification,
         )
         self._metrics = Metrics(self._label())
-        self._exclude_pattern = re.compile(options.exclude) if getattr(options, "exclude", None) else None
+        self._exclude_pattern = (
+            re.compile(options.exclude) if getattr(options, "exclude", None) else None
+        )
+        self._excluded_user_provided_ids = set()
         logger.info(
             "GITHUB_EVENT_NAME: %s, GITHUB_SHA: %s, GITHUB_REPOSITORY: %s, GITHUB_REF_NAME: %s",
             GitHubEnv.event_name(),
@@ -83,24 +86,55 @@ class ControllerBase(ABC):
     def _next_yaml_content_in_repo(self):
         yaml_files = glob(f"{self._workspace_path}/**/*.yaml", recursive=True)
         yaml_files.extend(glob(f"{self._workspace_path}/**/*.yml", recursive=True))
-        
+
         for yaml_path in yaml_files:
-            # Skip files that match the exclude pattern
+            # Skip files that match the exclude pattern. We still make a best-effort attempt to
+            # record the excluded model's user_provided_id (without full schema validation, since
+            # exclusion is also used for files that don't validate) so handle_deleted_models can
+            # tell "intentionally excluded" apart from "actually deleted" and not raise/delete for
+            # models that are simply not being scanned right now.
             if self._exclude_pattern and self._exclude_pattern.search(yaml_path):
                 logger.debug("Excluding YAML file matching pattern: %s", yaml_path)
+                self._record_excluded_user_provided_ids(yaml_path)
                 continue
-                
+
             with open(yaml_path, encoding="utf-8") as fd:
-                try:
-                    yaml_content = yaml.safe_load(fd)
-                except yaml.YAMLError:
-                    logger.warning("Failed to parse yaml file: %s", yaml_path, exc_info=True)
-                    continue
-                    
+                yaml_content = yaml.safe_load(fd)
                 if not yaml_content:
                     logger.warning("Detected an invalid or empty yaml file: %s", yaml_path)
                 else:
                     yield yaml_path, yaml_content
+
+    def _record_excluded_user_provided_ids(self, yaml_path):
+        """Best-effort extraction of user_provided_id(s) from an excluded YAML file.
+
+        This does not run schema validation, since exclusion is also used for files that
+        wouldn't validate. Any failure here is swallowed - worst case, this specific excluded
+        model is not recognized and deletion-safety treats it like any other excluded file for
+        which the id couldn't be determined.
+        """
+
+        try:
+            with open(yaml_path, encoding="utf-8") as fd:
+                yaml_content = yaml.safe_load(fd)
+        except (yaml.YAMLError, OSError):
+            return
+
+        if not isinstance(yaml_content, dict):
+            return
+
+        if ModelSchema.MULTI_MODELS_KEY in yaml_content:
+            for model_entry in yaml_content.get(ModelSchema.MULTI_MODELS_KEY) or []:
+                if not isinstance(model_entry, dict):
+                    continue
+                model_metadata = model_entry.get(ModelSchema.MODEL_ENTRY_META_KEY) or {}
+                user_provided_id = model_metadata.get(ModelSchema.MODEL_ID_KEY)
+                if user_provided_id:
+                    self._excluded_user_provided_ids.add(user_provided_id)
+        else:
+            user_provided_id = yaml_content.get(ModelSchema.MODEL_ID_KEY)
+            if user_provided_id:
+                self._excluded_user_provided_ids.add(user_provided_id)
 
     @staticmethod
     def _make_directory_pattern_recursive(pattern):
@@ -509,13 +543,24 @@ class ModelController(ControllerBase):
         latest_version = self.datarobot_models[model_info.user_provided_id].latest_version
         if latest_version:
             from_commit_sha = self._get_latest_model_version_git_commit_ancestor(model_info)
+            if not from_commit_sha:
+                # The latest version has no git model version (e.g. created via the UI or a
+                # non-action client). We cannot compute a settings diff without an ancestor
+                # commit - mirrors how version handling elsewhere already treats a missing
+                # ancestor as "upload everything" rather than failing.
+                logger.debug(
+                    "No git commit ancestor found for the latest version of model %s; "
+                    "skipping settings-change detection for this model.",
+                    model_info.user_provided_id,
+                )
+                return
         else:
             from_commit_sha = self._get_git_commit_ancestor(model_info)
-        if not from_commit_sha:
-            raise UnexpectedResult(
-                "Unexpected None ancestor commit sha, "
-                f"model_git_id: {model_info.user_provided_id}"
-            )
+            if not from_commit_sha:
+                raise UnexpectedResult(
+                    "Unexpected None ancestor commit sha, "
+                    f"model_git_id: {model_info.user_provided_id}"
+                )
         changed_files, deleted_files = self._repo.find_changed_files(
             GitHubEnv.github_sha(), from_commit_sha
         )
@@ -787,8 +832,9 @@ class ModelController(ControllerBase):
 
             if match:
                 if (
-                    str(local_key_value["value"]) == match["value"]
+                    self._key_value_matches_server(local_key_value, match)
                     and local_key_value["category"] == match["category"]
+                    and local_key_value["value_type"] == match["valueType"]
                 ):
                     continue
                 else:
@@ -818,6 +864,29 @@ class ModelController(ControllerBase):
             )
             if not match:
                 self._dr_client.delete_key_value(server_key_value["id"])
+
+    @staticmethod
+    def _key_value_matches_server(local_key_value, server_key_value):
+        """
+        Compare a local key-value's value against the server's, by type.
+
+        The server only stores a meaningful string in "value" for string/url/credential
+        types; for "boolean" it's the Python str() of the boolean ("True"/"False"), and for
+        "numeric" the "value" field is always empty - the real number lives in
+        "numericValue" instead. Comparing "value" directly for booleans/numerics either
+        risks a string-format mismatch or - for numerics - always mismatches against an
+        empty string, causing needless re-patching on every run.
+        """
+
+        value_type = local_key_value["value_type"]
+        if value_type == "numeric":
+            try:
+                return float(local_key_value["value"]) == server_key_value.get("numericValue")
+            except (TypeError, ValueError):
+                return False
+        if value_type == "boolean":
+            return bool(local_key_value["value"]) == server_key_value.get("booleanValue")
+        return str(local_key_value["value"]) == server_key_value["value"]
 
     @staticmethod
     def _was_new_version_created(previous_latest_version, latest_version):
@@ -1025,17 +1094,24 @@ class ModelController(ControllerBase):
 
         missing_locally_id_to_git_id = {}
         for user_provided_id, datarobot_model in self.datarobot_models.items():
-            if user_provided_id not in self.models_info:
-                missing_locally_id_to_git_id[datarobot_model.model["id"]] = user_provided_id
+            if user_provided_id in self.models_info:
+                continue
+            if user_provided_id in self._excluded_user_provided_ids:
+                logger.debug(
+                    "Model %s is not in the local source tree because it's excluded "
+                    "(--exclude), not because it was deleted. Skipping deletion handling.",
+                    user_provided_id,
+                )
+                continue
+            missing_locally_id_to_git_id[datarobot_model.model["id"]] = user_provided_id
 
         if missing_locally_id_to_git_id:
             if not self.options.allow_model_deletion:
                 missing_user_provided_ids = list(missing_locally_id_to_git_id.values())
-                logger.info(
+                raise IllegalModelDeletion(
                     "Model deletion was configured as not being allowed. "
                     f"The missing models in the local source tree are: {missing_user_provided_ids}"
                 )
-                return
 
             model_ids_to_fetch = list(missing_locally_id_to_git_id.keys())
             deployments = self._dr_client.fetch_custom_model_deployments(model_ids_to_fetch)
