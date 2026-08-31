@@ -2254,13 +2254,19 @@ class DrClient:
         return self._paginated_fetch(self.ENVIRONMENT_DROP_IN_ROUTE, json=payload)
 
     def fetch_credentials(self):
+        """Fetch all credentials stored in DataRobot."""
+
         return self._paginated_fetch(self.CREDENTIALS_ROUTE)
 
     def fetch_catalog_items(self, search_for=None):
+        """Fetch AI catalog items, optionally filtered by name via search_for."""
+
         params = {"searchFor": search_for} if search_for else None
         return self._paginated_fetch(self.CATALOG_ITEMS_ROUTE, params=params)
 
     def create_dataset_from_file(self, file):
+        """Upload a local file to the AI catalog as a new dataset."""
+
         with open(file, "rb") as fd:
             payload = {"file": (str(file), fd)}
 
@@ -2283,6 +2289,8 @@ class DrClient:
         return response.json()
 
     def update_dataset(self, dataset_id, name):
+        """Rename an existing AI catalog dataset."""
+
         payload = {"name": name}
 
         response = self._http_requester.patch(
@@ -2300,6 +2308,8 @@ class DrClient:
         return response.json()
 
     def fetch_compliance_docs_initialization(self, registered_model_version_id):
+        """Fetch the compliance docs initialization status for a registered model version."""
+
         response = self._http_requester.get(
             self.COMPLIANCE_DOCS_INITIALIZATION_ROUTE.format(
                 registered_model_version_id=registered_model_version_id
@@ -2308,12 +2318,16 @@ class DrClient:
         return response.json()
 
     def fetch_key_values(self, registered_model_version_id):
+        """Fetch all key-values attached to a registered model version."""
+
         return self._paginated_fetch(
             self.KEY_VALUES_ROUTE,
             params={"entityId": registered_model_version_id, "entityType": "modelPackage"},
         )
 
     def create_key_value(self, registered_model_version_id, name, category, value, value_type):
+        """Create a new key-value on a registered model version."""
+
         payload = self._create_key_value_payload(
             category, name, registered_model_version_id, value, value_type
         )
@@ -2337,6 +2351,8 @@ class DrClient:
         value,
         value_type,
     ):
+        """Update an existing key-value on a registered model version."""
+
         payload = self._create_key_value_payload(
             category, name, registered_model_version_id, value, value_type
         )
@@ -2353,6 +2369,8 @@ class DrClient:
         return response.json()
 
     def delete_key_value(self, key_value_id):
+        """Delete a key-value by id."""
+
         response = self._http_requester.delete(
             self.KEY_VALUE_ROUTE.format(key_value_id=key_value_id)
         )
@@ -2365,6 +2383,8 @@ class DrClient:
             )
 
     def perform_compliance_docs_initialization(self, registered_model_version_id):
+        """Trigger compliance docs initialization for a registered model version."""
+
         response = self._http_requester.post(
             self.COMPLIANCE_DOCS_INITIALIZATION_ROUTE.format(
                 registered_model_version_id=registered_model_version_id
@@ -2383,6 +2403,8 @@ class DrClient:
         return response.json()
 
     def create_compliance_docs(self, registered_model_version_id):
+        """Generate a compliance docs document for a registered model version."""
+
         payload = {
             "documentType": "MODEL_COMPLIANCE",
             "entityId": registered_model_version_id,

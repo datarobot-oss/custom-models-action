@@ -3,6 +3,8 @@
 #  This is proprietary source code of DataRobot, Inc. and its affiliates.
 #  Released under the terms of DataRobot Tool and Utility Agreement.
 
+# pylint: disable=protected-access
+
 """Unit tests for YAML file exclusion functionality."""
 
 import os
@@ -46,9 +48,9 @@ def test_yaml_file_exclusion(options, exclude_pattern, expected_files, workspace
 
     # Create directories and write YAML files
     os.makedirs(workspace_path / "test", exist_ok=True)
-    with open(workspace_path / "model1.yaml", "w") as f:
+    with open(workspace_path / "model1.yaml", "w", encoding="utf-8") as f:
         yaml.dump(model1_content, f)
-    with open(workspace_path / "test/model2.yaml", "w") as f:
+    with open(workspace_path / "test/model2.yaml", "w", encoding="utf-8") as f:
         yaml.dump(model2_content, f)
 
     controller = ModelController(options, None)

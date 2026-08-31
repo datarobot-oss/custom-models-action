@@ -390,6 +390,8 @@ class TestModelSchemaValidator:
         ["string_value", True, 42, 42.2],
     )
     def test_runtime_parameters(self, regression_model_schema, value):
+        """A runtime parameter value of any of the supported scalar types should validate."""
+
         regression_model_schema[ModelSchema.VERSION_KEY][
             ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
         ] = [{"name": "name", "type": "type", "value": value}]
@@ -404,6 +406,8 @@ class TestModelSchemaValidator:
         ],
     )
     def test_runtime_parameters_fail(self, regression_model_schema, parameters):
+        """An unsupported value type or a missing value should fail validation."""
+
         regression_model_schema[ModelSchema.VERSION_KEY][
             ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
         ] = parameters

@@ -1,3 +1,7 @@
+# pylint: disable=redefined-outer-name
+
+"""A module that contains unit-tests for the ModelInfo class."""
+
 import pytest
 
 from model_info import ModelInfo
@@ -6,6 +10,8 @@ from schema_validator import ModelSchema
 
 @pytest.fixture
 def model_info():
+    """A ModelInfo fixture with a single runtime parameter."""
+
     model_schema = {
         ModelSchema.MODEL_ID_KEY: "abc123",
         ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_BINARY,
@@ -33,6 +39,8 @@ def model_info():
 
 @pytest.fixture
 def model_version():
+    """A DataRobot latest-version payload matching the model_info fixture's runtime parameter."""
+
     return {
         "baseEnvironmentId": "627790db5621558eedc4c7fa",
         "runtimeParameters": [{"fieldName": "param", "type": "numeric", "currentValue": 42}],
@@ -40,16 +48,22 @@ def model_version():
 
 
 def test_should_create_new_version(model_info, model_version):
+    """A changed runtime parameter value should require a new version."""
+
     model_version["runtimeParameters"][0]["currentValue"] = 0
 
     assert model_info.should_create_new_version(datarobot_latest_model_version=model_version)
 
 
 def test_should_not_create_new_version(model_info, model_version):
+    """An unchanged runtime parameter value should not require a new version."""
+
     assert not model_info.should_create_new_version(datarobot_latest_model_version=model_version)
 
 
 def test_fail_when_runtime_parameter_does_not_exist(model_info, model_version):
+    """A runtime parameter missing from the server's latest version should raise."""
+
     model_version["runtimeParameters"] = []
 
     with pytest.raises(ValueError, match="Model version on server does not have runtime param:"):
