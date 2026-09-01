@@ -1388,7 +1388,7 @@ class DrClient:
             )
         model_package = response.json()
         try:
-            self._wait_for_async_resolution(
+            location = self._wait_for_async_resolution(
                 response.headers["Location"], max_wait=self.DEPLOYMENT_CREATE_MAX_WAIT_SEC
             )
         except HttpRequesterException as ex:
@@ -1398,7 +1398,8 @@ class DrClient:
                 f"Model package id: {model_package['id']}, "
                 f"Exception: {str(ex)}."
             ) from ex
-        return model_package
+        response = self._http_requester.get(location, raw=True)
+        return response.json()
 
     def _create_deployment_from_model_package(self, model_package, deployment_info):
         label = deployment_info.get_settings_value(DeploymentSchema.LABEL_KEY)

@@ -1557,9 +1557,13 @@ class TestRegisteredModels:
 
     @pytest.fixture
     def patch_wait_for_async_resolution(self):
-        """Patch wait for async resolution method."""
+        """Patch wait for async resolution method to resolve to a fixed model package URL."""
 
-        with patch.object(DrClient, "_wait_for_async_resolution"):
+        with patch.object(
+            DrClient,
+            "_wait_for_async_resolution",
+            return_value="https://dr/api/v2/modelPackages/resolved_model_package/",
+        ):
             yield
 
     @pytest.mark.usefixtures("patch_wait_for_async_resolution")
@@ -1584,6 +1588,11 @@ class TestRegisteredModels:
             headers={"Location": "https://dr/api/v2/status/67baedd52a54aeda01837ccb"},
             json={"id": "new_registered_model_id"},
             status=201,
+        )
+        responses.get(
+            url="https://dr/api/v2/modelPackages/resolved_model_package/",
+            json={"id": "new_registered_model_id", "complianceDocsCount": None},
+            status=200,
         )
 
         registered_model_version = dr_client.create_or_update_registered_model(
@@ -1623,6 +1632,11 @@ class TestRegisteredModels:
             headers={"Location": "https://dr/api/v2/status/67baedd52a54aeda01837ccb"},
             json={"id": new_registered_model_id},
             status=201,
+        )
+        responses.get(
+            url="https://dr/api/v2/modelPackages/resolved_model_package/",
+            json={"id": new_registered_model_id, "complianceDocsCount": None},
+            status=200,
         )
         registered_model_version = dr_client.create_or_update_registered_model(
             custom_model_version_id,
