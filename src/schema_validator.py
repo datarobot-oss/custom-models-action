@@ -235,6 +235,7 @@ class ModelSchema(SharedSchema):
     # The 'PARTITIONING_COLUMN_KEY' is relevant for structured models only and is optional.
     PARTITIONING_COLUMN_KEY = "partitioning_column"
     TRAINING_DATASET_ID_KEY = "training_dataset_id"
+    TRAINING_DATASET_FILE_KEY = "training_dataset_file"
     # The 'HOLDOUT_DATASET_ID_KEY' is relevant for unstructured models only and is optional.
     HOLDOUT_DATASET_ID_KEY = "holdout_dataset_id"
 
@@ -248,6 +249,10 @@ class ModelSchema(SharedSchema):
     EGRESS_NETWORK_POLICY_KEY = "egress_network_policy"
     EGRESS_NETWORK_POLICY_NONE = "NONE"
     EGRESS_NETWORK_POLICY_PUBLIC = "PUBLIC"
+
+    RESOURCE_BUNDLE_ID = "resource_bundle_id"
+
+    RUNTIME_PARAMETER_VALUES_KEY = "runtime_parameter_values"
 
     MODEL_REPLACEMENT_REASON_KEY = "model_replacement_reason"
     MODEL_REPLACEMENT_REASON_ACCURACY = "ACCURACY"
@@ -287,6 +292,8 @@ class ModelSchema(SharedSchema):
     MODEL_NAME = "model_name"
     MODEL_DESCRIPTION = "model_description"
     GLOBAL = "global"
+    COMPLIANCE_DOCS_KEY = "compliance_docs"
+    KEY_VALUES_KEY = "key_values"
 
     MODEL_SCHEMA = Schema(
         {
@@ -329,8 +336,10 @@ class ModelSchema(SharedSchema):
                 Optional(EGRESS_NETWORK_POLICY_KEY): Or(
                     EGRESS_NETWORK_POLICY_NONE, EGRESS_NETWORK_POLICY_PUBLIC
                 ),
+                Optional(RESOURCE_BUNDLE_ID): And(str, len),
                 Optional(PARTITIONING_COLUMN_KEY): And(str, len),
                 Optional(TRAINING_DATASET_ID_KEY): And(str, ObjectId.is_valid),
+                Optional(TRAINING_DATASET_FILE_KEY): And(str, len),
                 Optional(HOLDOUT_DATASET_ID_KEY): And(str, ObjectId.is_valid),
                 Optional(MODEL_REPLACEMENT_REASON_KEY, default=MODEL_REPLACEMENT_REASON_OTHER): Or(
                     MODEL_REPLACEMENT_REASON_ACCURACY,
@@ -341,6 +350,18 @@ class ModelSchema(SharedSchema):
                     MODEL_REPLACEMENT_REASON_DEPRECATION,
                     MODEL_REPLACEMENT_REASON_OTHER,
                 ),
+                Optional(RUNTIME_PARAMETER_VALUES_KEY): [
+                    {
+                        "name": str,
+                        "type": str,
+                        "value": Or(
+                            str,
+                            bool,
+                            int,
+                            float,
+                        ),
+                    }
+                ],
             },
             Optional(TEST_KEY): {
                 # The skip attribute allows users to have the test section in their yaml file
@@ -387,6 +408,17 @@ class ModelSchema(SharedSchema):
                 Optional(MODEL_NAME): And(str, len),
                 Optional(MODEL_DESCRIPTION): And(str, len),
                 Optional(GLOBAL, default=False): bool,
+                Optional(COMPLIANCE_DOCS_KEY, default=False): bool,
+                Optional(VERSION_KEY): {
+                    Optional(KEY_VALUES_KEY): [
+                        {
+                            "name": str,
+                            "category": str,
+                            "value_type": str,
+                            "value": Or(str, int, float, bool),
+                        }
+                    ],
+                },
             },
         }
     )

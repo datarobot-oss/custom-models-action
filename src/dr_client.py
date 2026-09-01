@@ -70,6 +70,16 @@ class DrClient:
     REGISTERED_MODELS_LIST_ROUTE = "registeredModels/"
     REGISTERED_MODEL_ROUTE = "registeredModels/{registered_model_id}/"
     REGISTERED_MODELS_VERSIONS_ROUTE = "registeredModels/{registered_model_id}/versions/"
+    CREDENTIALS_ROUTE = "credentials/"
+    CATALOG_ITEMS_ROUTE = "catalogItems/"
+    DATASET_ROUTE = "datasets/{dataset_id}/"
+    DATASET_FROM_FILE_ROUTE = "datasets/fromFile/"
+    COMPLIANCE_DOCS_INITIALIZATION_ROUTE = (
+        "modelComplianceDocsInitializations/{registered_model_version_id}"
+    )
+    AUTOMATED_DOCUMENTS_ROUTE = "automatedDocuments/"
+    KEY_VALUES_ROUTE = "keyValues/"
+    KEY_VALUE_ROUTE = "keyValues/{key_value_id}/"
 
     DEFAULT_MAX_WAIT_SEC = 600
 
@@ -508,22 +518,22 @@ class DrClient:
         registered_model_id = registered_model["id"] if registered_model else None
         if registered_model_id:
             existing_registered_versions = self._get_registered_model_versions(registered_model_id)
-            existing_version_id = next(
+            existing_version = next(
                 (
-                    v["id"]
+                    v
                     for v in existing_registered_versions
                     if v["modelId"] == custom_model_version_id
                 ),
                 None,
             )
-            if existing_version_id:
+            if existing_version:
                 logger.info(
                     "Custom model version is already registered. Registered model name: %s, "
                     "custom model version id: %s",
                     registered_model_name,
                     custom_model_version_id,
                 )
-                return existing_version_id
+                return existing_version
             registered_model_name = None
 
         model_package = self.create_model_package_from_custom_model_version(
@@ -532,7 +542,7 @@ class DrClient:
             registered_model_id,
         )
 
-        return model_package["id"]
+        return model_package
 
     def update_registered_model(self, registered_model_name, description, is_global):
         """
@@ -659,6 +669,22 @@ class DrClient:
         )
         if egress_network_policy:
             payload.append(("networkEgressPolicy", str(egress_network_policy)))
+
+        resource_bundle_id = model_info.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.RESOURCE_BUNDLE_ID
+        )
+        if resource_bundle_id:
+            payload.append(("resourceBundleId", resource_bundle_id))
+
+        runtime_parameters = model_info.get_value(
+            ModelSchema.VERSION_KEY, ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
+        )
+        if runtime_parameters:
+            payload_params = [
+                {"fieldName": param["name"], "type": param["type"], "value": param["value"]}
+                for param in runtime_parameters
+            ]
+            payload.append(("runtimeParameterValues", json.dumps(payload_params)))
 
         return payload, file_objs
 
@@ -1362,7 +1388,7 @@ class DrClient:
             )
         model_package = response.json()
         try:
-            self._wait_for_async_resolution(
+            location = self._wait_for_async_resolution(
                 response.headers["Location"], max_wait=self.DEPLOYMENT_CREATE_MAX_WAIT_SEC
             )
         except HttpRequesterException as ex:
@@ -1372,7 +1398,8 @@ class DrClient:
                 f"Model package id: {model_package['id']}, "
                 f"Exception: {str(ex)}."
             ) from ex
-        return model_package
+        response = self._http_requester.get(location, raw=True)
+        return response.json()
 
     def _create_deployment_from_model_package(self, model_package, deployment_info):
         label = deployment_info.get_settings_value(DeploymentSchema.LABEL_KEY)
@@ -2226,3 +2253,190 @@ class DrClient:
 
         payload = {"searchFor": search_for} if search_for else None
         return self._paginated_fetch(self.ENVIRONMENT_DROP_IN_ROUTE, json=payload)
+
+    def fetch_credentials(self):
+        """Fetch all credentials stored in DataRobot."""
+
+        return self._paginated_fetch(self.CREDENTIALS_ROUTE)
+
+    def fetch_catalog_items(self, search_for=None):
+        """Fetch AI catalog items, optionally filtered by name via search_for."""
+
+        params = {"searchFor": search_for} if search_for else None
+        return self._paginated_fetch(self.CATALOG_ITEMS_ROUTE, params=params)
+
+    def create_dataset_from_file(self, file):
+        """Upload a local file to the AI catalog as a new dataset."""
+
+        with open(file, "rb") as fd:
+            payload = {"file": (str(file), fd)}
+
+            mp_encoder = MultipartEncoder(fields=payload)
+            headers = {"Content-Type": mp_encoder.content_type}
+
+            response = self._http_requester.post(
+                self.DATASET_FROM_FILE_ROUTE, data=mp_encoder, headers=headers
+            )
+
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                "Failed to create dataset. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        location = self._wait_for_async_resolution(response.headers["Location"])
+        response = self._http_requester.get(location, raw=True)
+        return response.json()
+
+    def update_dataset(self, dataset_id, name):
+        """Rename an existing AI catalog dataset."""
+
+        payload = {"name": name}
+
+        response = self._http_requester.patch(
+            self.DATASET_ROUTE.format(dataset_id=dataset_id),
+            json=payload,
+        )
+        if response.status_code != 200:
+            raise DataRobotClientError(
+                "Failed to update dataset properties "
+                f"Dataset id: {dataset_id}, "
+                f"Response status: {response.status_code}, "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        return response.json()
+
+    def fetch_compliance_docs_initialization(self, registered_model_version_id):
+        """Fetch the compliance docs initialization status for a registered model version."""
+
+        response = self._http_requester.get(
+            self.COMPLIANCE_DOCS_INITIALIZATION_ROUTE.format(
+                registered_model_version_id=registered_model_version_id
+            )
+        )
+        return response.json()
+
+    def fetch_key_values(self, registered_model_version_id):
+        """Fetch all key-values attached to a registered model version."""
+
+        return self._paginated_fetch(
+            self.KEY_VALUES_ROUTE,
+            params={"entityId": registered_model_version_id, "entityType": "modelPackage"},
+        )
+
+    def create_key_value(self, registered_model_version_id, name, category, value, value_type):
+        """Create a new key-value on a registered model version."""
+
+        payload = self._create_key_value_payload(
+            category, name, registered_model_version_id, value, value_type
+        )
+
+        response = self._http_requester.post(self.KEY_VALUES_ROUTE, json=payload)
+        if response.status_code != 201:
+            raise DataRobotClientError(
+                "Failed to create key-value. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        return response.json()
+
+    def update_key_value(
+        self,
+        key_value_id,
+        registered_model_version_id,
+        name,
+        category,
+        value,
+        value_type,
+    ):
+        """Update an existing key-value on a registered model version."""
+
+        payload = self._create_key_value_payload(
+            category, name, registered_model_version_id, value, value_type
+        )
+        response = self._http_requester.patch(
+            self.KEY_VALUE_ROUTE.format(key_value_id=key_value_id), json=payload
+        )
+        if response.status_code != 200:
+            raise DataRobotClientError(
+                "Failed to create/update key-value. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        return response.json()
+
+    def delete_key_value(self, key_value_id):
+        """Delete a key-value by id."""
+
+        response = self._http_requester.delete(
+            self.KEY_VALUE_ROUTE.format(key_value_id=key_value_id)
+        )
+        if response.status_code != 204:
+            raise DataRobotClientError(
+                "Failed to delete key-value. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+
+    def perform_compliance_docs_initialization(self, registered_model_version_id):
+        """Trigger compliance docs initialization for a registered model version."""
+
+        response = self._http_requester.post(
+            self.COMPLIANCE_DOCS_INITIALIZATION_ROUTE.format(
+                registered_model_version_id=registered_model_version_id
+            )
+        )
+
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                "Failed to initialize compliance docs. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        location = self._wait_for_async_resolution(response.headers["Location"], max_wait=30 * 60)
+        response = self._http_requester.get(location, raw=True)
+        return response.json()
+
+    def create_compliance_docs(self, registered_model_version_id):
+        """Generate a compliance docs document for a registered model version."""
+
+        payload = {
+            "documentType": "MODEL_COMPLIANCE",
+            "entityId": registered_model_version_id,
+            "outputFormat": "docx",
+        }
+
+        response = self._http_requester.post(self.AUTOMATED_DOCUMENTS_ROUTE, json=payload)
+
+        if response.status_code != 202:
+            raise DataRobotClientError(
+                "Failed to create compliance docs. "
+                f"Response status: {response.status_code} "
+                f"Response body: {response.text}",
+                code=response.status_code,
+            )
+        self._wait_for_async_resolution(response.headers["Location"])
+
+    def _create_key_value_payload(
+        self, category, name, registered_model_version_id, value, value_type
+    ):
+        payload = {
+            "entityId": registered_model_version_id,
+            "entityType": "modelPackage",
+            "name": name,
+            "category": category,
+            "valueType": value_type,
+        }
+        if value_type == "boolean":
+            payload["booleanValue"] = value
+        elif value_type == "numeric":
+            payload["numericValue"] = value
+        else:
+            payload["value"] = value
+        return payload

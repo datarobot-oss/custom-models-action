@@ -385,6 +385,36 @@ class TestModelSchemaValidator:
             in str(ex)
         )
 
+    @pytest.mark.parametrize(
+        "value",
+        ["string_value", True, 42, 42.2],
+    )
+    def test_runtime_parameters(self, regression_model_schema, value):
+        """A runtime parameter value of any of the supported scalar types should validate."""
+
+        regression_model_schema[ModelSchema.VERSION_KEY][
+            ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
+        ] = [{"name": "name", "type": "type", "value": value}]
+
+        self._validate_schema(True, regression_model_schema)
+
+    @pytest.mark.parametrize(
+        "parameters",
+        [
+            [{"name": "name", "type": "type", "value": ["list_value_not_allowed"]}],
+            [{"name": "name", "type": "type"}],  # Missing value
+        ],
+    )
+    def test_runtime_parameters_fail(self, regression_model_schema, parameters):
+        """An unsupported value type or a missing value should fail validation."""
+
+        regression_model_schema[ModelSchema.VERSION_KEY][
+            ModelSchema.RUNTIME_PARAMETER_VALUES_KEY
+        ] = parameters
+
+        with pytest.raises(InvalidSchema):
+            self._validate_schema(True, regression_model_schema)
+
 
 class TestModelSchemaGetValue:
     """Contains cases to test the get value method from a model schema."""
