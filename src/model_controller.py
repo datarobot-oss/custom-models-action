@@ -105,12 +105,17 @@ class ControllerBase(ABC):
                 try:
                     yaml_content = yaml.safe_load(fd)
                 except yaml.YAMLError as ex:
-                    # A file with a .yaml/.yml extension isn't necessarily one of ours to parse
-                    # (e.g. a Helm chart template using Go-template syntax) - and the caller's
-                    # --exclude pattern is opt-in, so an un-excluded non-model file must not take
-                    # down the whole scan.
-                    logger.warning("Skipping unparsable yaml file: %s (%s)", yaml_path, ex)
-                    continue
+                    # Deliberately re-raise rather than skip: skipping would drop this file's
+                    # user_provided_id from every bookkeeping set, and handle_deleted_models
+                    # would then treat a previously-synced model whose metadata merely has a
+                    # syntax error as "deleted from the repo" - risking an actual deletion in
+                    # DataRobot when allow_model_deletion is set. A file that was never meant to
+                    # be model/deployment metadata (e.g. a Helm chart template) belongs in
+                    # --exclude, not silently swallowed here.
+                    raise yaml.YAMLError(
+                        f"Failed to parse '{yaml_path}' as YAML: {ex}\n"
+                        "If this file isn't model/deployment metadata, exclude it via --exclude."
+                    ) from ex
                 if not yaml_content:
                     logger.warning("Detected an invalid or empty yaml file: %s", yaml_path)
                 else:
