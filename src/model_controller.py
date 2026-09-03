@@ -102,7 +102,15 @@ class ControllerBase(ABC):
                 continue
 
             with open(yaml_path, encoding="utf-8") as fd:
-                yaml_content = yaml.safe_load(fd)
+                try:
+                    yaml_content = yaml.safe_load(fd)
+                except yaml.YAMLError as ex:
+                    # A file with a .yaml/.yml extension isn't necessarily one of ours to parse
+                    # (e.g. a Helm chart template using Go-template syntax) - and the caller's
+                    # --exclude pattern is opt-in, so an un-excluded non-model file must not take
+                    # down the whole scan.
+                    logger.warning("Skipping unparsable yaml file: %s (%s)", yaml_path, ex)
+                    continue
                 if not yaml_content:
                     logger.warning("Detected an invalid or empty yaml file: %s", yaml_path)
                 else:
