@@ -80,13 +80,23 @@ class GitTool:
                 # The 'from' commit is typically the last commit DataRobot has on record for a
                 # model - it can be missing from this checkout long after the fact (a shallow
                 # clone, or a customer environment reactivated long after that commit aged out
-                # of history). Fall back to a full scan of the 'to' commit rather than crash.
+                # of history). Fall back to every file present at 'to_commit', found via a tree
+                # traversal rather than a parent diff: to_commit.stats/diff both need a parent
+                # object, which a shallow clone may not have even for to_commit's own immediate
+                # parent - a tree traversal needs no history at all, so it can't hit the same
+                # wall this is meant to route around.
                 logger.warning(
                     "Could not resolve commit %s in the local repository - "
-                    "falling back to a full scan instead of an incremental diff.",
+                    "falling back to every file in %s instead of an incremental diff.",
                     from_commit_sha,
+                    to_commit_sha,
                 )
-                return self._categorize_changed_files(to_commit.stats.files)
+                all_files = [
+                    self.repo_path / item.path
+                    for item in to_commit.tree.traverse()
+                    if item.type == "blob"
+                ]
+                return all_files, []
             diff = from_commit_sha.diff(to_commit)
 
             changed_or_new_files = []

@@ -78,7 +78,10 @@ class TestGitTool:
     ):
         """A 'from' commit DataRobot has on record can be missing from this checkout (a
         shallow clone, or a customer environment reactivated long after that commit aged
-        out of history) - this must fall back to a full scan, not crash."""
+        out of history) - this must fall back to every file at HEAD via a tree traversal,
+        not a parent diff (which itself needs a parent object a shallow clone may lack -
+        see test_changed_files_with_unresolvable_from_commit_survives_shallow_clone),
+        and not crash."""
 
         init_repo_with_models_factory(1, is_multi=False)
         make_a_change_and_commit(git_repo, [str(common_filepath)], 1)
@@ -89,7 +92,33 @@ class TestGitTool:
         changed_files, deleted_files = repo_tool.find_changed_files("HEAD", bogus_sha)
 
         assert not deleted_files
-        assert set(changed_files) == set(repo_tool.find_changed_files("HEAD")[0])
+        expected = {
+            workspace_path / rel_path
+            for rel_path in git_repo.git.ls_tree("-r", "--name-only", "HEAD").splitlines()
+        }
+        assert set(changed_files) == expected
+
+    def test_changed_files_with_unresolvable_from_commit_survives_shallow_clone(
+        self, tmp_path, workspace_path, init_repo_with_models_factory, common_filepath, git_repo
+    ):
+        """A parent-diff based fallback (e.g. Commit.stats/Commit.diff) needs to
+        resolve to_commit's own parent - which a --depth 1 clone doesn't have either,
+        swapping one unhandled crash for another. The fallback must not touch history
+        at all."""
+
+        init_repo_with_models_factory(1, is_multi=False)
+        make_a_change_and_commit(git_repo, [str(common_filepath)], 1)
+
+        shallow_clone_path = tmp_path / "shallow-clone"
+        git_repo.git.clone("--depth", "1", f"file://{workspace_path}", str(shallow_clone_path))
+
+        repo_tool = GitTool(shallow_clone_path)
+        bogus_sha = "89c34fd69787fc2d32af680d7b7c9d57aa5f8eeb"
+
+        changed_files, deleted_files = repo_tool.find_changed_files("HEAD", bogus_sha)
+
+        assert not deleted_files
+        assert changed_files
 
     def test_is_ancestor_of(
         self, workspace_path, git_repo, init_repo_with_models_factory, common_filepath
