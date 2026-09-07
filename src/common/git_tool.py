@@ -74,7 +74,19 @@ class GitTool:
 
         to_commit = self.repo.commit(to_commit_sha)
         if from_commit_sha:
-            from_commit_sha = self.repo.commit(from_commit_sha)
+            try:
+                from_commit_sha = self.repo.commit(from_commit_sha)
+            except ValueError:
+                # The 'from' commit is typically the last commit DataRobot has on record for a
+                # model - it can be missing from this checkout long after the fact (a shallow
+                # clone, or a customer environment reactivated long after that commit aged out
+                # of history). Fall back to a full scan of the 'to' commit rather than crash.
+                logger.warning(
+                    "Could not resolve commit %s in the local repository - "
+                    "falling back to a full scan instead of an incremental diff.",
+                    from_commit_sha,
+                )
+                return self._categorize_changed_files(to_commit.stats.files)
             diff = from_commit_sha.diff(to_commit)
 
             changed_or_new_files = []
