@@ -207,6 +207,8 @@ class ModelController(ControllerBase):
 
         logger.info("Scanning and loading DataRobot model files ...")
         for yaml_path, yaml_content in self._next_yaml_content_in_repo():
+            logger.info(f"Yaml Path: {yaml_path}")
+            logger.info(f"\n\n Yaml Content: \n\n {yaml_content} \n\n")
             if ModelSchema.is_multi_models_schema(yaml_content):
                 transformed = ModelSchema.validate_and_transform_multi(yaml_content)
                 for model_entry in transformed[ModelSchema.MULTI_MODELS_KEY]:
