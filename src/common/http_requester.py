@@ -16,7 +16,7 @@ class HttpRequester:
     setup authorization credentials in the form of a token.
     """
 
-    MAX_QUERY_TIMEOUT = 30.0
+    MAX_QUERY_TIMEOUT = 60.0
 
     def __init__(self, base_url, api_token=None, verify_cert=True):
         self._base_url = base_url
