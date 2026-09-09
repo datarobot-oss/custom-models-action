@@ -185,26 +185,12 @@ class DrClient:
             A DataRobot custom model dictionary or None if not found.
         """
 
-        namespaced_id = Namespace.namespaced(user_provided_id)
-
         custom_models = self.fetch_custom_models()
+        namespaced_id = Namespace.namespaced(user_provided_id)
         try:
             return next(cm for cm in custom_models if cm.get("userProvidedId") == namespaced_id)
         except StopIteration:
-            pass
-
-        # The model may be missing from the general listing above even though it exists: a
-        # custom model that was created but crashed/timed-out before its first version was
-        # attached can be absent from `fetch_custom_models()` (see RAPTOR-20139 - the listing
-        # joins in version data server-side and appears to drop such version-less models).
-        # Fall back to a targeted, single-model query instead of only scanning that listing, so
-        # a version-less model left behind by a previous failed attempt can still be found and
-        # recovered rather than wedging every subsequent retry with a 422.
-        custom_models = self._paginated_fetch(
-            self.CUSTOM_MODELS_ROUTE, params={"userProvidedId": namespaced_id}
-        )
-        filtered_models = self._filter_entities(custom_models)
-        return filtered_models[0] if filtered_models else None
+            return None
 
     def _paginated_fetch(self, route_url, **kwargs):
         def _fetch_single_page(url, raw):
