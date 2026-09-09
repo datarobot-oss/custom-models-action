@@ -9,6 +9,8 @@
 import re
 
 import pytest
+from mock import Mock
+from mock import patch
 
 from common.convertors import MemoryConvertor
 from common.exceptions import InvalidMemoryValue
@@ -16,8 +18,38 @@ from common.exceptions import NamespaceAlreadySet
 from common.exceptions import NamespaceNotInitialized
 from common.git_tool import GitTool
 from common.github_env import GitHubEnv
+from common.http_requester import HttpRequester
 from common.namepsace import Namespace
 from tests.unit.conftest import make_a_change_and_commit
+
+
+class TestHttpRequesterTimeout:
+    """Contains unit-tests for HttpRequester's per-call timeout handling."""
+
+    @pytest.fixture
+    def requester(self):
+        """A fixture to return an HttpRequester instance."""
+
+        return HttpRequester("https://dummy/", "123abc")
+
+    @pytest.mark.parametrize("verb, requests_fn_name", [("post", "post"), ("patch", "patch")])
+    def test_default_timeout_used_when_not_overridden(self, requester, verb, requests_fn_name):
+        """POST/PATCH use the shared MAX_QUERY_TIMEOUT when no explicit timeout is given."""
+
+        with patch(f"common.http_requester.requests.{requests_fn_name}") as mock_requests_fn:
+            mock_requests_fn.return_value = Mock(status_code=201)
+            getattr(requester, verb)("some/route/")
+            assert mock_requests_fn.call_args.kwargs["timeout"] == HttpRequester.MAX_QUERY_TIMEOUT
+
+    @pytest.mark.parametrize("verb, requests_fn_name", [("post", "post"), ("patch", "patch")])
+    def test_explicit_timeout_overrides_default(self, requester, verb, requests_fn_name):
+        """POST/PATCH honor an explicit timeout override, e.g. for large uploads."""
+
+        custom_timeout = 180.0
+        with patch(f"common.http_requester.requests.{requests_fn_name}") as mock_requests_fn:
+            mock_requests_fn.return_value = Mock(status_code=201)
+            getattr(requester, verb)("some/route/", timeout=custom_timeout)
+            assert mock_requests_fn.call_args.kwargs["timeout"] == custom_timeout
 
 
 class TestConvertor:

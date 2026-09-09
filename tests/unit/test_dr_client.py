@@ -469,6 +469,46 @@ class TestCustomModelRoutes(SharedRouteTests):
             assert len(responses.calls) == 1
 
     @responses.activate
+    def test_create_custom_model_idempotent_recovers_version_less_model(
+        self,
+        dr_client,
+        regression_model_info,
+        custom_models_url,
+        git_model_version,
+        regression_model_response_factory,
+    ):
+        """
+        A case to test idempotent custom model creation recovers a model that a previous,
+        crashed attempt left behind without a version, even though such a model is missing
+        from the general listing (RAPTOR-20139).
+        """
+
+        # Mock POST to fail with 422 and specific message.
+        status_code = 422
+        error_message = (
+            '{"message": "Cannot create a custom model with a user provided ID '
+            '(abc123) that equals to an already existing one."}'
+        )
+        responses.add(responses.POST, custom_models_url, body=error_message, status=status_code)
+
+        existing_model = regression_model_response_factory("existing-version-less-model")
+        namespaced_id = Namespace.namespaced(
+            regression_model_info.get_value(ModelSchema.MODEL_ID_KEY)
+        )
+        existing_model["userProvidedId"] = namespaced_id
+
+        # The general listing does not surface the version-less model.
+        with mock.patch.object(dr_client, "fetch_custom_models", return_value=[]):
+            # A targeted, filtered lookup does find it.
+            mock_single_page_response(
+                custom_models_url,
+                entities=[existing_model],
+                match=[matchers.query_param_matcher({"userProvidedId": namespaced_id})],
+            )
+            custom_model = dr_client.create_custom_model(regression_model_info, git_model_version)
+            assert custom_model == existing_model
+
+    @responses.activate
     def test_delete_custom_model_success(
         self,
         dr_client,
@@ -992,6 +1032,42 @@ class TestCustomModelVersionRoutes:
             custom_model_id, is_major_update, regression_model_info, git_model_version
         )
         assert version_id is not None
+
+    @pytest.mark.parametrize(
+        "from_latest, requester_method",
+        [(False, "post"), (True, "patch")],
+        ids=["new-version", "from-latest"],
+    )
+    def test_create_custom_model_version_uses_extended_timeout(
+        self,
+        dr_client,
+        custom_model_id,
+        regression_model_info,
+        git_model_version,
+        regression_model_version_response,
+        from_latest,
+        requester_method,
+    ):
+        """
+        A case to test that version creation (a large multipart upload, per RAPTOR-20139) uses
+        a dedicated, longer timeout than the shared HttpRequester default.
+        """
+
+        mock_response = Mock(status_code=201, json=lambda: regression_model_version_response)
+        with mock.patch.object(
+            dr_client._http_requester, requester_method, return_value=mock_response
+        ) as mock_requester_call:
+            dr_client.create_custom_model_version(
+                custom_model_id,
+                True,
+                regression_model_info,
+                git_model_version,
+                from_latest=from_latest,
+            )
+        assert (
+            mock_requester_call.call_args.kwargs["timeout"]
+            == DrClient.CUSTOM_MODEL_VERSION_CREATE_TIMEOUT_SEC
+        )
 
     @responses.activate
     def test_create_custom_model_version_failure(

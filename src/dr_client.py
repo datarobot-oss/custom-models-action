@@ -87,6 +87,15 @@ class DrClient:
     # are super busy.
     DEPLOYMENT_CREATE_MAX_WAIT_SEC = 2 * DEFAULT_MAX_WAIT_SEC
 
+    # Uploading a custom model version is a large multipart request (model files, possibly
+    # including multi-megabyte weights such as safetensors) and, unlike other API calls, may
+    # legitimately take a while to complete. RAPTOR-20139 measured a model with a large
+    # safetensors payload taking ~30s even on a healthy run, leaving almost no margin under
+    # the shared HttpRequester.MAX_QUERY_TIMEOUT (30s) and causing spurious timeouts against a
+    # cold/busy server. Give this specific call a much larger, dedicated timeout instead of
+    # raising the timeout for every API call.
+    CUSTOM_MODEL_VERSION_CREATE_TIMEOUT_SEC = 180.0
+
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
             datarobot_webserver = f"{StringUtil.slash_suffix(datarobot_webserver)}api/v2/"
@@ -176,12 +185,26 @@ class DrClient:
             A DataRobot custom model dictionary or None if not found.
         """
 
-        custom_models = self.fetch_custom_models()
         namespaced_id = Namespace.namespaced(user_provided_id)
+
+        custom_models = self.fetch_custom_models()
         try:
             return next(cm for cm in custom_models if cm.get("userProvidedId") == namespaced_id)
         except StopIteration:
-            return None
+            pass
+
+        # The model may be missing from the general listing above even though it exists: a
+        # custom model that was created but crashed/timed-out before its first version was
+        # attached can be absent from `fetch_custom_models()` (see RAPTOR-20139 - the listing
+        # joins in version data server-side and appears to drop such version-less models).
+        # Fall back to a targeted, single-model query instead of only scanning that listing, so
+        # a version-less model left behind by a previous failed attempt can still be found and
+        # recovered rather than wedging every subsequent retry with a 422.
+        custom_models = self._paginated_fetch(
+            self.CUSTOM_MODELS_ROUTE, params={"userProvidedId": namespaced_id}
+        )
+        filtered_models = self._filter_entities(custom_models)
+        return filtered_models[0] if filtered_models else None
 
     def _paginated_fetch(self, route_url, **kwargs):
         def _fetch_single_page(url, raw):
@@ -476,9 +499,19 @@ class DrClient:
 
             url = self.CUSTOM_MODELS_VERSIONS_ROUTE.format(model_id=custom_model_id)
             if from_latest:
-                response = self._http_requester.patch(url, data=mp_encoder, headers=headers)
+                response = self._http_requester.patch(
+                    url,
+                    data=mp_encoder,
+                    headers=headers,
+                    timeout=self.CUSTOM_MODEL_VERSION_CREATE_TIMEOUT_SEC,
+                )
             else:
-                response = self._http_requester.post(url, data=mp_encoder, headers=headers)
+                response = self._http_requester.post(
+                    url,
+                    data=mp_encoder,
+                    headers=headers,
+                    timeout=self.CUSTOM_MODEL_VERSION_CREATE_TIMEOUT_SEC,
+                )
         finally:
             for file_obj in file_objs:
                 file_obj.close()
