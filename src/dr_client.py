@@ -192,6 +192,39 @@ class DrClient:
         except StopIteration:
             return None
 
+    def _search_custom_model_by_name_and_git_id(self, model_info, user_provided_id):
+        """
+        Fall back to DataRobot's `searchFor` filter (matches name/description/language) when
+        the general listing doesn't surface a model - e.g. one that was created but crashed
+        before its first version was attached (RAPTOR-20139). `searchFor` isn't an exact match,
+        so the result is still narrowed down to an exact `userProvidedId` match to avoid
+        returning an unrelated model with a similar name.
+
+        Parameters
+        ----------
+        model_info : model_info.ModelInfo
+            A local model info as loaded from the local source tree.
+        user_provided_id : str
+            A unique ID that is defined by the user.
+
+        Returns
+        -------
+        dict or None,
+            A DataRobot custom model dictionary or None if not found.
+        """
+
+        name = model_info.get_settings_value(ModelSchema.NAME_KEY)
+        if not name:
+            return None
+
+        namespaced_id = Namespace.namespaced(user_provided_id)
+        custom_models = self._paginated_fetch(self.CUSTOM_MODELS_ROUTE, params={"searchFor": name})
+        filtered_models = self._filter_entities(custom_models)
+        try:
+            return next(cm for cm in filtered_models if cm.get("userProvidedId") == namespaced_id)
+        except StopIteration:
+            return None
+
     def _paginated_fetch(self, route_url, **kwargs):
         def _fetch_single_page(url, raw):
             if raw:
@@ -257,7 +290,9 @@ class DrClient:
                 if "Cannot create a custom model with a user provided ID" in message:
                     # Model already exists, fetch it
                     user_provided_id = model_info.get_value(ModelSchema.MODEL_ID_KEY)
-                    existing_model = self.fetch_custom_model_by_git_id(user_provided_id)
+                    existing_model = self.fetch_custom_model_by_git_id(
+                        user_provided_id
+                    ) or self._search_custom_model_by_name_and_git_id(model_info, user_provided_id)
                     if existing_model:
                         logger.debug("Custom model already exists (id: %s)", existing_model["id"])
                         return existing_model

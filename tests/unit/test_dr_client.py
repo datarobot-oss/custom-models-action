@@ -469,6 +469,89 @@ class TestCustomModelRoutes(SharedRouteTests):
             assert len(responses.calls) == 1
 
     @responses.activate
+    def test_create_custom_model_idempotent_recovers_version_less_model_via_search(
+        self,
+        dr_client,
+        regression_model_info,
+        custom_models_url,
+        git_model_version,
+        regression_model_response_factory,
+    ):
+        """
+        A case to test that idempotent custom model creation recovers a model that a previous,
+        crashed attempt left behind without a version, when the general listing doesn't
+        surface it, by falling back to a `searchFor`-by-name query (RAPTOR-20139).
+        """
+
+        # Mock POST to fail with 422 and specific message.
+        status_code = 422
+        error_message = (
+            '{"message": "Cannot create a custom model with a user provided ID '
+            '(abc123) that equals to an already existing one."}'
+        )
+        responses.add(responses.POST, custom_models_url, body=error_message, status=status_code)
+
+        existing_model = regression_model_response_factory("existing-version-less-model")
+        namespaced_id = Namespace.namespaced(
+            regression_model_info.get_value(ModelSchema.MODEL_ID_KEY)
+        )
+        existing_model["userProvidedId"] = namespaced_id
+
+        model_name = regression_model_info.get_settings_value(ModelSchema.NAME_KEY)
+
+        # The general listing does not surface the version-less model.
+        with mock.patch.object(dr_client, "fetch_custom_model_by_git_id", return_value=None):
+            # A `searchFor`-by-name query does find it.
+            mock_single_page_response(
+                custom_models_url,
+                entities=[existing_model],
+                match=[matchers.query_param_matcher({"searchFor": model_name})],
+            )
+            custom_model = dr_client.create_custom_model(regression_model_info, git_model_version)
+            assert custom_model == existing_model
+
+    @responses.activate
+    def test_create_custom_model_idempotent_recovery_fails_without_a_name(
+        self,
+        dr_client,
+        custom_models_url,
+        git_model_version,
+    ):
+        """
+        A case to test that the search-based recovery fallback is skipped (rather than issuing
+        a meaningless, unfiltered search) when the model has no configured name, and the
+        original error is raised.
+        """
+
+        model_info_without_name = ModelInfo(
+            yaml_filepath="/dummy/yaml/filepath",
+            model_path="/dummy/model/path",
+            metadata={
+                ModelSchema.MODEL_ID_KEY: "abc123",
+                ModelSchema.TARGET_TYPE_KEY: ModelSchema.TARGET_TYPE_REGRESSION,
+                ModelSchema.SETTINGS_SECTION_KEY: {
+                    ModelSchema.TARGET_NAME_KEY: "target_column",
+                },
+                ModelSchema.VERSION_KEY: {
+                    ModelSchema.MODEL_ENV_ID_KEY: "627790db5621558eedc4c7fa",
+                },
+            },
+        )
+
+        status_code = 422
+        error_message = (
+            '{"message": "Cannot create a custom model with a user provided ID '
+            '(abc123) that equals to an already existing one."}'
+        )
+        responses.add(responses.POST, custom_models_url, body=error_message, status=status_code)
+
+        # No GET is mocked at all: a search call without a name would fail to match and error.
+        with mock.patch.object(dr_client, "fetch_custom_model_by_git_id", return_value=None):
+            with pytest.raises(DataRobotClientError) as ex:
+                dr_client.create_custom_model(model_info_without_name, git_model_version)
+            assert ex.value.code == status_code
+
+    @responses.activate
     def test_delete_custom_model_success(
         self,
         dr_client,
