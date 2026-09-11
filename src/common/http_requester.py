@@ -62,7 +62,7 @@ class HttpRequester:
             **kwargs,
         )
 
-    def post(self, endpoint_sub_url, data=None, json=None, headers=None):
+    def post(self, endpoint_sub_url, data=None, json=None, headers=None, timeout=None):
         """
         Implement a POST HTTP call.
 
@@ -76,6 +76,8 @@ class HttpRequester:
             A json data to send in the body of the request.
         headers : (optional) dict
             Header attributes that will be set in the request.
+        timeout : (optional) float
+            A request timeout, in seconds, overriding `MAX_QUERY_TIMEOUT`.
 
         Returns
         -------
@@ -94,10 +96,10 @@ class HttpRequester:
             json=json,
             headers=request_headers,
             verify=self._verify_cert,
-            timeout=self.MAX_QUERY_TIMEOUT,
+            timeout=timeout if timeout is not None else self.MAX_QUERY_TIMEOUT,
         )
 
-    def patch(self, endpoint_sub_url, data=None, json=None, headers=None):
+    def patch(self, endpoint_sub_url, data=None, json=None, headers=None, timeout=None):
         """
         Implement a PATCH HTTP call.
 
@@ -111,6 +113,8 @@ class HttpRequester:
             A json data to send in the body of the request.
         headers : (optional) dict
             Header attributes that will be set in the request.
+        timeout : (optional) float
+            A request timeout, in seconds, overriding `MAX_QUERY_TIMEOUT`.
 
         Returns
         -------
@@ -129,7 +133,7 @@ class HttpRequester:
             json=json,
             headers=request_headers,
             verify=self._verify_cert,
-            timeout=self.MAX_QUERY_TIMEOUT,
+            timeout=timeout if timeout is not None else self.MAX_QUERY_TIMEOUT,
         )
 
     def delete(self, endpoint_sub_url):

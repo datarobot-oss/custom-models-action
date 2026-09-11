@@ -87,6 +87,15 @@ class DrClient:
     # are super busy.
     DEPLOYMENT_CREATE_MAX_WAIT_SEC = 2 * DEFAULT_MAX_WAIT_SEC
 
+    # Uploading a custom model version is a large multipart request (model files, possibly
+    # including multi-megabyte weights such as safetensors) and, unlike other API calls, may
+    # legitimately take a while to complete. RAPTOR-20139 measured a model with a large
+    # safetensors payload taking ~30s even on a healthy run, leaving almost no margin under
+    # the shared HttpRequester.MAX_QUERY_TIMEOUT (30s) and causing spurious timeouts against a
+    # cold/busy server. Give this specific call a much larger, dedicated timeout instead of
+    # raising the timeout for every API call.
+    CUSTOM_MODEL_VERSION_CREATE_TIMEOUT_SEC = 180.0
+
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
             datarobot_webserver = f"{StringUtil.slash_suffix(datarobot_webserver)}api/v2/"
@@ -183,6 +192,39 @@ class DrClient:
         except StopIteration:
             return None
 
+    def _search_custom_model_by_name_and_git_id(self, model_info, user_provided_id):
+        """
+        Fall back to DataRobot's `searchFor` filter (matches name/description/language) when
+        the general listing doesn't surface a model - e.g. one that was created but crashed
+        before its first version was attached (RAPTOR-20139). `searchFor` isn't an exact match,
+        so the result is still narrowed down to an exact `userProvidedId` match to avoid
+        returning an unrelated model with a similar name.
+
+        Parameters
+        ----------
+        model_info : model_info.ModelInfo
+            A local model info as loaded from the local source tree.
+        user_provided_id : str
+            A unique ID that is defined by the user.
+
+        Returns
+        -------
+        dict or None,
+            A DataRobot custom model dictionary or None if not found.
+        """
+
+        name = model_info.get_settings_value(ModelSchema.NAME_KEY)
+        if not name:
+            return None
+
+        namespaced_id = Namespace.namespaced(user_provided_id)
+        custom_models = self._paginated_fetch(self.CUSTOM_MODELS_ROUTE, params={"searchFor": name})
+        filtered_models = self._filter_entities(custom_models)
+        try:
+            return next(cm for cm in filtered_models if cm.get("userProvidedId") == namespaced_id)
+        except StopIteration:
+            return None
+
     def _paginated_fetch(self, route_url, **kwargs):
         def _fetch_single_page(url, raw):
             if raw:
@@ -248,7 +290,9 @@ class DrClient:
                 if "Cannot create a custom model with a user provided ID" in message:
                     # Model already exists, fetch it
                     user_provided_id = model_info.get_value(ModelSchema.MODEL_ID_KEY)
-                    existing_model = self.fetch_custom_model_by_git_id(user_provided_id)
+                    existing_model = self.fetch_custom_model_by_git_id(
+                        user_provided_id
+                    ) or self._search_custom_model_by_name_and_git_id(model_info, user_provided_id)
                     if existing_model:
                         logger.debug("Custom model already exists (id: %s)", existing_model["id"])
                         return existing_model
@@ -476,9 +520,19 @@ class DrClient:
 
             url = self.CUSTOM_MODELS_VERSIONS_ROUTE.format(model_id=custom_model_id)
             if from_latest:
-                response = self._http_requester.patch(url, data=mp_encoder, headers=headers)
+                response = self._http_requester.patch(
+                    url,
+                    data=mp_encoder,
+                    headers=headers,
+                    timeout=self.CUSTOM_MODEL_VERSION_CREATE_TIMEOUT_SEC,
+                )
             else:
-                response = self._http_requester.post(url, data=mp_encoder, headers=headers)
+                response = self._http_requester.post(
+                    url,
+                    data=mp_encoder,
+                    headers=headers,
+                    timeout=self.CUSTOM_MODEL_VERSION_CREATE_TIMEOUT_SEC,
+                )
         finally:
             for file_obj in file_objs:
                 file_obj.close()
