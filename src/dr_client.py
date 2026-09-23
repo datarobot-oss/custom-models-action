@@ -96,6 +96,13 @@ class DrClient:
     # raising the timeout for every API call.
     CUSTOM_MODEL_VERSION_CREATE_TIMEOUT_SEC = 180.0
 
+    # RAPTOR-20515 measured GET .../registeredModels/{id}/versions/ taking 28.46s for just 33
+    # records against a healthy server - within the shared HttpRequester.MAX_QUERY_TIMEOUT (30s)
+    # but leaving almost no margin, and a registry with more versions takes proportionally
+    # longer. Give this specific call a dedicated, larger timeout instead of raising the
+    # timeout for every API call.
+    REGISTERED_MODEL_VERSIONS_LIST_TIMEOUT_SEC = 120.0
+
     def __init__(self, datarobot_webserver, datarobot_api_token, verify_cert=True):
         if "v2" not in datarobot_webserver:
             datarobot_webserver = f"{StringUtil.slash_suffix(datarobot_webserver)}api/v2/"
@@ -674,6 +681,7 @@ class DrClient:
     def _get_registered_model_versions(self, registered_model_id):
         return self._paginated_fetch(
             self.REGISTERED_MODELS_VERSIONS_ROUTE.format(registered_model_id=registered_model_id),
+            timeout=self.REGISTERED_MODEL_VERSIONS_LIST_TIMEOUT_SEC,
         )
 
     @classmethod

@@ -32,18 +32,22 @@ class TestHttpRequesterTimeout:
 
         return HttpRequester("https://dummy/", "123abc")
 
-    @pytest.mark.parametrize("verb, requests_fn_name", [("post", "post"), ("patch", "patch")])
+    @pytest.mark.parametrize(
+        "verb, requests_fn_name", [("get", "get"), ("post", "post"), ("patch", "patch")]
+    )
     def test_default_timeout_used_when_not_overridden(self, requester, verb, requests_fn_name):
-        """POST/PATCH use the shared MAX_QUERY_TIMEOUT when no explicit timeout is given."""
+        """GET/POST/PATCH use the shared MAX_QUERY_TIMEOUT when no explicit timeout is given."""
 
         with patch(f"common.http_requester.requests.{requests_fn_name}") as mock_requests_fn:
             mock_requests_fn.return_value = Mock(status_code=201)
             getattr(requester, verb)("some/route/")
             assert mock_requests_fn.call_args.kwargs["timeout"] == HttpRequester.MAX_QUERY_TIMEOUT
 
-    @pytest.mark.parametrize("verb, requests_fn_name", [("post", "post"), ("patch", "patch")])
+    @pytest.mark.parametrize(
+        "verb, requests_fn_name", [("get", "get"), ("post", "post"), ("patch", "patch")]
+    )
     def test_explicit_timeout_overrides_default(self, requester, verb, requests_fn_name):
-        """POST/PATCH honor an explicit timeout override, e.g. for large uploads."""
+        """GET/POST/PATCH honor an explicit timeout override, e.g. for large uploads or fetches."""
 
         custom_timeout = 180.0
         with patch(f"common.http_requester.requests.{requests_fn_name}") as mock_requests_fn:
