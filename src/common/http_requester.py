@@ -34,7 +34,7 @@ class HttpRequester:
             return f"{self._base_url}{endpoint_sub_url}"
         return f"{self._base_url}{StringUtil.slash_suffix(endpoint_sub_url)}"
 
-    def get(self, endpoint_sub_url, raw=False, **kwargs):
+    def get(self, endpoint_sub_url, raw=False, timeout=None, **kwargs):
         """
         Implement a GET HTTP call.
 
@@ -44,6 +44,8 @@ class HttpRequester:
             A relative path, starting from the configured web server route.
         raw : bool
             Whether to consider the `endpoint_sub_url` as a full URL or as a relative path.
+        timeout : (optional) float
+            A request timeout, in seconds, overriding `MAX_QUERY_TIMEOUT`.
         kwargs : dict
             A map of key-value pairs to be submitted to the GET operation.
 
@@ -58,7 +60,7 @@ class HttpRequester:
             url,
             headers=self._headers.copy(),
             verify=self._verify_cert,
-            timeout=self.MAX_QUERY_TIMEOUT,
+            timeout=timeout if timeout is not None else self.MAX_QUERY_TIMEOUT,
             **kwargs,
         )
 
